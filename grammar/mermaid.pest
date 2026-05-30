@@ -1,0 +1,102 @@
+WHITESPACE = _{ " " | "\t" }
+NEWLINE = { "\r\n" | "\n" | "\r" }
+COMMENT = _{ "%%" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
+
+simple_id = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+quoted_id = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+identifier = { quoted_id | simple_id }
+
+free_text = { (!NEWLINE ~ ANY)* }
+edge_label = { (!"|" ~ ANY)* }
+subgraph_title = { (!(NEWLINE | "end") ~ ANY)* }
+text = { identifier | quoted_id }
+
+direction = { "TB" | "TD" | "BT" | "RL" | "LR" }
+node_shape_brackets = { "[" ~ node_text ~ "]" }
+node_shape_parens = { "(" ~ node_text ~ ")" }
+node_shape_circle = { "((" ~ node_text ~ "))" }
+node_shape_subroutine = { "[[" ~ node_text ~ "]]" }
+node_shape_diamond = { "{" ~ node_text ~ "}" }
+node_shape_hexagon = { "{{" ~ node_text ~ "}}" }
+node_shape_trapezoid = { "[/" ~ node_text ~ "/]" }
+node_shape_trapezoid_alt = { "[\\" ~ node_text ~ "\\]" }
+node_shape = { node_shape_brackets | node_shape_parens | node_shape_circle | node_shape_subroutine | node_shape_diamond | node_shape_hexagon | node_shape_trapezoid | node_shape_trapezoid_alt }
+node_text = { text }
+node_decl = { identifier ~ (node_shape)? }
+
+edge_arrow_solid = { "-->" }
+edge_arrow_dotted = { "-.->" }
+edge_arrow_thick = { "==>" }
+edge_arrow_labeled = { "-->|" ~ edge_label ~ "|" }
+edge_arrow = { edge_arrow_labeled | edge_arrow_thick | edge_arrow_dotted | edge_arrow_solid }
+edge = { identifier ~ edge_arrow ~ identifier }
+
+subgraph = { "subgraph" ~ subgraph_title? ~ NEWLINE+ ~ (flowchart_statement ~ (NEWLINE+ ~ flowchart_statement)*)? ~ "end" }
+flowchart_statement = _{ edge | node_decl | subgraph }
+flowchart_diagram = { ("flowchart" | "graph") ~ direction? ~ NEWLINE+ ~ (flowchart_statement ~ (NEWLINE+ ~ flowchart_statement)*)? }
+
+participant = { "participant" ~ identifier ~ ("as" ~ identifier)? }
+actor = { "actor" ~ identifier }
+message_arrow_solid = { "->" }
+message_arrow_solid_tip = { "->>" }
+message_arrow_dashed = { "-->" }
+message_arrow_dashed_tip = { "-->>" }
+message_arrow_cross = { "-x" }
+message_arrow_open = { "-)" }
+message_arrow = { message_arrow_open | message_arrow_cross | message_arrow_dashed_tip | message_arrow_dashed | message_arrow_solid_tip | message_arrow_solid }
+message = { identifier ~ message_arrow ~ identifier ~ (":" ~ free_text)? }
+note_placement = { "left" | "right" | "over" }
+note_target = { identifier ~ ("," ~ identifier)? }
+note = { "note" ~ note_placement ~ ("of")? ~ note_target ~ ":" ~ free_text }
+activation = { ("+" | "-") ~ identifier }
+sequence_statement = { participant | actor | message | note | activation }
+sequence_diagram = { "sequenceDiagram" ~ NEWLINE+ ~ (sequence_statement ~ NEWLINE*)* }
+
+visibility = { "+" | "-" | "#" | "~" }
+class_member = { visibility? ~ identifier ~ (":" ~ identifier)? ~ ("(" ~ ")")? }
+class_members = { "{" ~ NEWLINE* ~ (class_member ~ (NEWLINE+ ~ class_member)*)? ~ NEWLINE* ~ "}" }
+class_keyword = @{ "class" ~ !(ASCII_ALPHANUMERIC | "_") }
+class_decl = { class_keyword ~ identifier ~ class_members? }
+class_member_decl = { identifier ~ ":" ~ identifier }
+relation_type = { "<|--" | "*--" | "o--" | "-->" | "..>" }
+relation_label = { ":" ~ free_text }
+relation = { identifier ~ relation_type ~ identifier ~ relation_label? }
+class_diagram = { "classDiagram" ~ NEWLINE+ ~ (class_decl | class_member_decl | relation) ~ (NEWLINE+ ~ (class_decl | class_member_decl | relation))* ~ NEWLINE* }
+
+state_id = { identifier }
+state_simple = { "state" ~ state_id ~ (":" ~ free_text)? }
+state_composite = { "state" ~ state_id ~ "{" ~ NEWLINE* ~ (state_element ~ (NEWLINE+ ~ state_element)*)? ~ NEWLINE* ~ "}" }
+state_element = _{ state_simple | transition | state_composite }
+start_end_state = { "[*]" }
+transition = { (state_id | start_end_state) ~ "-->" ~ (state_id | start_end_state) ~ (":" ~ free_text)? }
+state_diagram = { ("stateDiagram-v2" | "stateDiagram") ~ NEWLINE+ ~ (state_element ~ (NEWLINE+ ~ state_element)*)? ~ NEWLINE* }
+
+cardinality = { "|o" | "||" | "}o" | "}|" | "o|" | "o{" | "|{" }
+relationship = { cardinality ~ "--" ~ cardinality }
+attribute = { identifier ~ identifier }
+entity_attributes = { "{" ~ NEWLINE* ~ (attribute ~ ("," ~ attribute)*)? ~ NEWLINE* ~ "}" }
+entity = { identifier ~ entity_attributes? }
+er_relationship_label = { ":" ~ free_text }
+er_statement = { identifier ~ relationship ~ identifier ~ er_relationship_label? }
+er_element = _{ er_statement | entity }
+er_diagram = { "erDiagram" ~ NEWLINE+ ~ (er_element ~ (NEWLINE+ ~ er_element)*)? ~ NEWLINE* }
+
+pie_diagram = { "pie" ~ (NEWLINE ~ pie_modifier)* ~ NEWLINE+ ~ (pie_data_entry ~ (NEWLINE+ ~ pie_data_entry)*)* ~ NEWLINE* }
+pie_modifier = { "title" ~ free_text | "showData" }
+pie_data_entry = ${ (!(":" | NEWLINE) ~ ANY)+ ~ ":" ~ (!NEWLINE ~ ANY)* }
+
+timeline_diagram = { "timeline" ~ NEWLINE+ ~ (timeline_entry ~ (NEWLINE+ ~ timeline_entry)*)* ~ NEWLINE* }
+timeline_entry = _{ tl_title | tl_section | tl_event_line }
+tl_title = { "title" ~ free_text }
+tl_section = { "section" ~ free_text }
+tl_event_line = ${ (!(":" | NEWLINE) ~ ANY)+ ~ ":" ~ (!NEWLINE ~ ANY)* }
+
+gg_commit = { "commit" ~ gg_tag? }
+gg_tag = { "tag:" ~ free_text }
+gg_branch = { "branch" ~ identifier }
+gg_checkout = { "checkout" ~ identifier }
+gg_merge = { "merge" ~ identifier }
+gg_statement = { gg_commit | gg_branch | gg_checkout | gg_merge }
+gg_diagram = { "gitGraph" ~ NEWLINE+ ~ (gg_statement ~ (NEWLINE+ ~ gg_statement)*)* ~ NEWLINE* }
+
+file = { SOI ~ (COMMENT | WHITESPACE | NEWLINE)* ~ (flowchart_diagram | sequence_diagram | class_diagram | state_diagram | er_diagram | pie_diagram | timeline_diagram | gg_diagram) ~ (COMMENT | WHITESPACE | NEWLINE)* ~ EOI }
