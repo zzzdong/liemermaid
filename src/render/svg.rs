@@ -16,6 +16,7 @@ use crate::{
 pub struct SvgRenderer {
     svg_content: String,
     gradient_map: HashMap<*const GradientDef, usize>,
+    background_color: Option<Color>,
 }
 
 impl SvgRenderer {
@@ -23,7 +24,14 @@ impl SvgRenderer {
         Self {
             svg_content: String::new(),
             gradient_map: HashMap::new(),
+            background_color: None,
         }
+    }
+
+    /// 设置背景色（None = 透明）
+    pub fn with_background(mut self, color: Color) -> Self {
+        self.background_color = Some(color);
+        self
     }
 
     /// 递归收集所有渐变定义并建立索引映射
@@ -96,6 +104,15 @@ impl SvgRenderer {
             width, height, width, height
         ));
         svg.push('\n');
+
+        // 背景色
+        if let Some(bg) = self.background_color {
+            svg.push_str(&format!(
+                r#"<rect width="100%" height="100%" fill="{}" />"#,
+                Self::color_to_css(&bg)
+            ));
+            svg.push('\n');
+        }
 
         // 收集渐变并生成 defs
         let (gradients, map) = Self::collect_gradients(elements);
@@ -174,7 +191,7 @@ impl SvgRenderer {
 }
 
 impl Renderer for SvgRenderer {
-    fn draw_rect(&mut self, rect: Rect, style: &FillStrokeStyle) {
+    fn draw_rect(&mut self, rect: Rect, radius: Option<f64>, style: &FillStrokeStyle) {
         let mut attrs = format!(
             r#"x="{}" y="{}" width="{}" height="{}""#,
             rect.x0,
@@ -182,6 +199,10 @@ impl Renderer for SvgRenderer {
             rect.width(),
             rect.height()
         );
+
+        if let Some(r) = radius {
+            attrs.push_str(&format!(r#" rx="{}" ry="{}""#, r, r));
+        }
 
         if let Some(fill) = &style.fill {
             attrs.push_str(&format!(r#" fill="{}""#, Self::color_to_css(fill)));
@@ -339,13 +360,15 @@ impl Renderer for SvgRenderer {
 
         // 遍历布局中的每一行
         for line in layout.lines() {
-            // 遍历行中的每个 item（Run）
+            let mut line_text = String::new();
+            let mut first_glyph_pos: Option<(f64, f64)> = None;
+
+            // 收集该行所有 glyph run 的文本和首个 glyph 位置
             for item in line.items() {
                 match item {
                     parley::layout::PositionedLayoutItem::GlyphRun(glyph_run) => {
                         let run = glyph_run.run();
 
-                        // 从 run 的 text_range 提取文本
                         let text_range = run.text_range();
                         if text_range.end <= text_range.start {
                             continue;
@@ -358,27 +381,31 @@ impl Renderer for SvgRenderer {
                             continue;
                         }
 
-                        let escaped_text = Self::escape_xml(run_text);
-
-                        // position.y 是文本块左上角的 y 坐标
-                        // glyph.y 是 glyph 相对于 layout 原点（左上角）的 y 偏移
-                        // tspan_y = 左上角 y + glyph 偏移 = baseline 的 y 坐标
-                        let mut glyph_iter = glyph_run.positioned_glyphs();
-                        if let Some(first_glyph) = glyph_iter.next() {
-                            let tspan_y = position.y + first_glyph.y as f64;
-                            // 直接使用绝对 x 坐标，不使用 text-anchor
-                            let tspan_x = position.x + first_glyph.x as f64;
-
-                            let tspan = format!(
-                                r#"<tspan x="{}" y="{}">{}</tspan>"#,
-                                tspan_x, tspan_y, escaped_text
-                            );
-                            tspans.push_str(&tspan);
+                        if first_glyph_pos.is_none() {
+                            if let Some(first_glyph) = glyph_run.positioned_glyphs().next() {
+                                let tspan_y = position.y + first_glyph.y as f64;
+                                let tspan_x = position.x + first_glyph.x as f64;
+                                first_glyph_pos = Some((tspan_x, tspan_y));
+                            }
                         }
+
+                        line_text.push_str(run_text);
                     }
                     parley::layout::PositionedLayoutItem::InlineBox(_) => {
                         // 内联盒子：目前暂不处理
                     }
+                }
+            }
+
+            // 将该行所有文本合并为一个 tspan，让浏览器自然处理字间距
+            if let Some((tspan_x, tspan_y)) = first_glyph_pos {
+                if !line_text.is_empty() {
+                    let escaped_text = Self::escape_xml(&line_text);
+                    let tspan = format!(
+                        r#"<tspan x="{}" y="{}">{}</tspan>"#,
+                        tspan_x, tspan_y, escaped_text
+                    );
+                    tspans.push_str(&tspan);
                 }
             }
         }

@@ -14,8 +14,8 @@ use crate::{
 
 /// Abstract renderer interface for drawing visual elements to an output format.
 pub trait Renderer {
-    /// Draws a filled or stroked rectangle.
-    fn draw_rect(&mut self, rect: Rect, style: &FillStrokeStyle);
+    /// Draws a filled or stroked rectangle (radius = Some(r) for rounded corners).
+    fn draw_rect(&mut self, rect: Rect, radius: Option<f64>, style: &FillStrokeStyle);
 
     /// Draws a filled or stroked circle.
     fn draw_circle(&mut self, center: Point, radius: f64, style: &FillStrokeStyle);
@@ -73,8 +73,8 @@ pub trait Renderer {
         Self: Sized,
     {
         match element {
-            VisualElement::Rect { rect, style, .. } => {
-                self.draw_rect(*rect, style);
+            VisualElement::Rect { rect, radius, style, .. } => {
+                self.draw_rect(*rect, *radius, style);
             }
             VisualElement::Circle {
                 center,

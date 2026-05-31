@@ -4,20 +4,21 @@ use vello_cpu::kurbo::Point;
 
 use crate::{
     ast::Direction,
-    diagram_builder::types::OutputConfig,
+    builder::types::OutputConfig,
 };
 
 use super::{
     coord::NodeAnchors,
     types::{
-        ChainItem, GroupId, GroupMetrics, LayoutTree, LogicalGroup,
+        ChainItem, GroupId, GroupMetrics, InternalLayout, LayoutTree,
+        LogicalGroup,
         NodeId, NodeMetrics, NodePosition, Size,
     },
 };
 
 const MARGIN: f64 = 40.0;
 const H_GAP: f64 = 60.0;
-const V_GAP: f64 = 80.0;
+const V_GAP: f64 = 60.0;
 
 pub fn compute_positions(
     tree: &LayoutTree,
@@ -62,7 +63,7 @@ fn position_group(
     if is_horizontal {
         position_group_horizontal(group, node_metrics, group_metrics, next_id, config, direction, start_main, positions)
     } else {
-        position_group_vertical(group, node_metrics, gmetrics, next_id, config, start_main, positions)
+        position_group_vertical(group, node_metrics, gmetrics, next_id, config, direction, start_main, positions)
     }
 }
 
@@ -72,12 +73,13 @@ fn position_group_vertical(
     gmetrics: Option<&GroupMetrics>,
     next_id: &mut GroupId,
     config: &OutputConfig,
+    direction: Direction,
     start_main: f64,
     positions: &mut HashMap<NodeId, NodePosition>,
 ) -> f64 {
     match group {
         LogicalGroup::Chain { items } => position_chain_vertical(
-            items, node_metrics, gmetrics, next_id, config, start_main, positions,
+            items, node_metrics, gmetrics, next_id, config, direction, start_main, positions,
         ),
         LogicalGroup::Branch {
             source, arms, sink,
@@ -105,13 +107,21 @@ fn position_chain_vertical(
     gmetrics: Option<&GroupMetrics>,
     next_id: &mut GroupId,
     config: &OutputConfig,
+    direction: Direction,
     start_main: f64,
     positions: &mut HashMap<NodeId, NodePosition>,
 ) -> f64 {
     let canvas_center = config.width / 2.0;
     let mut cur_main = start_main;
 
-    for item in items {
+    // BT (Bottom-Top): 反转链，让第一个节点在最下方
+    let chain_items: Vec<&ChainItem> = if direction == Direction::BT {
+        items.iter().rev().collect()
+    } else {
+        items.iter().collect()
+    };
+
+    for item in chain_items {
         if let Some(node_id) = &item.node_id {
             let nm = node_metrics.get(node_id).unwrap_or_else(|| {
                 unreachable!("Node metrics not found for {}", node_id)
@@ -122,7 +132,7 @@ fn position_chain_vertical(
             cur_main += size.height + V_GAP;
         } else if let Some(sub) = &item.sub_group {
             cur_main = position_group_vertical(
-                sub, node_metrics, gmetrics, next_id, config, cur_main, positions,
+                sub, node_metrics, gmetrics, next_id, config, direction.clone(), cur_main, positions,
             );
         }
     }
@@ -135,7 +145,7 @@ fn position_branch_vertical(
     arms: &[super::types::BranchArm],
     sink: &Option<NodeId>,
     node_metrics: &HashMap<NodeId, NodeMetrics>,
-    _gmetrics: Option<&GroupMetrics>,
+    gmetrics: Option<&GroupMetrics>,
     config: &OutputConfig,
     start_main: f64,
     positions: &mut HashMap<NodeId, NodePosition>,
@@ -151,32 +161,57 @@ fn position_branch_vertical(
     // branches
     let branch_main = start_main + source_size.height + V_GAP;
 
-    // 收集每个 arm 的宽度（从 arm 的第一个节点获取）
-    let arm_sizes: Vec<Size> = arms
-        .iter()
-        .map(|arm| {
-            let first = get_first_node_id(&arm.body);
-            node_metrics.get(&first).map(|m| m.size).unwrap_or(Size::new(140.0, 50.0))
-        })
-        .collect();
+    // 使用 GroupMetrics 获取更准确的 arm 尺寸
+    // branch_sizes 包含每个 arm body 的总尺寸
+    let arm_sizes: Vec<Size> = if let Some(gm) = gmetrics {
+        if let InternalLayout::Branch { branch_sizes, .. } = &gm.internal {
+            branch_sizes.clone()
+        } else {
+            compute_arm_sizes_from_first_node(arms, node_metrics)
+        }
+    } else {
+        compute_arm_sizes_from_first_node(arms, node_metrics)
+    };
 
     let total_w: f64 = arm_sizes.iter().map(|s| s.width).sum::<f64>()
         + (arm_sizes.len().saturating_sub(1)) as f64 * H_GAP;
     let start_x = canvas_center - total_w / 2.0;
     let mut cur_x = start_x;
 
+    // 计算所有 arm 第一个节点的最大高度，用于 Y 轴对齐
+    let first_node_max_h = arms
+        .iter()
+        .map(|arm| {
+            let first = get_first_node_id(&arm.body);
+            node_metrics
+                .get(&first)
+                .map(|m| m.size.height)
+                .unwrap_or(36.0)
+        })
+        .fold(0.0f64, f64::max);
+
     for (i, arm) in arms.iter().enumerate() {
         let arm_size = arm_sizes.get(i).copied().unwrap_or(Size::new(140.0, 50.0));
         let arm_center_x = cur_x + arm_size.width / 2.0;
-        let arm_center_y = branch_main + arm_size.height / 2.0;
+        // 所有 arm 的第一个节点在同一水平线上对齐
+        let arm_center_y = branch_main + first_node_max_h / 2.0;
         position_arm(&arm.body, node_metrics, arm_center_x, arm_center_y, positions);
         cur_x += arm_size.width + H_GAP;
     }
 
-    // sink 检测
-    let branch_max_h = arm_sizes.iter().map(|s| s.height).fold(0.0f64, f64::max);
+    // sink 定位（始终居中于所有 branch 的下方）
+    let branch_max_h = arms
+        .iter()
+        .map(|arm| {
+            let first = get_first_node_id(&arm.body);
+            node_metrics
+                .get(&first)
+                .map(|m| m.size.height)
+                .unwrap_or(36.0)
+        })
+        .fold(0.0f64, f64::max);
     if let Some(sink_node) = sink {
-        let sink_nm = node_metrics.get(sink_node).unwrap_or(&source_nm);
+        let sink_nm = node_metrics.get(sink_node).unwrap_or(source_nm);
         let ss = sink_nm.size;
         let sink_main = branch_main + branch_max_h + V_GAP;
         let sink_center = Point::new(canvas_center, sink_main + ss.height / 2.0);
@@ -185,6 +220,21 @@ fn position_branch_vertical(
     }
 
     branch_main
+}
+
+fn compute_arm_sizes_from_first_node(
+    arms: &[super::types::BranchArm],
+    node_metrics: &HashMap<NodeId, NodeMetrics>,
+) -> Vec<Size> {
+    arms.iter()
+        .map(|arm| {
+            let first = get_first_node_id(&arm.body);
+            node_metrics
+                .get(&first)
+                .map(|m| m.size)
+                .unwrap_or(Size::new(140.0, 50.0))
+        })
+        .collect()
 }
 
 fn position_cycle_vertical(
@@ -234,7 +284,7 @@ fn position_group_horizontal(
     _group_metrics: &HashMap<GroupId, GroupMetrics>,
     next_id: &mut GroupId,
     config: &OutputConfig,
-    _direction: Direction,
+    direction: Direction,
     start_main: f64,
     positions: &mut HashMap<NodeId, NodePosition>,
 ) -> f64 {
@@ -243,7 +293,14 @@ fn position_group_horizontal(
             let canvas_center = config.height / 2.0;
             let mut cur_main = start_main;
 
-            for item in items {
+            // RL (Right-Left): 反转链，让第一个节点在最右侧
+            let chain_items: Vec<&ChainItem> = if direction == Direction::RL {
+                items.iter().rev().collect()
+            } else {
+                items.iter().collect()
+            };
+
+            for item in chain_items {
                 if let Some(node_id) = &item.node_id {
                     let nm = node_metrics.get(node_id).unwrap();
                     let size = nm.size;
@@ -262,7 +319,7 @@ fn position_group_horizontal(
             positions.insert(node_id.clone(), NodePosition { center, anchors: NodeAnchors::new((size.width, size.height)) });
             start_main + size.width
         }
-        _ => position_group_vertical(group, node_metrics, None, next_id, config, start_main, positions),
+        _ => position_group_vertical(group, node_metrics, None, next_id, config, direction, start_main, positions),
     }
 }
 
@@ -281,12 +338,13 @@ fn position_arm(
         }
         LogicalGroup::Chain { items } => {
             let mut cur_y = center_y;
-            for item in items {
+            for (j, item) in items.iter().enumerate() {
                 if let Some(node_id) = &item.node_id {
                     let nm = node_metrics.get(node_id).unwrap();
                     let size = nm.size;
-                    positions.insert(node_id.clone(), NodePosition { center: Point::new(center_x, cur_y + size.height / 2.0), anchors: NodeAnchors::new((size.width, size.height)) });
-                    cur_y += size.height + V_GAP;
+                    let node_center_y = if j == 0 { cur_y } else { cur_y + size.height / 2.0 };
+                    positions.insert(node_id.clone(), NodePosition { center: Point::new(center_x, node_center_y), anchors: NodeAnchors::new((size.width, size.height)) });
+                    cur_y = node_center_y + size.height / 2.0 + V_GAP;
                 }
             }
         }

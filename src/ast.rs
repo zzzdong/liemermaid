@@ -44,9 +44,14 @@ pub enum NodeShape {
     Subroutine,
     Diamond,
     Hexagon,
+    Circle,
+    DoubleCircle,
+    Cylinder,
+    Asymmetric,
+    Parallelogram,
+    ParallelogramAlt,
     Trapezoid,
     TrapezoidAlt,
-    Circle,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -104,7 +109,7 @@ pub struct Message {
     pub text: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MessageArrow {
     Solid,
     SolidTip,
@@ -121,7 +126,7 @@ pub struct Note {
     pub text: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NotePlacement {
     LeftOf,
     RightOf,

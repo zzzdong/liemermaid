@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{Node, NodeShape},
-    diagram_builder::types::OutputConfig,
+    builder::types::OutputConfig,
     text::create_text_layout,
     visual::{TextAlign, TextBaseline, TextStyle},
 };
@@ -19,13 +19,18 @@ const NODE_PAD_Y: f64 = 8.0;
 const FONT_SIZE: f64 = 13.0;
 
 const H_GAP: f64 = 60.0;
-const V_GAP: f64 = 80.0;
+const V_GAP: f64 = 60.0;
 
 fn shape_multiplier(shape: &Option<NodeShape>) -> (f64, f64, f64, f64) {
     match shape {
         Some(NodeShape::Diamond) => (MIN_NODE_WIDTH * 1.4, MIN_NODE_HEIGHT * 1.4, NODE_PAD_X * 1.6, NODE_PAD_Y * 1.6),
         Some(NodeShape::Hexagon) => (MIN_NODE_WIDTH * 1.3, MIN_NODE_HEIGHT * 1.2, NODE_PAD_X * 1.4, NODE_PAD_Y * 1.2),
-        Some(NodeShape::Circle) => (MIN_NODE_HEIGHT * 1.3, MIN_NODE_HEIGHT * 1.3, NODE_PAD_X * 1.3, NODE_PAD_Y * 1.3),
+        Some(NodeShape::Circle) | Some(NodeShape::DoubleCircle) => (MIN_NODE_HEIGHT * 1.3, MIN_NODE_HEIGHT * 1.3, NODE_PAD_X * 1.3, NODE_PAD_Y * 1.3),
+        Some(NodeShape::Cylinder) => (MIN_NODE_WIDTH * 1.1, MIN_NODE_HEIGHT * 1.2, NODE_PAD_X * 1.2, NODE_PAD_Y * 1.5),
+        Some(NodeShape::Stadium) => (MIN_NODE_WIDTH * 1.1, MIN_NODE_HEIGHT, NODE_PAD_X * 1.5, NODE_PAD_Y),
+        Some(NodeShape::Asymmetric) => (MIN_NODE_WIDTH * 1.1, MIN_NODE_HEIGHT, NODE_PAD_X * 1.3, NODE_PAD_Y),
+        Some(NodeShape::Parallelogram) | Some(NodeShape::ParallelogramAlt) => (MIN_NODE_WIDTH * 1.2, MIN_NODE_HEIGHT, NODE_PAD_X * 1.5, NODE_PAD_Y),
+        Some(NodeShape::Trapezoid) | Some(NodeShape::TrapezoidAlt) => (MIN_NODE_WIDTH * 1.2, MIN_NODE_HEIGHT, NODE_PAD_X * 1.4, NODE_PAD_Y),
         _ => (MIN_NODE_WIDTH, MIN_NODE_HEIGHT, NODE_PAD_X, NODE_PAD_Y),
     }
 }

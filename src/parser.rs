@@ -7,7 +7,7 @@ use crate::error::{ParseError, ParseResult};
 type Result<T> = ParseResult<T>;
 
 #[derive(Parser)]
-#[grammar = "../grammar/mermaid.pest"]
+#[grammar = "grammar/mermaid.pest"]
 pub struct MermaidParser;
 
 impl MermaidParser {
@@ -201,20 +201,20 @@ impl MermaidParser {
     fn parse_node_shape(pair: &pest::iterators::Pair<Rule>) -> Result<NodeShape> {
         let s = pair.as_str();
         let shape = match s {
-            _ if s.starts_with('[') && s.ends_with(']') && !s.starts_with("[[") => {
-                NodeShape::Rectangle
-            }
-            _ if s.starts_with('(') && s.ends_with(')') && !s.starts_with("((") => {
-                NodeShape::Rounded
-            }
+            _ if s.starts_with("(((") => NodeShape::DoubleCircle,
             _ if s.starts_with("((") => NodeShape::Circle,
+            _ if s.starts_with("([") => NodeShape::Stadium,
+            _ if s.starts_with('(') && s.ends_with(')') => NodeShape::Rounded,
+            _ if s.starts_with("[(") => NodeShape::Cylinder,
             _ if s.starts_with("[[") => NodeShape::Subroutine,
-            _ if s.starts_with('{') && s.ends_with('}') && !s.starts_with("{{") => {
-                NodeShape::Diamond
-            }
+            _ if s.starts_with("[/") && s.ends_with("\\]") => NodeShape::Trapezoid,
+            _ if s.starts_with("[/") && s.ends_with("/]") => NodeShape::Parallelogram,
+            _ if s.starts_with("[\\") && s.ends_with("/]") => NodeShape::TrapezoidAlt,
+            _ if s.starts_with("[\\") && s.ends_with("\\]") => NodeShape::ParallelogramAlt,
+            _ if s.starts_with('[') && s.ends_with(']') => NodeShape::Rectangle,
             _ if s.starts_with("{{") => NodeShape::Hexagon,
-            _ if s.starts_with("[/") && s.ends_with("/]") => NodeShape::Trapezoid,
-            _ if s.starts_with("[\\") && s.ends_with("\\]") => NodeShape::TrapezoidAlt,
+            _ if s.starts_with('{') && s.ends_with('}') => NodeShape::Diamond,
+            _ if s.starts_with('>') && s.ends_with(']') => NodeShape::Asymmetric,
             _ => NodeShape::Rectangle,
         };
         Ok(shape)

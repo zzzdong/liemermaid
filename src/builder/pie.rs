@@ -2,7 +2,10 @@ use vello_cpu::kurbo::Point;
 
 use crate::{
     ast::PieDiagram,
-    diagram_builder::types::{OutputConfig, PALETTE},
+    builder::{
+        layout::types::LayoutEngine,
+        types::{OutputConfig, PALETTE},
+    },
     error::{DiagramError, DiagramResult},
     text::create_text_layout,
     visual::{
@@ -15,6 +18,22 @@ const PIE_MARGIN: f64 = 60.0;
 const PIE_TITLE_SIZE: f64 = 24.0;
 const PIE_LABEL_SIZE: f64 = 13.0;
 const PIE_LABEL_OFFSET: f64 = 20.0;
+
+pub struct PieEngine<'a> {
+    pie: &'a PieDiagram,
+}
+
+impl<'a> PieEngine<'a> {
+    pub fn new(pie: &'a PieDiagram) -> Self {
+        Self { pie }
+    }
+}
+
+impl<'a> LayoutEngine for PieEngine<'a> {
+    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<VisualElement>> {
+        build_pie_elements(self.pie, config)
+    }
+}
 
 pub fn build_pie_elements(
     pie: &PieDiagram,

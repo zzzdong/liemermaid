@@ -1,5 +1,5 @@
 pub mod ast;
-pub mod diagram_builder;
+pub mod builder;
 pub mod error;
 pub mod option;
 pub mod parser;
@@ -9,7 +9,7 @@ pub mod visual;
 pub use ast::Diagram;
 pub use parser::MermaidParser;
 
-use diagram_builder::{build_diagram_with_config, types::OutputConfig};
+use builder::{build_diagram_with_config, types::OutputConfig};
 use render::SvgRenderer;
 
 /// 渲染 Mermaid 图表为 SVG 字符串
@@ -24,7 +24,9 @@ use render::SvgRenderer;
 /// use liemermaid::render;
 ///
 /// let svg = render(r#"flowchart TD
-///     A[Start] --> B[End]
+///     A[Start]
+///     B[End]
+///     A --> B
 /// "#, 800, 600).expect("render failed");
 /// ```
 pub fn render(mermaid_text: &str, width: u32, height: u32) -> error::DiagramResult<String> {
@@ -39,6 +41,7 @@ pub fn render(mermaid_text: &str, width: u32, height: u32) -> error::DiagramResu
     };
     
     let elements = build_diagram_with_config(&diagram, &config)?;
-    let renderer = SvgRenderer::new();
+    let renderer = SvgRenderer::new()
+        .with_background(config.background);
     renderer.render(&elements, width, height)
 }

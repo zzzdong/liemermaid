@@ -1,6 +1,6 @@
 use liemermaid::{
     MermaidParser,
-    diagram_builder::build_diagram,
+    builder::{build_diagram_with_config, types::OutputConfig},
     render::SvgRenderer,
 };
 
@@ -8,7 +8,12 @@ use liemermaid::{
 fn render_to_svg(mermaid_text: &str, width: u32, height: u32) -> String {
     let diagram = MermaidParser::parse_mermaid(mermaid_text)
         .expect("parsing should succeed");
-    let elements = build_diagram(&diagram)
+    let config = OutputConfig {
+        width: width as f64,
+        height: height as f64,
+        ..OutputConfig::default()
+    };
+    let elements = build_diagram_with_config(&diagram, &config)
         .expect("building visual elements should succeed");
     let renderer = SvgRenderer::new();
     renderer.render(&elements, width, height)

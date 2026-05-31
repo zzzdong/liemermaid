@@ -57,7 +57,7 @@
 Mermaid Text
     → Pest Parser (grammar/mermaid.pest)
     → AST (ast.rs: Flowchart { direction, nodes, edges, subgraphs })
-    → diagram_builder/flowchart.rs:
+    → builder/flowchart.rs:
         1. build_graph()       → in_degree, adjacency
         2. assign_layers()     → layers: HashMap<NodeId, usize>
         3. compute_positions() → positions: HashMap<NodeId, Point>

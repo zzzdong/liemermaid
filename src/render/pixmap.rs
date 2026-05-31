@@ -22,6 +22,7 @@ pub struct PixmapRenderer {
     resources: Resources,
     width: u32,
     height: u32,
+    background_color: Option<Color>,
 }
 
 impl PixmapRenderer {
@@ -31,11 +32,25 @@ impl PixmapRenderer {
             resources: Resources::new(),
             width,
             height,
+            background_color: None,
         }
+    }
+
+    /// 设置背景色（None = 透明）
+    pub fn with_background(mut self, color: Color) -> Self {
+        self.background_color = Some(color);
+        self
     }
 
     /// 渲染视觉元素序列并输出 Pixmap
     pub fn render(mut self, elements: &[VisualElement]) -> Result<Pixmap> {
+        // 先填充背景色
+        if let Some(bg) = self.background_color {
+            let rect = Rect::new(0.0, 0.0, self.width as f64, self.height as f64);
+            let fill = FillStrokeStyle::new().with_fill(bg);
+            self.draw_rect(rect, None, &fill);
+        }
+
         self.render_elements(elements);
 
         let mut pixmap = Pixmap::new(self.width as u16, self.height as u16);
@@ -56,7 +71,23 @@ impl PixmapRenderer {
 }
 
 impl Renderer for PixmapRenderer {
-    fn draw_rect(&mut self, rect: Rect, style: &FillStrokeStyle) {
+    fn draw_rect(&mut self, rect: Rect, radius: Option<f64>, style: &FillStrokeStyle) {
+        if let Some(r) = radius {
+            // Vello has no native rounded rect, approximate with BezPath
+            let path = rounded_rect_path(rect, r);
+            if let Some(fill) = &style.fill {
+                let color = Self::color_to_vello(fill);
+                self.ctx.set_paint(color);
+                self.ctx.fill_path(&path);
+            }
+            if let Some(stroke) = &style.stroke {
+                let color = Self::color_to_vello(&stroke.color);
+                self.ctx.set_paint(color);
+                self.set_stroke_style(stroke);
+                self.ctx.stroke_path(&path);
+            }
+            return;
+        }
         if let Some(fill) = &style.fill {
             let color = Self::color_to_vello(fill);
             self.ctx.set_paint(color);
@@ -248,11 +279,55 @@ impl Renderer for PixmapRenderer {
     }
 
     fn begin_group(&mut self, _transform: Option<&Transform>) {
-        // vello_cpu 暂不支持变换组，直接渲染子元素
+        // vello_cpu暂不支持变换组，直接渲染子元素
         // 未来可以在这里保存/恢复渲染状态
     }
 
     fn end_group(&mut self) {
-        // 恢复渲染状态
     }
+}
+
+/// Build a Bezier approximation of a rounded rectangle.
+fn rounded_rect_path(rect: Rect, radius: f64) -> BezPath {
+    let w = rect.width() / 2.0;
+    let h = rect.height() / 2.0;
+    let cx = rect.x0 + w;
+    let cy = rect.y0 + h;
+    let r = radius.min(w).min(h);
+    let segments = 10;
+    let mut path = BezPath::new();
+    // 顶边
+    path.move_to(Point::new(cx - w + r, cy - h));
+    path.line_to(Point::new(cx + w - r, cy - h));
+    // 右上角
+    for i in 0..=segments {
+        let a = std::f64::consts::FRAC_PI_2 * i as f64 / segments as f64
+            - std::f64::consts::FRAC_PI_2;
+        path.line_to(Point::new(cx + w - r + r * a.cos(), cy - h + r + r * a.sin()));
+    }
+    // 右边
+    path.line_to(Point::new(cx + w, cy + h - r));
+    // 右下角
+    for i in 0..=segments {
+        let a = std::f64::consts::FRAC_PI_2 * i as f64 / segments as f64;
+        path.line_to(Point::new(cx + w - r + r * a.cos(), cy + h - r + r * a.sin()));
+    }
+    // 底边
+    path.line_to(Point::new(cx - w + r, cy + h));
+    // 左下角
+    for i in 0..=segments {
+        let a = std::f64::consts::FRAC_PI_2 * i as f64 / segments as f64
+            + std::f64::consts::FRAC_PI_2;
+        path.line_to(Point::new(cx - w + r + r * a.cos(), cy + h - r + r * a.sin()));
+    }
+    // 左边
+    path.line_to(Point::new(cx - w, cy - h + r));
+    // 左上角
+    for i in 0..=segments {
+        let a = std::f64::consts::FRAC_PI_2 * i as f64 / segments as f64
+            + std::f64::consts::PI;
+        path.line_to(Point::new(cx - w + r + r * a.cos(), cy - h + r + r * a.sin()));
+    }
+    path.close_path();
+    path
 }

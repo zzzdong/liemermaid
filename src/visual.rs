@@ -9,6 +9,7 @@ pub enum VisualElement {
     // ---- 基础图形 ----
     Rect {
         rect: Rect,
+        radius: Option<f64>,
         style: FillStrokeStyle,
         z_index: i32,
     },
@@ -65,8 +66,9 @@ pub enum VisualElement {
 impl Clone for VisualElement {
     fn clone(&self) -> Self {
         match self {
-            VisualElement::Rect { rect, style, z_index } => VisualElement::Rect {
+            VisualElement::Rect { rect, radius, style, z_index } => VisualElement::Rect {
                 rect: *rect,
+                radius: *radius,
                 style: style.clone(),
                 z_index: *z_index,
             },
@@ -141,9 +143,10 @@ impl Clone for VisualElement {
 impl std::fmt::Debug for VisualElement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            VisualElement::Rect { rect, style, z_index } => f
+            VisualElement::Rect { rect, radius, style, z_index } => f
                 .debug_struct("Rect")
                 .field("rect", rect)
+                .field("radius", radius)
                 .field("style", style)
                 .field("z_index", z_index)
                 .finish(),
@@ -248,11 +251,21 @@ pub const Z_LABEL: i32 = 40;
 pub const Z_TITLE: i32 = 50;
 
 /// 2D 变换
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 pub struct Transform {
     pub translate: Vec2,
     pub rotate: f64, // 弧度
     pub scale: Vec2,
+}
+
+impl Default for Transform {
+    fn default() -> Self {
+        Self {
+            translate: Vec2::new(0.0, 0.0),
+            rotate: 0.0,
+            scale: Vec2::new(1.0, 1.0),
+        }
+    }
 }
 
 impl Transform {
@@ -480,5 +493,152 @@ impl Default for TextStyle {
             align: TextAlign::Left,
             vertical_align: TextBaseline::Top,
         }
+    }
+}
+
+/// 在边终点绘制箭头（填充三角形）
+pub fn draw_arrow_head(
+    elements: &mut Vec<VisualElement>,
+    tip: &Point,
+    dir: &Point,
+    style: &StrokeStyle,
+) {
+    let sz = 10.0;
+    let perp_x = -dir.y;
+    let perp_y = dir.x;
+    let base = Point::new(tip.x - dir.x * sz, tip.y - dir.y * sz);
+    let p1 = Point::new(base.x + perp_x * sz * 0.5, base.y + perp_y * sz * 0.5);
+    let p2 = Point::new(base.x - perp_x * sz * 0.5, base.y - perp_y * sz * 0.5);
+
+    let mut path = BezPath::new();
+    path.move_to(*tip);
+    path.line_to(p1);
+    path.line_to(p2);
+    path.close_path();
+
+    elements.push(VisualElement::Path {
+        path,
+        style: FillStrokeStyle::new()
+            .with_fill(style.color)
+            .with_stroke(style.color, style.width),
+        z_index: Z_AXIS,
+    });
+}
+
+// ===================================================================
+// 统一主题系统 — 集中管理所有配色（参考 AntV G6 + Tailwind 设计）
+// ===================================================================
+
+/// 通用主题色常量
+pub mod theme {
+    use super::Color;
+
+    // ---- 基础 ----
+    pub const BACKGROUND: Color = Color::new(255, 255, 255);
+    pub const FONT_FAMILY: &str = "Segoe UI, system-ui, -apple-system, sans-serif";
+    pub const FONT_SIZE: f64 = 13.0;
+    pub const NODE_RADIUS: f64 = 6.0;
+
+    // ---- 连线通用 ----
+    pub const EDGE_COLOR: Color = Color::new(148, 163, 184); // slate-400
+    pub const EDGE_WIDTH: f64 = 2.0;
+    pub const TEXT_COLOR: Color = Color::new(30, 41, 59);     // slate-800
+
+    // ==================== Flowchart (蓝) ====================
+    pub mod flowchart {
+        use super::super::Color;
+        pub const FILL: Color = Color::new(238, 242, 255);     // indigo-50
+        pub const STROKE: Color = Color::new(99, 102, 241);    // indigo-500
+        pub const TEXT: Color = super::TEXT_COLOR;
+        pub const EDGE: Color = super::EDGE_COLOR;
+    }
+
+    // ==================== State (绿) ====================
+    pub mod state {
+        use super::super::Color;
+        pub const FILL: Color = Color::new(240, 253, 244);     // green-50
+        pub const STROKE: Color = Color::new(34, 197, 94);     // green-500
+        pub const TEXT: Color = Color::new(22, 101, 52);       // green-800
+        pub const EDGE: Color = super::EDGE_COLOR;
+        pub const START_FILL: Color = Color::new(22, 101, 52); // green-800
+        pub const END_STROKE: Color = Color::new(34, 197, 94); // green-500
+    }
+
+    // ==================== Class (紫) ====================
+    pub mod class {
+        use super::super::Color;
+        pub const FILL: Color = Color::new(255, 255, 255);     // white
+        pub const HEADER_FILL: Color = Color::new(250, 245, 255); // purple-50
+        pub const STROKE: Color = Color::new(168, 85, 247);    // purple-500
+        pub const TEXT: Color = super::TEXT_COLOR;
+        pub const EDGE: Color = super::EDGE_COLOR;
+        pub const SEPARATOR: Color = Color::new(214, 188, 250); // purple-200
+        pub const DIAMOND_FILL: Color = Color::new(168, 85, 247); // purple-500
+    }
+
+    // ==================== Sequence (天蓝) ====================
+    pub mod sequence {
+        use super::super::Color;
+        pub const ACTOR_FILL: Color = Color::new(240, 249, 255); // sky-50
+        pub const ACTOR_STROKE: Color = Color::new(14, 165, 233); // sky-500
+        pub const FILL: Color = Color::new(240, 249, 255);     // sky-50
+        pub const STROKE: Color = Color::new(14, 165, 233);    // sky-500
+        pub const TEXT: Color = super::TEXT_COLOR;
+        pub const EDGE: Color = super::EDGE_COLOR;
+        pub const LIFELINE: Color = Color::new(203, 213, 225); // slate-300
+        pub const NOTE_FILL: Color = Color::new(254, 252, 232); // yellow-50
+        pub const NOTE_STROKE: Color = Color::new(234, 179, 8); // yellow-500
+    }
+
+    // ==================== ER (琥珀) ====================
+    pub mod er {
+        use super::super::Color;
+        pub const FILL: Color = Color::new(255, 251, 235);     // amber-50
+        pub const HEADER_FILL: Color = Color::new(254, 243, 199); // amber-100
+        pub const STROKE: Color = Color::new(245, 158, 11);    // amber-500
+        pub const TEXT: Color = super::TEXT_COLOR;
+        pub const EDGE: Color = super::EDGE_COLOR;
+    }
+
+    // ==================== Timeline (粉) ====================
+    pub mod timeline {
+        use super::super::Color;
+        pub const LINE: Color = Color::new(236, 72, 153);      // pink-500
+        pub const TEXT: Color = super::TEXT_COLOR;
+        pub const TITLE: Color = Color::new(30, 41, 59);       // slate-800
+    }
+
+    // ==================== Git Graph (多分支) ====================
+    pub mod gitgraph {
+        use super::super::Color;
+        pub const BRANCH_COLORS: [Color; 8] = [
+            Color::new(99, 102, 241),    // indigo-500
+            Color::new(249, 115, 22),    // orange-500
+            Color::new(34, 197, 94),     // green-500
+            Color::new(234, 179, 8),     // yellow-500
+            Color::new(168, 85, 247),    // purple-500
+            Color::new(6, 182, 212),     // cyan-500
+            Color::new(148, 163, 184),   // slate-400
+            Color::new(236, 72, 153),    // pink-500
+        ];
+        pub const TEXT: Color = super::TEXT_COLOR;
+        pub const COMMIT_STROKE: Color = Color::new(255, 255, 255);
+    }
+
+    // ==================== Pie (多色轮盘) ====================
+    pub mod pie {
+        use super::super::Color;
+        pub const COLORS: [Color; 10] = [
+            Color::new(99, 102, 241),    // indigo-500
+            Color::new(14, 165, 233),    // sky-500
+            Color::new(249, 115, 22),    // orange-500
+            Color::new(34, 197, 94),     // green-500
+            Color::new(168, 85, 247),    // purple-500
+            Color::new(234, 179, 8),     // yellow-500
+            Color::new(236, 72, 153),    // pink-500
+            Color::new(6, 182, 212),     // cyan-500
+            Color::new(239, 68, 68),     // red-500
+            Color::new(20, 184, 166),    // teal-500
+        ];
     }
 }
