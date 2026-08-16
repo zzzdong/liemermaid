@@ -1,5 +1,3 @@
-use liemermaid;
-
 fn main() {
     // 1. 基础状态图
     let basic = r#"stateDiagram-v2

@@ -2,16 +2,12 @@ use vello_cpu::kurbo::Point;
 
 use crate::{
     ast::{MessageArrow, NotePlacement, SequenceDiagram},
-    builder::{
-        layout::types::LayoutEngine,
-        types::OutputConfig,
-    },
+    builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
     text::{compute_text_offset, create_text_layout},
     visual::{
-        theme,
-        FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle,
-        VisualElement, Z_AXIS, Z_LABEL, Z_SERIES,
+        FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle, VisualElement, Z_AXIS,
+        Z_LABEL, Z_SERIES, theme,
     },
 };
 
@@ -42,10 +38,7 @@ impl<'a> LayoutEngine for SequenceEngine<'a> {
     }
 }
 
-pub fn build_sequence_elements(
-    seq: &SequenceDiagram,
-    config: &OutputConfig,
-) -> Vec<VisualElement> {
+pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> Vec<VisualElement> {
     let mut elements = Vec::new();
 
     if seq.participants.is_empty() {
@@ -122,7 +115,7 @@ pub fn build_sequence_elements(
             },
             rotation: 0.0,
             max_width: Some(bw - 8.0),
-            layout: Some(layout),
+            layout: Some(Box::new(layout)),
             z_index: Z_LABEL,
         });
     }
@@ -138,7 +131,13 @@ pub fn build_sequence_elements(
     for msg in &seq.messages {
         let fi = name_to_idx.get(msg.from.as_str()).copied().unwrap_or(0);
         let ti = name_to_idx.get(msg.to.as_str()).copied().unwrap_or(0);
-        message_entries.push((fi, ti, cur_y, msg.text.clone().unwrap_or_default(), msg.arrow));
+        message_entries.push((
+            fi,
+            ti,
+            cur_y,
+            msg.text.clone().unwrap_or_default(),
+            msg.arrow,
+        ));
         cur_y += MESSAGE_SPACING;
     }
 
@@ -186,12 +185,18 @@ pub fn build_sequence_elements(
                     Point::new(loop_x, arrow_y + 10.0),
                     Point::new(from_x, arrow_y + 10.0),
                 ],
-                style: StrokeStyle { color: theme::sequence::EDGE, width: 1.5 },
+                style: StrokeStyle {
+                    color: theme::sequence::EDGE,
+                    width: 1.5,
+                },
                 z_index: Z_AXIS,
             });
         } else {
             let dir = if to_x > from_x { 1.0 } else { -1.0 };
-            let stroke = StrokeStyle { color: theme::sequence::EDGE, width: 1.5 };
+            let stroke = StrokeStyle {
+                color: theme::sequence::EDGE,
+                width: 1.5,
+            };
 
             elements.push(VisualElement::Line {
                 start: Point::new(from_x, arrow_y),
@@ -257,7 +262,8 @@ pub fn build_sequence_elements(
                 ..Default::default()
             };
             let layout = create_text_layout(text, &ts, Some(200.0));
-            let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Bottom);
+            let (x_off, y_off) =
+                compute_text_offset(&layout, TextAlign::Center, TextBaseline::Bottom);
             elements.push(VisualElement::TextRun {
                 text: text.clone(),
                 position: Point::new(mid_x + x_off, arrow_y - 4.0 + y_off),
@@ -268,7 +274,7 @@ pub fn build_sequence_elements(
                 },
                 rotation: 0.0,
                 max_width: Some(200.0),
-                layout: Some(layout),
+                layout: Some(Box::new(layout)),
                 z_index: Z_LABEL,
             });
         }
@@ -294,11 +300,11 @@ pub fn build_sequence_elements(
 
         let (nx, nw) = match placement {
             NotePlacement::LeftOf => {
-                let w = (min_ref_x - 10.0).max(100.0).min(200.0);
+                let w = (min_ref_x - 10.0).clamp(100.0, 200.0);
                 (min_ref_x - w - 10.0, w)
             }
             NotePlacement::RightOf => {
-                let w = (config.width - max_ref_x - 10.0).max(100.0).min(200.0);
+                let w = (config.width - max_ref_x - 10.0).clamp(100.0, 200.0);
                 (max_ref_x + 10.0, w)
             }
             NotePlacement::Over => {
@@ -338,7 +344,7 @@ pub fn build_sequence_elements(
             },
             rotation: 0.0,
             max_width: Some(nw - 10.0),
-            layout: Some(layout),
+            layout: Some(Box::new(layout)),
             z_index: Z_LABEL,
         });
     }

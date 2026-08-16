@@ -13,9 +13,8 @@ use crate::{
     error::DiagramResult,
     text::{compute_text_offset, create_text_layout},
     visual::{
-        theme,
-        Color, FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle,
-        VisualElement, Z_AXIS, Z_LABEL, Z_SERIES,
+        Color, FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle, VisualElement,
+        Z_AXIS, Z_LABEL, Z_SERIES, theme,
     },
 };
 
@@ -29,7 +28,10 @@ const SMALL_FONT: f64 = 11.0;
 enum StateNode {
     Start,
     End,
-    Normal { id: String, description: Option<String> },
+    Normal {
+        id: String,
+        description: Option<String>,
+    },
 }
 
 pub struct StateEngine<'a> {
@@ -48,10 +50,7 @@ impl<'a> LayoutEngine for StateEngine<'a> {
     }
 }
 
-pub fn build_state_elements(
-    diagram: &StateDiagram,
-    _config: &OutputConfig,
-) -> Vec<VisualElement> {
+pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> Vec<VisualElement> {
     let mut elements = Vec::new();
 
     if diagram.transitions.is_empty() && diagram.states.is_empty() {
@@ -69,12 +68,22 @@ pub fn build_state_elements(
 
     // Process transitions to discover all states
     for t in &diagram.transitions {
-        let from_key = if t.from == "[*]" { START_KEY.to_string() } else { t.from.clone() };
-        let to_key = if t.to == "[*]" { END_KEY.to_string() } else { t.to.clone() };
+        let from_key = if t.from == "[*]" {
+            START_KEY.to_string()
+        } else {
+            t.from.clone()
+        };
+        let to_key = if t.to == "[*]" {
+            END_KEY.to_string()
+        } else {
+            t.to.clone()
+        };
 
         // Register states
         if t.from == "[*]" {
-            state_map.entry(START_KEY.to_string()).or_insert(StateNode::Start);
+            state_map
+                .entry(START_KEY.to_string())
+                .or_insert(StateNode::Start);
         } else {
             state_map
                 .entry(t.from.clone())
@@ -85,7 +94,9 @@ pub fn build_state_elements(
         }
 
         if t.to == "[*]" {
-            state_map.entry(END_KEY.to_string()).or_insert(StateNode::End);
+            state_map
+                .entry(END_KEY.to_string())
+                .or_insert(StateNode::End);
         } else {
             state_map
                 .entry(t.to.clone())
@@ -141,7 +152,14 @@ pub fn build_state_elements(
         let text_h = layout.height() as f64;
 
         let desc_text_h = if let Some(d) = &desc {
-            let dl = create_text_layout(d, &TextStyle { font_size: SMALL_FONT, ..ts.clone() }, None);
+            let dl = create_text_layout(
+                d,
+                &TextStyle {
+                    font_size: SMALL_FONT,
+                    ..ts.clone()
+                },
+                None,
+            );
             dl.height() as f64 + 4.0
         } else {
             0.0
@@ -207,7 +225,13 @@ pub fn build_state_elements(
     for id in &node_ids {
         if let Some(idx) = node_indices.get(id) {
             let nl = &node_layouts[id];
-            sugiyama_node_sizes.insert(*idx, NodeSize { width: nl.width, height: nl.height });
+            sugiyama_node_sizes.insert(
+                *idx,
+                NodeSize {
+                    width: nl.width,
+                    height: nl.height,
+                },
+            );
         }
     }
 
@@ -228,8 +252,16 @@ pub fn build_state_elements(
 
     // ---- Draw transitions with orthogonal routing ----
     for t in &diagram.transitions {
-        let from_key = if t.from == "[*]" { START_KEY.to_string() } else { t.from.clone() };
-        let to_key = if t.to == "[*]" { END_KEY.to_string() } else { t.to.clone() };
+        let from_key = if t.from == "[*]" {
+            START_KEY.to_string()
+        } else {
+            t.from.clone()
+        };
+        let to_key = if t.to == "[*]" {
+            END_KEY.to_string()
+        } else {
+            t.to.clone()
+        };
         let from_pos = positions.get(&from_key);
         let to_pos = positions.get(&to_key);
         if let (Some(fp), Some(tp)) = (from_pos, to_pos) {
@@ -248,16 +280,16 @@ pub fn build_state_elements(
             };
             let mid_y = (from_bottom + to_top) / 2.0;
 
-            let stroke = StrokeStyle { color: theme::state::EDGE, width: 1.5 };
+            let stroke = StrokeStyle {
+                color: theme::state::EDGE,
+                width: 1.5,
+            };
 
             // Orthogonal routing:
             // - Same X: straight vertical line (2 points)
             // - Different X: vertical → horizontal → vertical (4 points)
             let points = if (fp.x - tp.x).abs() < 0.001 {
-                vec![
-                    Point::new(fp.x, from_bottom),
-                    Point::new(fp.x, to_top),
-                ]
+                vec![Point::new(fp.x, from_bottom), Point::new(fp.x, to_top)]
             } else {
                 vec![
                     Point::new(fp.x, from_bottom),
@@ -298,7 +330,8 @@ pub fn build_state_elements(
                     ..Default::default()
                 };
                 let layout = create_text_layout(label, &ts, Some(200.0));
-                let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Bottom);
+                let (x_off, y_off) =
+                    compute_text_offset(&layout, TextAlign::Center, TextBaseline::Bottom);
                 let label_cx = (fp.x + tp.x) / 2.0;
                 elements.push(VisualElement::TextRun {
                     text: label.clone(),
@@ -310,7 +343,7 @@ pub fn build_state_elements(
                     },
                     rotation: 0.0,
                     max_width: Some(200.0),
-                    layout: Some(layout),
+                    layout: Some(Box::new(layout)),
                     z_index: Z_LABEL,
                 });
             }
@@ -339,8 +372,7 @@ pub fn build_state_elements(
                 elements.push(VisualElement::Circle {
                     center: *pos,
                     radius: r - 2.0,
-                    style: FillStrokeStyle::new()
-                        .with_fill(theme::state::START_FILL),
+                    style: FillStrokeStyle::new().with_fill(theme::state::START_FILL),
                     z_index: Z_SERIES,
                 });
             }
@@ -406,7 +438,7 @@ pub fn build_state_elements(
                     },
                     rotation: 0.0,
                     max_width: Some(nl.width - 10.0),
-                    layout: Some(layout),
+                    layout: Some(Box::new(layout)),
                     z_index: Z_LABEL,
                 });
 
@@ -421,7 +453,8 @@ pub fn build_state_elements(
                         ..Default::default()
                     };
                     let dl = create_text_layout(desc, &dts, Some(nl.width - 10.0));
-                    let (dx_off, dy_off) = compute_text_offset(&dl, TextAlign::Center, TextBaseline::Top);
+                    let (dx_off, dy_off) =
+                        compute_text_offset(&dl, TextAlign::Center, TextBaseline::Top);
                     elements.push(VisualElement::TextRun {
                         text: desc.clone(),
                         position: Point::new(pos.x + dx_off, pos.y + 4.0 + dy_off),
@@ -432,7 +465,7 @@ pub fn build_state_elements(
                         },
                         rotation: 0.0,
                         max_width: Some(nl.width - 10.0),
-                        layout: Some(dl),
+                        layout: Some(Box::new(dl)),
                         z_index: Z_LABEL,
                     });
                 }
@@ -475,7 +508,7 @@ fn topological_sort(
     }
 
     // Append any remaining nodes (from cycles or disconnected)
-    for (node, _) in in_degree {
+    for node in in_degree.keys() {
         if !result.contains(node) {
             result.push(node.clone());
         }

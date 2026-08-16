@@ -1,22 +1,18 @@
 use std::collections::HashMap;
 
+use petgraph::Direction;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
-use petgraph::Direction;
 use vello_cpu::kurbo::Point;
 
 use crate::{
     ast::{GitGraphDiagram, GitGraphStatement},
-    builder::{
-        layout::types::LayoutEngine,
-        types::OutputConfig,
-    },
+    builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
     text::{compute_text_offset, create_text_layout},
     visual::{
-        theme,
-        Color, FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle,
-        VisualElement, Z_AXIS, Z_LABEL, Z_SERIES,
+        Color, FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle, VisualElement,
+        Z_AXIS, Z_LABEL, Z_SERIES, theme,
     },
 };
 
@@ -142,7 +138,8 @@ pub fn build_gitgraph_elements(
 
     for &node_idx in &commit_list {
         let data = &dag[node_idx];
-        let col_idx = branch_order.iter()
+        let col_idx = branch_order
+            .iter()
             .position(|b| b == &data.branch_name)
             .unwrap_or(0);
         let x = base_x + col_idx as f64 * BRANCH_SPACING;
@@ -159,13 +156,21 @@ pub fn build_gitgraph_elements(
         });
     }
 
-    let branch_colors: HashMap<&str, Color> = branch_order.iter().enumerate().map(|(i, name)| {
-        (name.as_str(), theme::gitgraph::BRANCH_COLORS[i % theme::gitgraph::BRANCH_COLORS.len()])
-    }).collect();
+    let branch_colors: HashMap<&str, Color> = branch_order
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            (
+                name.as_str(),
+                theme::gitgraph::BRANCH_COLORS[i % theme::gitgraph::BRANCH_COLORS.len()],
+            )
+        })
+        .collect();
 
     // ===== Phase 3: Draw same-branch lines =====
     for branch_name in &branch_order {
-        let branch_commits: Vec<&CommitPos> = commit_positions.iter()
+        let branch_commits: Vec<&CommitPos> = commit_positions
+            .iter()
             .filter(|cp| cp.branch_name == *branch_name)
             .collect();
 
@@ -183,23 +188,25 @@ pub fn build_gitgraph_elements(
         }
 
         // 非 main 分支：从父 commit 的 Y 高度画竖线到第一个 commit（分支分叉线段）
-        if *branch_name != "main" && !branch_commits.is_empty() {
-            if let Some(parent_y) = commit_list.iter().copied()
+        if *branch_name != "main"
+            && !branch_commits.is_empty()
+            && let Some(parent_y) = commit_list
+                .iter()
+                .copied()
                 .find(|&n| dag[n].branch_name == *branch_name)
                 .and_then(|n| {
                     dag.edges_directed(n, Direction::Incoming)
                         .filter_map(|e| node_to_pos.get(&e.source()).map(|p| p.y))
                         .next()
                 })
-            {
-                let first = branch_commits[0].position;
-                elements.push(VisualElement::Line {
-                    start: Point::new(first.x, parent_y),
-                    end: first,
-                    style: StrokeStyle { color, width: 2.5 },
-                    z_index: Z_AXIS,
-                });
-            }
+        {
+            let first = branch_commits[0].position;
+            elements.push(VisualElement::Line {
+                start: Point::new(first.x, parent_y),
+                end: first,
+                style: StrokeStyle { color, width: 2.5 },
+                z_index: Z_AXIS,
+            });
         }
     }
 
@@ -217,20 +224,20 @@ pub fn build_gitgraph_elements(
             let parent_idx = edge.source();
             let parent_data = &dag[parent_idx];
 
-            if parent_data.branch_name != data.branch_name {
-                if let Some(&parent_pos) = node_to_pos.get(&parent_idx) {
-                    let mid_x = (pos.x + parent_pos.x) / 2.0;
-                    elements.push(VisualElement::Polyline {
-                        points: vec![
-                            parent_pos,
-                            Point::new(mid_x, parent_pos.y),
-                            Point::new(mid_x, pos.y),
-                            pos,
-                        ],
-                        style: StrokeStyle { color, width: 1.5 },
-                        z_index: Z_AXIS,
-                    });
-                }
+            if parent_data.branch_name != data.branch_name
+                && let Some(&parent_pos) = node_to_pos.get(&parent_idx)
+            {
+                let mid_x = (pos.x + parent_pos.x) / 2.0;
+                elements.push(VisualElement::Polyline {
+                    points: vec![
+                        parent_pos,
+                        Point::new(mid_x, parent_pos.y),
+                        Point::new(mid_x, pos.y),
+                        pos,
+                    ],
+                    style: StrokeStyle { color, width: 1.5 },
+                    z_index: Z_AXIS,
+                });
             }
         }
     }
@@ -265,14 +272,19 @@ pub fn build_gitgraph_elements(
                 ..Default::default()
             };
             let layout = create_text_layout(tag, &ts, Some(200.0));
-            let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Left, TextBaseline::Middle);
+            let (x_off, y_off) =
+                compute_text_offset(&layout, TextAlign::Left, TextBaseline::Middle);
             elements.push(VisualElement::TextRun {
                 text: tag.clone(),
                 position: Point::new(cp.position.x + LABEL_OFFSET + x_off, cp.position.y + y_off),
-                style: TextStyle { align: TextAlign::Left, vertical_align: TextBaseline::Top, ..ts },
+                style: TextStyle {
+                    align: TextAlign::Left,
+                    vertical_align: TextBaseline::Top,
+                    ..ts
+                },
                 rotation: 0.0,
                 max_width: Some(200.0),
-                layout: Some(layout),
+                layout: Some(Box::new(layout)),
                 z_index: Z_LABEL,
             });
         }
@@ -297,10 +309,14 @@ pub fn build_gitgraph_elements(
         elements.push(VisualElement::TextRun {
             text: branch_name.clone(),
             position: Point::new(x - LABEL_OFFSET + x_off, y + y_off),
-            style: TextStyle { align: TextAlign::Left, vertical_align: TextBaseline::Top, ..ts },
+            style: TextStyle {
+                align: TextAlign::Left,
+                vertical_align: TextBaseline::Top,
+                ..ts
+            },
             rotation: 0.0,
             max_width: Some(120.0),
-            layout: Some(layout),
+            layout: Some(Box::new(layout)),
             z_index: Z_LABEL,
         });
     }

@@ -6,7 +6,7 @@ use parley::{
 };
 
 use crate::{
-    error::{DiagramError},
+    error::DiagramError,
     visual::{Color, TextAlign, TextBaseline, TextStyle},
 };
 

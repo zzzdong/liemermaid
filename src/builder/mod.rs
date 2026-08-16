@@ -11,10 +11,7 @@ pub mod types;
 
 use crate::{
     ast::Diagram,
-    builder::{
-        layout::types::LayoutEngine,
-        types::OutputConfig,
-    },
+    builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
     visual::{TextAlign, TextBaseline, Transform, VisualElement},
 };
@@ -63,10 +60,18 @@ fn compute_bbox(elements: &[VisualElement]) -> Option<(f64, f64, f64, f64)> {
             ($x:expr, $y:expr) => {
                 let x = $x;
                 let y = $y;
-                if min_x.is_none() || x < min_x.unwrap() { min_x = Some(x); }
-                if min_y.is_none() || y < min_y.unwrap() { min_y = Some(y); }
-                if max_x.is_none() || x > max_x.unwrap() { max_x = Some(x); }
-                if max_y.is_none() || y > max_y.unwrap() { max_y = Some(y); }
+                if min_x.is_none() || x < min_x.unwrap() {
+                    min_x = Some(x);
+                }
+                if min_y.is_none() || y < min_y.unwrap() {
+                    min_y = Some(y);
+                }
+                if max_x.is_none() || x > max_x.unwrap() {
+                    max_x = Some(x);
+                }
+                if max_y.is_none() || y > max_y.unwrap() {
+                    max_y = Some(y);
+                }
             };
         }
 
@@ -109,9 +114,20 @@ fn compute_bbox(elements: &[VisualElement]) -> Option<(f64, f64, f64, f64)> {
                     }
                 }
             }
-            VisualElement::TextRun { position, layout, style, .. } => {
-                let tw = layout.as_ref().map(|l| l.width() as f64).unwrap_or(style.font_size * 4.0);
-                let th = layout.as_ref().map(|l| l.height() as f64).unwrap_or(style.font_size);
+            VisualElement::TextRun {
+                position,
+                layout,
+                style,
+                ..
+            } => {
+                let tw = layout
+                    .as_ref()
+                    .map(|l| l.width() as f64)
+                    .unwrap_or(style.font_size * 4.0);
+                let th = layout
+                    .as_ref()
+                    .map(|l| l.height() as f64)
+                    .unwrap_or(style.font_size);
                 let (tx0, tx1) = match style.align {
                     TextAlign::Left => (position.x, position.x + tw),
                     TextAlign::Center => (position.x - tw / 2.0, position.x + tw / 2.0),
@@ -152,21 +168,19 @@ fn fit_to_canvas(elements: Vec<VisualElement>, config: &OutputConfig) -> Vec<Vis
     let content_w = x1 - x0;
     let content_h = y1 - y0;
     let margin = 40.0;
-    let avail_w = config.width as f64 - 2.0 * margin;
-    let avail_h = config.height as f64 - 2.0 * margin;
+    let avail_w = config.width - 2.0 * margin;
+    let avail_h = config.height - 2.0 * margin;
 
     // 计算缩放比例（绝不放大）
-    let scale = (avail_w / content_w)
-        .min(avail_h / content_h)
-        .min(1.0);
+    let scale = (avail_w / content_w).min(avail_h / content_h).min(1.0);
 
     // 缩放后的内容尺寸
     let scaled_w = content_w * scale;
     let scaled_h = content_h * scale;
 
     // 居中偏移量
-    let offset_x = ((config.width as f64 - scaled_w) / 2.0) - x0 * scale;
-    let offset_y = ((config.height as f64 - scaled_h) / 2.0) - y0 * scale;
+    let offset_x = ((config.width - scaled_w) / 2.0) - x0 * scale;
+    let offset_y = ((config.height - scaled_h) / 2.0) - y0 * scale;
 
     if offset_x.abs() < 0.5 && offset_y.abs() < 0.5 && (scale - 1.0).abs() < 0.001 {
         return elements;
@@ -184,4 +198,3 @@ fn fit_to_canvas(elements: Vec<VisualElement>, config: &OutputConfig) -> Vec<Vis
         z_index: 0,
     }]
 }
-

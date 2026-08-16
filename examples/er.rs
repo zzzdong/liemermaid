@@ -1,5 +1,3 @@
-use liemermaid;
-
 fn main() {
     // 1. 简单实体关系图
     let basic = r#"erDiagram

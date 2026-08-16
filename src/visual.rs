@@ -49,9 +49,9 @@ pub enum VisualElement {
         text: String,
         position: Point, // 锚点位置（配合 align/baseline 确定文本块左上角）
         style: crate::visual::TextStyle,
-        rotation: f64,                  // 弧度
+        rotation: f64, // 弧度
         max_width: Option<f64>,
-        layout: Option<TextLayout>, // 预排版结果
+        layout: Option<Box<TextLayout>>, // 预排版结果
         z_index: i32,
     },
 
@@ -66,7 +66,12 @@ pub enum VisualElement {
 impl Clone for VisualElement {
     fn clone(&self) -> Self {
         match self {
-            VisualElement::Rect { rect, radius, style, z_index } => VisualElement::Rect {
+            VisualElement::Rect {
+                rect,
+                radius,
+                style,
+                z_index,
+            } => VisualElement::Rect {
                 rect: *rect,
                 radius: *radius,
                 style: style.clone(),
@@ -83,18 +88,31 @@ impl Clone for VisualElement {
                 style: style.clone(),
                 z_index: *z_index,
             },
-            VisualElement::Line { start, end, style, z_index } => VisualElement::Line {
+            VisualElement::Line {
+                start,
+                end,
+                style,
+                z_index,
+            } => VisualElement::Line {
                 start: *start,
                 end: *end,
                 style: style.clone(),
                 z_index: *z_index,
             },
-            VisualElement::Polyline { points, style, z_index } => VisualElement::Polyline {
+            VisualElement::Polyline {
+                points,
+                style,
+                z_index,
+            } => VisualElement::Polyline {
                 points: points.clone(),
                 style: style.clone(),
                 z_index: *z_index,
             },
-            VisualElement::Path { path, style, z_index } => VisualElement::Path {
+            VisualElement::Path {
+                path,
+                style,
+                z_index,
+            } => VisualElement::Path {
                 path: path.clone(),
                 style: style.clone(),
                 z_index: *z_index,
@@ -143,7 +161,12 @@ impl Clone for VisualElement {
 impl std::fmt::Debug for VisualElement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            VisualElement::Rect { rect, radius, style, z_index } => f
+            VisualElement::Rect {
+                rect,
+                radius,
+                style,
+                z_index,
+            } => f
                 .debug_struct("Rect")
                 .field("rect", rect)
                 .field("radius", radius)
@@ -162,20 +185,33 @@ impl std::fmt::Debug for VisualElement {
                 .field("style", style)
                 .field("z_index", z_index)
                 .finish(),
-            VisualElement::Line { start, end, style, z_index } => f
+            VisualElement::Line {
+                start,
+                end,
+                style,
+                z_index,
+            } => f
                 .debug_struct("Line")
                 .field("start", start)
                 .field("end", end)
                 .field("style", style)
                 .field("z_index", z_index)
                 .finish(),
-            VisualElement::Polyline { points, style, z_index } => f
+            VisualElement::Polyline {
+                points,
+                style,
+                z_index,
+            } => f
                 .debug_struct("Polyline")
                 .field("points", points)
                 .field("style", style)
                 .field("z_index", z_index)
                 .finish(),
-            VisualElement::Path { path: _, style, z_index } => f
+            VisualElement::Path {
+                path: _,
+                style,
+                z_index,
+            } => f
                 .debug_struct("Path")
                 .field("path", &"<BezPath>")
                 .field("style", style)
@@ -542,13 +578,13 @@ pub mod theme {
     // ---- 连线通用 ----
     pub const EDGE_COLOR: Color = Color::new(148, 163, 184); // slate-400
     pub const EDGE_WIDTH: f64 = 2.0;
-    pub const TEXT_COLOR: Color = Color::new(30, 41, 59);     // slate-800
+    pub const TEXT_COLOR: Color = Color::new(30, 41, 59); // slate-800
 
     // ==================== Flowchart (蓝) ====================
     pub mod flowchart {
         use super::super::Color;
-        pub const FILL: Color = Color::new(238, 242, 255);     // indigo-50
-        pub const STROKE: Color = Color::new(99, 102, 241);    // indigo-500
+        pub const FILL: Color = Color::new(238, 242, 255); // indigo-50
+        pub const STROKE: Color = Color::new(99, 102, 241); // indigo-500
         pub const TEXT: Color = super::TEXT_COLOR;
         pub const EDGE: Color = super::EDGE_COLOR;
     }
@@ -556,9 +592,9 @@ pub mod theme {
     // ==================== State (绿) ====================
     pub mod state {
         use super::super::Color;
-        pub const FILL: Color = Color::new(240, 253, 244);     // green-50
-        pub const STROKE: Color = Color::new(34, 197, 94);     // green-500
-        pub const TEXT: Color = Color::new(22, 101, 52);       // green-800
+        pub const FILL: Color = Color::new(240, 253, 244); // green-50
+        pub const STROKE: Color = Color::new(34, 197, 94); // green-500
+        pub const TEXT: Color = Color::new(22, 101, 52); // green-800
         pub const EDGE: Color = super::EDGE_COLOR;
         pub const START_FILL: Color = Color::new(22, 101, 52); // green-800
         pub const END_STROKE: Color = Color::new(34, 197, 94); // green-500
@@ -567,9 +603,9 @@ pub mod theme {
     // ==================== Class (紫) ====================
     pub mod class {
         use super::super::Color;
-        pub const FILL: Color = Color::new(255, 255, 255);     // white
+        pub const FILL: Color = Color::new(255, 255, 255); // white
         pub const HEADER_FILL: Color = Color::new(250, 245, 255); // purple-50
-        pub const STROKE: Color = Color::new(168, 85, 247);    // purple-500
+        pub const STROKE: Color = Color::new(168, 85, 247); // purple-500
         pub const TEXT: Color = super::TEXT_COLOR;
         pub const EDGE: Color = super::EDGE_COLOR;
         pub const SEPARATOR: Color = Color::new(214, 188, 250); // purple-200
@@ -581,8 +617,8 @@ pub mod theme {
         use super::super::Color;
         pub const ACTOR_FILL: Color = Color::new(240, 249, 255); // sky-50
         pub const ACTOR_STROKE: Color = Color::new(14, 165, 233); // sky-500
-        pub const FILL: Color = Color::new(240, 249, 255);     // sky-50
-        pub const STROKE: Color = Color::new(14, 165, 233);    // sky-500
+        pub const FILL: Color = Color::new(240, 249, 255); // sky-50
+        pub const STROKE: Color = Color::new(14, 165, 233); // sky-500
         pub const TEXT: Color = super::TEXT_COLOR;
         pub const EDGE: Color = super::EDGE_COLOR;
         pub const LIFELINE: Color = Color::new(203, 213, 225); // slate-300
@@ -593,9 +629,9 @@ pub mod theme {
     // ==================== ER (琥珀) ====================
     pub mod er {
         use super::super::Color;
-        pub const FILL: Color = Color::new(255, 251, 235);     // amber-50
+        pub const FILL: Color = Color::new(255, 251, 235); // amber-50
         pub const HEADER_FILL: Color = Color::new(254, 243, 199); // amber-100
-        pub const STROKE: Color = Color::new(245, 158, 11);    // amber-500
+        pub const STROKE: Color = Color::new(245, 158, 11); // amber-500
         pub const TEXT: Color = super::TEXT_COLOR;
         pub const EDGE: Color = super::EDGE_COLOR;
     }
@@ -603,23 +639,23 @@ pub mod theme {
     // ==================== Timeline (粉) ====================
     pub mod timeline {
         use super::super::Color;
-        pub const LINE: Color = Color::new(236, 72, 153);      // pink-500
+        pub const LINE: Color = Color::new(236, 72, 153); // pink-500
         pub const TEXT: Color = super::TEXT_COLOR;
-        pub const TITLE: Color = Color::new(30, 41, 59);       // slate-800
+        pub const TITLE: Color = Color::new(30, 41, 59); // slate-800
     }
 
     // ==================== Git Graph (多分支) ====================
     pub mod gitgraph {
         use super::super::Color;
         pub const BRANCH_COLORS: [Color; 8] = [
-            Color::new(99, 102, 241),    // indigo-500
-            Color::new(249, 115, 22),    // orange-500
-            Color::new(34, 197, 94),     // green-500
-            Color::new(234, 179, 8),     // yellow-500
-            Color::new(168, 85, 247),    // purple-500
-            Color::new(6, 182, 212),     // cyan-500
-            Color::new(148, 163, 184),   // slate-400
-            Color::new(236, 72, 153),    // pink-500
+            Color::new(99, 102, 241),  // indigo-500
+            Color::new(249, 115, 22),  // orange-500
+            Color::new(34, 197, 94),   // green-500
+            Color::new(234, 179, 8),   // yellow-500
+            Color::new(168, 85, 247),  // purple-500
+            Color::new(6, 182, 212),   // cyan-500
+            Color::new(148, 163, 184), // slate-400
+            Color::new(236, 72, 153),  // pink-500
         ];
         pub const TEXT: Color = super::TEXT_COLOR;
         pub const COMMIT_STROKE: Color = Color::new(255, 255, 255);
@@ -629,16 +665,16 @@ pub mod theme {
     pub mod pie {
         use super::super::Color;
         pub const COLORS: [Color; 10] = [
-            Color::new(99, 102, 241),    // indigo-500
-            Color::new(14, 165, 233),    // sky-500
-            Color::new(249, 115, 22),    // orange-500
-            Color::new(34, 197, 94),     // green-500
-            Color::new(168, 85, 247),    // purple-500
-            Color::new(234, 179, 8),     // yellow-500
-            Color::new(236, 72, 153),    // pink-500
-            Color::new(6, 182, 212),     // cyan-500
-            Color::new(239, 68, 68),     // red-500
-            Color::new(20, 184, 166),    // teal-500
+            Color::new(99, 102, 241), // indigo-500
+            Color::new(14, 165, 233), // sky-500
+            Color::new(249, 115, 22), // orange-500
+            Color::new(34, 197, 94),  // green-500
+            Color::new(168, 85, 247), // purple-500
+            Color::new(234, 179, 8),  // yellow-500
+            Color::new(236, 72, 153), // pink-500
+            Color::new(6, 182, 212),  // cyan-500
+            Color::new(239, 68, 68),  // red-500
+            Color::new(20, 184, 166), // teal-500
         ];
     }
 }

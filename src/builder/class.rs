@@ -1,20 +1,16 @@
 use std::collections::{HashMap, VecDeque};
 
-use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::Direction;
+use petgraph::graph::{DiGraph, NodeIndex};
 use vello_cpu::kurbo::{BezPath, Point, Rect};
 
 use crate::{
     ast::{ClassDiagram, RelationKind, Visibility},
-    builder::{
-        layout::types::LayoutEngine,
-        types::OutputConfig,
-    },
+    builder::{layout::types::LayoutEngine, types::OutputConfig},
     text::{compute_text_offset, create_text_layout},
     visual::{
-        theme,
-        Color, FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle,
-        VisualElement, Z_AXIS, Z_LABEL, Z_SERIES,
+        Color, FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle, VisualElement,
+        Z_AXIS, Z_LABEL, Z_SERIES, theme,
     },
 };
 
@@ -42,10 +38,7 @@ impl<'a> LayoutEngine for ClassEngine<'a> {
     }
 }
 
-pub fn build_class_elements(
-    diagram: &ClassDiagram,
-    _config: &OutputConfig,
-) -> Vec<VisualElement> {
+pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> Vec<VisualElement> {
     let mut elements = Vec::new();
 
     if diagram.classes.is_empty() {
@@ -64,7 +57,13 @@ pub fn build_class_elements(
 
     let mut layouts: HashMap<String, ClassLayout> = HashMap::new();
     for cls in &diagram.classes {
-        let ts = TextStyle { font_size: FONT_SIZE, font_family: theme::FONT_FAMILY.to_string(), align: TextAlign::Left, vertical_align: TextBaseline::Top, ..Default::default() };
+        let ts = TextStyle {
+            font_size: FONT_SIZE,
+            font_family: theme::FONT_FAMILY.to_string(),
+            align: TextAlign::Left,
+            vertical_align: TextBaseline::Top,
+            ..Default::default()
+        };
         let name_layout = create_text_layout(&cls.name, &ts, None);
         let name_w = name_layout.width() as f64 + CLASS_PAD * 2.0;
 
@@ -95,23 +94,41 @@ pub fn build_class_elements(
         let col_w = name_w;
         let mut max_w = col_w;
         for line in attr_lines.iter().chain(method_lines.iter()) {
-            let l = create_text_layout(line, &TextStyle { font_size: SMALL_FONT, ..ts.clone() }, None);
+            let l = create_text_layout(
+                line,
+                &TextStyle {
+                    font_size: SMALL_FONT,
+                    ..ts.clone()
+                },
+                None,
+            );
             max_w = max_w.max(l.width() as f64 + CLASS_PAD * 2.0);
         }
 
         let header_h = name_layout.height() as f64 + 12.0;
-        let attr_h = if attr_lines.is_empty() { 0.0 } else { attr_lines.len() as f64 * 18.0 + 8.0 };
-        let method_h = if method_lines.is_empty() { 0.0 } else { method_lines.len() as f64 * 18.0 + 8.0 };
+        let attr_h = if attr_lines.is_empty() {
+            0.0
+        } else {
+            attr_lines.len() as f64 * 18.0 + 8.0
+        };
+        let method_h = if method_lines.is_empty() {
+            0.0
+        } else {
+            method_lines.len() as f64 * 18.0 + 8.0
+        };
         let height = header_h + attr_h + method_h;
 
-        layouts.insert(cls.name.clone(), ClassLayout {
-            name: cls.name.clone(),
-            width: max_w.max(CLASS_MIN_W),
-            height,
-            header_h,
-            attrs: attr_lines,
-            methods: method_lines,
-        });
+        layouts.insert(
+            cls.name.clone(),
+            ClassLayout {
+                name: cls.name.clone(),
+                width: max_w.max(CLASS_MIN_W),
+                height,
+                header_h,
+                attrs: attr_lines,
+                methods: method_lines,
+            },
+        );
     }
 
     // ---- Compute positions via petgraph layered layout ----
@@ -128,13 +145,16 @@ pub fn build_class_elements(
         node_indices.insert(name.clone(), idx);
     }
     for rel in &diagram.relations {
-        if let (Some(&from), Some(&to)) = (node_indices.get(&rel.source), node_indices.get(&rel.target)) {
+        if let (Some(&from), Some(&to)) =
+            (node_indices.get(&rel.source), node_indices.get(&rel.target))
+        {
             graph.add_edge(from, to, ());
         }
     }
 
     // BFS from roots (nodes with no incoming edges) to assign layers
-    let roots: Vec<NodeIndex> = graph.node_indices()
+    let roots: Vec<NodeIndex> = graph
+        .node_indices()
         .filter(|&idx| graph.neighbors_directed(idx, Direction::Incoming).count() == 0)
         .collect();
     let roots = if roots.is_empty() {
@@ -164,8 +184,8 @@ pub fn build_class_elements(
     // Ensure all class nodes have a layer (disconnected nodes go to layer 0)
     let mut next_layer = layers.values().copied().max().unwrap_or(0) + 1;
     for name in &class_names {
-        if !layers.contains_key(&node_indices[name]) {
-            layers.insert(node_indices[name], 0);
+        if let std::collections::hash_map::Entry::Vacant(e) = layers.entry(node_indices[name]) {
+            e.insert(0);
             next_layer = next_layer.max(1);
         }
     }
@@ -192,7 +212,11 @@ pub fn build_class_elements(
             + (nodes.len().saturating_sub(1)) as f64 * CLASS_MARGIN_X;
         layer_total_width.insert(layer, total);
     }
-    let max_layer_width = layer_total_width.values().cloned().max_by(|a,b| a.partial_cmp(b).unwrap()).unwrap_or(0.0);
+    let max_layer_width = layer_total_width
+        .values()
+        .cloned()
+        .max_by(|a, b| a.partial_cmp(b).unwrap())
+        .unwrap_or(0.0);
 
     // Compute positions per layer
     let start_x = 40.0;
@@ -217,9 +241,15 @@ pub fn build_class_elements(
             let cx = cur_x + layout.width / 2.0;
             let cy = current_y + layout.height / 2.0;
             positions.insert(name.clone(), Point::new(cx, cy));
-            class_rects.insert(name.clone(), Rect::new(
-                cur_x, current_y, cur_x + layout.width, current_y + layout.height,
-            ));
+            class_rects.insert(
+                name.clone(),
+                Rect::new(
+                    cur_x,
+                    current_y,
+                    cur_x + layout.width,
+                    current_y + layout.height,
+                ),
+            );
             cur_x += layout.width + CLASS_MARGIN_X;
         }
         current_y += max_h + 30.0;
@@ -257,15 +287,20 @@ pub fn build_class_elements(
                 Point::new(tp.x, to_r.y0)
             };
 
-            let stroke = StrokeStyle { color: theme::class::EDGE, width: 1.5 };
+            let stroke = StrokeStyle {
+                color: theme::class::EDGE,
+                width: 1.5,
+            };
 
             // 检查同层水平边是否有中间节点需要绕行
             let is_same_row_horizontal = is_from_left && (from_r.y0 - to_r.y0).abs() < 10.0;
             let has_intermediate = if is_same_row_horizontal {
                 class_rects.iter().any(|(n, r)| {
-                    n.as_str() != rel.source && n.as_str() != rel.target
+                    n.as_str() != rel.source
+                        && n.as_str() != rel.target
                         && (r.y0 - from_r.y0).abs() < 10.0
-                        && r.x0 > from_r.x1 && r.x0 < to_r.x0
+                        && r.x0 > from_r.x1
+                        && r.x0 < to_r.x0
                 })
             } else {
                 false
@@ -274,10 +309,11 @@ pub fn build_class_elements(
             if has_intermediate {
                 // 三段正交绕行：从源右侧向上 → 水平越过中间节点 → 向下到目标左侧
                 let route_y = from_r.y0 - 14.0;
-                let mut segs: Vec<(Point, Point)> = Vec::new();
-                segs.push((start, Point::new(start.x, route_y)));
-                segs.push((Point::new(start.x, route_y), Point::new(end.x, route_y)));
-                segs.push((Point::new(end.x, route_y), end));
+                let segs: Vec<(Point, Point)> = vec![
+                    (start, Point::new(start.x, route_y)),
+                    (Point::new(start.x, route_y), Point::new(end.x, route_y)),
+                    (Point::new(end.x, route_y), end),
+                ];
 
                 let is_dashed = rel.kind == RelationKind::Dependency;
                 for (seg_start, seg_end) in &segs {
@@ -294,17 +330,14 @@ pub fn build_class_elements(
                 }
 
                 // 箭头/菱形头：分别处理起点端和终点端
-                let first_seg_dir = Point::new(
-                    segs[0].1.x - segs[0].0.x,
-                    segs[0].1.y - segs[0].0.y,
-                );
-                let first_len = (first_seg_dir.x * first_seg_dir.x + first_seg_dir.y * first_seg_dir.y).sqrt();
+                let first_seg_dir =
+                    Point::new(segs[0].1.x - segs[0].0.x, segs[0].1.y - segs[0].0.y);
+                let first_len =
+                    (first_seg_dir.x * first_seg_dir.x + first_seg_dir.y * first_seg_dir.y).sqrt();
                 let first_ud = Point::new(first_seg_dir.x / first_len, first_seg_dir.y / first_len);
-                let last_seg_dir = Point::new(
-                    segs[2].1.x - segs[2].0.x,
-                    segs[2].1.y - segs[2].0.y,
-                );
-                let last_len = (last_seg_dir.x * last_seg_dir.x + last_seg_dir.y * last_seg_dir.y).sqrt();
+                let last_seg_dir = Point::new(segs[2].1.x - segs[2].0.x, segs[2].1.y - segs[2].0.y);
+                let last_len =
+                    (last_seg_dir.x * last_seg_dir.x + last_seg_dir.y * last_seg_dir.y).sqrt();
                 let last_ud = Point::new(last_seg_dir.x / last_len, last_seg_dir.y / last_len);
 
                 match rel.kind {
@@ -399,14 +432,22 @@ pub fn build_class_elements(
             ..Default::default()
         };
         let name_layout = create_text_layout(&layout.name, &ts, Some(layout.width - 8.0));
-        let (x_off, y_off) = compute_text_offset(&name_layout, TextAlign::Center, TextBaseline::Middle);
+        let (x_off, y_off) =
+            compute_text_offset(&name_layout, TextAlign::Center, TextBaseline::Middle);
         elements.push(VisualElement::TextRun {
             text: layout.name.clone(),
-            position: Point::new(rect.x0 + layout.width / 2.0 + x_off, rect.y0 + layout.header_h / 2.0 + y_off),
-            style: TextStyle { align: TextAlign::Left, vertical_align: TextBaseline::Top, ..ts },
+            position: Point::new(
+                rect.x0 + layout.width / 2.0 + x_off,
+                rect.y0 + layout.header_h / 2.0 + y_off,
+            ),
+            style: TextStyle {
+                align: TextAlign::Left,
+                vertical_align: TextBaseline::Top,
+                ..ts
+            },
             rotation: 0.0,
             max_width: Some(layout.width - 8.0),
-            layout: Some(name_layout),
+            layout: Some(Box::new(name_layout)),
             z_index: Z_LABEL,
         });
 
@@ -414,23 +455,37 @@ pub fn build_class_elements(
         elements.push(VisualElement::Line {
             start: Point::new(rect.x0, rect.y0 + layout.header_h),
             end: Point::new(rect.x1, rect.y0 + layout.header_h),
-            style: StrokeStyle { color: theme::class::STROKE, width: 1.5 },
+            style: StrokeStyle {
+                color: theme::class::STROKE,
+                width: 1.5,
+            },
             z_index: Z_AXIS,
         });
 
         // Attributes
         let mut line_y = rect.y0 + layout.header_h + 4.0;
         for attr in &layout.attrs {
-            let ts = TextStyle { font_size: SMALL_FONT, font_family: theme::FONT_FAMILY.to_string(), align: TextAlign::Left, vertical_align: TextBaseline::Top, color: theme::class::TEXT, ..Default::default() };
+            let ts = TextStyle {
+                font_size: SMALL_FONT,
+                font_family: theme::FONT_FAMILY.to_string(),
+                align: TextAlign::Left,
+                vertical_align: TextBaseline::Top,
+                color: theme::class::TEXT,
+                ..Default::default()
+            };
             let l = create_text_layout(attr, &ts, Some(layout.width - CLASS_PAD));
             let (x_off, y_off) = compute_text_offset(&l, TextAlign::Left, TextBaseline::Top);
             elements.push(VisualElement::TextRun {
                 text: attr.to_string(),
                 position: Point::new(rect.x0 + CLASS_PAD + x_off, line_y + y_off),
-                style: TextStyle { align: TextAlign::Left, vertical_align: TextBaseline::Top, ..ts },
+                style: TextStyle {
+                    align: TextAlign::Left,
+                    vertical_align: TextBaseline::Top,
+                    ..ts
+                },
                 rotation: 0.0,
                 max_width: Some(layout.width - CLASS_PAD),
-                layout: Some(l),
+                layout: Some(Box::new(l)),
                 z_index: Z_LABEL,
             });
             line_y += 18.0;
@@ -441,23 +496,37 @@ pub fn build_class_elements(
             elements.push(VisualElement::Line {
                 start: Point::new(rect.x0 + 4.0, line_y),
                 end: Point::new(rect.x1 - 4.0, line_y),
-                style: StrokeStyle { color: theme::class::SEPARATOR, width: 1.0 },
+                style: StrokeStyle {
+                    color: theme::class::SEPARATOR,
+                    width: 1.0,
+                },
                 z_index: Z_AXIS,
             });
         }
 
         // Methods
         for method in &layout.methods {
-            let ts = TextStyle { font_size: SMALL_FONT, font_family: theme::FONT_FAMILY.to_string(), align: TextAlign::Left, vertical_align: TextBaseline::Top, color: theme::class::TEXT, ..Default::default() };
+            let ts = TextStyle {
+                font_size: SMALL_FONT,
+                font_family: theme::FONT_FAMILY.to_string(),
+                align: TextAlign::Left,
+                vertical_align: TextBaseline::Top,
+                color: theme::class::TEXT,
+                ..Default::default()
+            };
             let l = create_text_layout(method, &ts, Some(layout.width - CLASS_PAD));
             let (x_off, y_off) = compute_text_offset(&l, TextAlign::Left, TextBaseline::Top);
             elements.push(VisualElement::TextRun {
                 text: method.to_string(),
                 position: Point::new(rect.x0 + CLASS_PAD + x_off, line_y + y_off),
-                style: TextStyle { align: TextAlign::Left, vertical_align: TextBaseline::Top, ..ts },
+                style: TextStyle {
+                    align: TextAlign::Left,
+                    vertical_align: TextBaseline::Top,
+                    ..ts
+                },
                 rotation: 0.0,
                 max_width: Some(layout.width - CLASS_PAD),
-                layout: Some(l),
+                layout: Some(Box::new(l)),
                 z_index: Z_LABEL,
             });
             line_y += 18.0;
@@ -467,7 +536,13 @@ pub fn build_class_elements(
     elements
 }
 
-fn draw_triangle_head(elements: &mut Vec<VisualElement>, tip: &Point, dir: &Point, filled: bool, style: &StrokeStyle) {
+fn draw_triangle_head(
+    elements: &mut Vec<VisualElement>,
+    tip: &Point,
+    dir: &Point,
+    filled: bool,
+    style: &StrokeStyle,
+) {
     let sz = 10.0;
     let perp_x = -dir.y;
     let perp_y = dir.x;
@@ -481,7 +556,11 @@ fn draw_triangle_head(elements: &mut Vec<VisualElement>, tip: &Point, dir: &Poin
     path.line_to(p2);
     path.close_path();
 
-    let fill = if filled { Some(theme::class::EDGE) } else { Some(Color::new(255, 255, 255)) };
+    let fill = if filled {
+        Some(theme::class::EDGE)
+    } else {
+        Some(Color::new(255, 255, 255))
+    };
     elements.push(VisualElement::Path {
         path,
         style: FillStrokeStyle::new()
@@ -491,7 +570,13 @@ fn draw_triangle_head(elements: &mut Vec<VisualElement>, tip: &Point, dir: &Poin
     });
 }
 
-fn draw_diamond_head(elements: &mut Vec<VisualElement>, center: &Point, dir: &Point, filled: bool, style: &StrokeStyle) {
+fn draw_diamond_head(
+    elements: &mut Vec<VisualElement>,
+    center: &Point,
+    dir: &Point,
+    filled: bool,
+    style: &StrokeStyle,
+) {
     let sz = 8.0;
     let perp_x = -dir.y;
     let perp_y = dir.x;
@@ -507,7 +592,11 @@ fn draw_diamond_head(elements: &mut Vec<VisualElement>, center: &Point, dir: &Po
     path.line_to(p2);
     path.close_path();
 
-    let fill = if filled { Some(theme::class::EDGE) } else { Some(Color::new(255, 255, 255)) };
+    let fill = if filled {
+        Some(theme::class::EDGE)
+    } else {
+        Some(Color::new(255, 255, 255))
+    };
     elements.push(VisualElement::Path {
         path,
         style: FillStrokeStyle::new()
@@ -517,11 +606,18 @@ fn draw_diamond_head(elements: &mut Vec<VisualElement>, center: &Point, dir: &Po
     });
 }
 
-fn draw_dashed_line(elements: &mut Vec<VisualElement>, start: &Point, end: &Point, style: &StrokeStyle) {
+fn draw_dashed_line(
+    elements: &mut Vec<VisualElement>,
+    start: &Point,
+    end: &Point,
+    style: &StrokeStyle,
+) {
     let dx = end.x - start.x;
     let dy = end.y - start.y;
     let len = (dx * dx + dy * dy).sqrt();
-    if len == 0.0 { return; }
+    if len == 0.0 {
+        return;
+    }
     let udx = dx / len;
     let udy = dy / len;
     let dash = 6.0;
@@ -531,7 +627,12 @@ fn draw_dashed_line(elements: &mut Vec<VisualElement>, start: &Point, end: &Poin
         let seg_end = (cur + dash).min(len);
         let s = Point::new(start.x + udx * cur, start.y + udy * cur);
         let e = Point::new(start.x + udx * seg_end, start.y + udy * seg_end);
-        elements.push(VisualElement::Line { start: s, end: e, style: style.clone(), z_index: Z_AXIS });
+        elements.push(VisualElement::Line {
+            start: s,
+            end: e,
+            style: style.clone(),
+            z_index: Z_AXIS,
+        });
         cur = seg_end + gap;
     }
 }

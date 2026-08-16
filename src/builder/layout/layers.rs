@@ -1,8 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use super::{
-    types::{LayoutTree, LogicalGroup, NodeId},
-};
+use super::types::{LayoutTree, LogicalGroup, NodeId};
 
 /// Pass 3: 在 LogicalGroup 基础上进行层级分配
 pub fn assign_layers(tree: &LayoutTree) -> HashMap<NodeId, usize> {
@@ -49,11 +47,7 @@ fn assign_group_layers(
             }
             layer
         }
-        LogicalGroup::Branch {
-            source,
-            arms,
-            sink,
-        } => {
+        LogicalGroup::Branch { source, arms, sink } => {
             if !visited.contains(source) {
                 layers.insert(source.clone(), start_layer);
                 visited.insert(source.clone());
@@ -90,7 +84,7 @@ fn assign_group_layers(
             // 循环体在 condition 的同一层（逻辑上在侧面）
             let body_end = assign_group_layers(body, start_layer, layers, visited);
 
-            let next = if let Some(exit_node) = exit {
+            if let Some(exit_node) = exit {
                 if !visited.contains(exit_node) {
                     layers.insert(exit_node.clone(), start_layer + 1);
                     visited.insert(exit_node.clone());
@@ -98,9 +92,7 @@ fn assign_group_layers(
                 start_layer + 2
             } else {
                 body_end
-            };
-
-            next
+            }
         }
         LogicalGroup::Leaf { node_id } => {
             if !visited.contains(node_id) {

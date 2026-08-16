@@ -1,5 +1,3 @@
-use liemermaid;
-
 fn main() {
     // 1. 基础 Git 分支图
     let basic = r#"gitGraph

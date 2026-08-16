@@ -186,8 +186,14 @@ pub struct StateDiagram {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum State {
-    Simple { id: String, description: Option<String> },
-    Composite { id: String, inner: Box<StateDiagram> },
+    Simple {
+        id: String,
+        description: Option<String>,
+    },
+    Composite {
+        id: String,
+        inner: Box<StateDiagram>,
+    },
     Start,
     End,
 }

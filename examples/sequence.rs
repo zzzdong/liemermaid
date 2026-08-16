@@ -1,5 +1,3 @@
-use liemermaid;
-
 fn main() {
     // 1. 基础时序图
     let basic = r#"sequenceDiagram

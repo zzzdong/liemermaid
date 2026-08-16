@@ -9,8 +9,8 @@ use crate::{
     error::{DiagramError, DiagramResult},
     text::create_text_layout,
     visual::{
-        Color, FillStrokeStyle, TextAlign, TextBaseline, TextStyle,
-        VisualElement, Z_LABEL, Z_SERIES, Z_TITLE,
+        Color, FillStrokeStyle, TextAlign, TextBaseline, TextStyle, VisualElement, Z_LABEL,
+        Z_SERIES, Z_TITLE,
     },
 };
 
@@ -83,7 +83,7 @@ pub fn build_pie_elements(
             style: title_style,
             rotation: 0.0,
             max_width: Some(config.width - PIE_MARGIN),
-            layout: Some(layout),
+            layout: Some(Box::new(layout)),
             z_index: Z_TITLE,
         });
     }
@@ -106,7 +106,10 @@ pub fn build_pie_elements(
         for i in 1..=arc_segments {
             let t = i as f64 / arc_segments as f64;
             let angle = start_angle + t * slice_angle;
-            path.line_to(Point::new(cx + radius * angle.cos(), cy + radius * angle.sin()));
+            path.line_to(Point::new(
+                cx + radius * angle.cos(),
+                cy + radius * angle.sin(),
+            ));
         }
         path.close_path();
 
@@ -148,7 +151,7 @@ pub fn build_pie_elements(
             style: label_style,
             rotation: 0.0,
             max_width: Some(200.0),
-            layout: Some(label_layout),
+            layout: Some(Box::new(label_layout)),
             z_index: Z_LABEL,
         });
 

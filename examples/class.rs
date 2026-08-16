@@ -1,5 +1,3 @@
-use liemermaid;
-
 fn main() {
     // 1. 基础类图（继承关系：Animal 在上，Dog/Cat 在下）
     let basic = r#"classDiagram

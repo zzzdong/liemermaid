@@ -84,10 +84,7 @@ impl<'a> SugiyamaLayout<'a> {
     }
 
     /// 运行完整 Sugiyama 布局管线
-    pub fn layout(
-        &self,
-        node_sizes: &HashMap<NodeIndex, NodeSize>,
-    ) -> SugiyamaResult {
+    pub fn layout(&self, node_sizes: &HashMap<NodeIndex, NodeSize>) -> SugiyamaResult {
         // Phase 0: 去环 — 检测反馈弧 + SCC
         let feedback_arcs = self.detect_feedback_arcs();
         let sccs = self.tarjan_scc();
@@ -110,7 +107,8 @@ impl<'a> SugiyamaLayout<'a> {
         let ordered = self.reduce_crossings(&layer_nodes, &feedback_arcs);
 
         // Phase 3: 坐标分配 (Brandes & Köpf 四方向平衡 + SCC 水平排布)
-        let positions = self.assign_coordinates_bk(&ordered, &sizes, &sccs, &scc_id, &feedback_arcs);
+        let positions =
+            self.assign_coordinates_bk(&ordered, &sizes, &sccs, &scc_id, &feedback_arcs);
 
         // Phase 4: 边路由
         let edge_routes = self.route_edges(&positions, &sizes, &layers, &feedback_arcs, &scc_id);
@@ -149,7 +147,8 @@ impl<'a> SugiyamaLayout<'a> {
             visited.insert(u);
             on_stack.insert(u);
 
-            let outgoing: Vec<NodeIndex> = g.edges_directed(u, petgraph::Direction::Outgoing)
+            let outgoing: Vec<NodeIndex> = g
+                .edges_directed(u, petgraph::Direction::Outgoing)
                 .map(|e| e.target())
                 .collect();
 
@@ -184,6 +183,7 @@ impl<'a> SugiyamaLayout<'a> {
         let mut on_stack: HashSet<NodeIndex> = HashSet::new();
         let mut sccs: Vec<Vec<NodeIndex>> = Vec::new();
 
+        #[allow(clippy::too_many_arguments)] // Tarjan 递归传递图与多个状态表
         fn strongconnect(
             g: &DiGraph<String, ()>,
             v: NodeIndex,
@@ -220,7 +220,9 @@ impl<'a> SugiyamaLayout<'a> {
                     let w = stack.pop().unwrap();
                     on_stack.remove(&w);
                     scc.push(w);
-                    if w == v { break; }
+                    if w == v {
+                        break;
+                    }
                 }
                 sccs.push(scc);
             }
@@ -229,8 +231,14 @@ impl<'a> SugiyamaLayout<'a> {
         for v in self.graph.node_indices() {
             if !indices.contains_key(&v) {
                 strongconnect(
-                    self.graph, v, &mut index, &mut stack,
-                    &mut indices, &mut lowlink, &mut on_stack, &mut sccs,
+                    self.graph,
+                    v,
+                    &mut index,
+                    &mut stack,
+                    &mut indices,
+                    &mut lowlink,
+                    &mut on_stack,
+                    &mut sccs,
                 );
             }
         }
@@ -294,26 +302,38 @@ impl<'a> SugiyamaLayout<'a> {
             }
         }
 
-        if queue.is_empty() {
-            if let Some(&sid) = scc_id.values().next() {
-                super_layers.insert(sid, 0);
-                queue.push_back(sid);
-            }
+        if queue.is_empty()
+            && let Some(&sid) = scc_id.values().next()
+        {
+            super_layers.insert(sid, 0);
+            queue.push_back(sid);
         }
 
         let mut in_deg_work = super_in_degree.clone();
         while let Some(sid) = queue.pop_front() {
             let cur = super_layers[&sid];
             for node in &sccs[sid] {
-                for e in self.graph.edges_directed(*node, petgraph::Direction::Outgoing) {
+                for e in self
+                    .graph
+                    .edges_directed(*node, petgraph::Direction::Outgoing)
+                {
                     let to = e.target();
                     let sid_to = scc_id[&to];
-                    if sid_to == sid { continue; }
-                    if feedback_arcs.contains(&(*node, to)) { continue; }
+                    if sid_to == sid {
+                        continue;
+                    }
+                    if feedback_arcs.contains(&(*node, to)) {
+                        continue;
+                    }
 
                     let new_layer = cur + 1;
-                    super_layers.entry(sid_to)
-                        .and_modify(|l| { if new_layer > *l { *l = new_layer; } })
+                    super_layers
+                        .entry(sid_to)
+                        .and_modify(|l| {
+                            if new_layer > *l {
+                                *l = new_layer;
+                            }
+                        })
                         .or_insert(new_layer);
 
                     if let Some(d) = in_deg_work.get_mut(&sid_to) {
@@ -348,7 +368,8 @@ impl<'a> SugiyamaLayout<'a> {
         // 计算忽略反馈弧的入度
         let mut in_degree: HashMap<NodeIndex, usize> = HashMap::new();
         for node in self.graph.node_indices() {
-            let count = self.graph
+            let count = self
+                .graph
                 .edges_directed(node, petgraph::Direction::Incoming)
                 .filter(|e| !feedback_arcs.contains(&(e.source(), node)))
                 .count();
@@ -366,25 +387,33 @@ impl<'a> SugiyamaLayout<'a> {
         }
 
         // 如果所有节点都有入度（强连通），选一个做源
-        if queue.is_empty() {
-            if let Some(first) = self.graph.node_indices().next() {
-                layers.insert(first, 0);
-                queue.push_back(first);
-            }
+        if queue.is_empty()
+            && let Some(first) = self.graph.node_indices().next()
+        {
+            layers.insert(first, 0);
+            queue.push_back(first);
         }
 
         while let Some(node) = queue.pop_front() {
             let cur_layer = layers[&node];
 
-            for edge in self.graph.edges_directed(node, petgraph::Direction::Outgoing) {
+            for edge in self
+                .graph
+                .edges_directed(node, petgraph::Direction::Outgoing)
+            {
                 let target = edge.target();
                 if feedback_arcs.contains(&(node, target)) {
                     continue; // 忽略反馈弧方向
                 }
 
                 let new_layer = cur_layer + 1;
-                layers.entry(target)
-                    .and_modify(|e| { if new_layer > *e { *e = new_layer; } })
+                layers
+                    .entry(target)
+                    .and_modify(|e| {
+                        if new_layer > *e {
+                            *e = new_layer;
+                        }
+                    })
                     .or_insert(new_layer);
 
                 if let Some(deg) = in_degree.get_mut(&target) {
@@ -399,7 +428,8 @@ impl<'a> SugiyamaLayout<'a> {
         // 确保所有节点都有层号（环中节点）
         for node in self.graph.node_indices() {
             if !layers.contains_key(&node) {
-                let max_pred = self.graph
+                let max_pred = self
+                    .graph
                     .edges_directed(node, petgraph::Direction::Incoming)
                     .filter_map(|e| layers.get(&e.source()))
                     .max()
@@ -430,13 +460,15 @@ impl<'a> SugiyamaLayout<'a> {
             };
 
             for layer in sorted_layers {
-                let nodes_in_layer: Vec<NodeIndex> = layers.iter()
+                let nodes_in_layer: Vec<NodeIndex> = layers
+                    .iter()
                     .filter(|(_, l)| **l == layer)
                     .map(|(n, _)| *n)
                     .collect();
 
                 let has_feedback_src = nodes_in_layer.iter().any(|n| feedback_sources.contains(n));
-                let non_feedback: Vec<NodeIndex> = nodes_in_layer.iter()
+                let non_feedback: Vec<NodeIndex> = nodes_in_layer
+                    .iter()
                     .filter(|n| !feedback_sources.contains(n))
                     .copied()
                     .collect();
@@ -449,7 +481,10 @@ impl<'a> SugiyamaLayout<'a> {
                         visited.insert(n);
                         while let Some(current) = stack.pop() {
                             layers.entry(current).and_modify(|l| *l += 1);
-                            for e in self.graph.edges_directed(current, petgraph::Direction::Outgoing) {
+                            for e in self
+                                .graph
+                                .edges_directed(current, petgraph::Direction::Outgoing)
+                            {
                                 if !feedback_arcs.contains(&(current, e.target()))
                                     && !visited.contains(&e.target())
                                 {
@@ -500,13 +535,18 @@ impl<'a> SugiyamaLayout<'a> {
         for _iter in 0..self.config.crossing_iterations {
             // Top-down: 用上层位置重排当前层
             for layer in 1..=max_layer {
-                let Some(upper) = ordered.get(&(layer - 1)) else { continue };
-                let Some(current) = ordered.get(&layer) else { continue };
+                let Some(upper) = ordered.get(&(layer - 1)) else {
+                    continue;
+                };
+                let Some(current) = ordered.get(&layer) else {
+                    continue;
+                };
 
                 let mut bc: Vec<(NodeIndex, f64)> = current
                     .iter()
                     .map(|&node| {
-                        let (sum, count) = self.graph
+                        let (sum, count) = self
+                            .graph
                             .edges_directed(node, petgraph::Direction::Incoming)
                             .filter(|e| !feedback_arcs.contains(&(e.source(), node)))
                             .filter_map(|e| upper.iter().position(|&n| n == e.source()))
@@ -526,13 +566,18 @@ impl<'a> SugiyamaLayout<'a> {
 
             // Bottom-up: 用下层位置重排当前层
             for layer in (0..max_layer).rev() {
-                let Some(lower) = ordered.get(&(layer + 1)) else { continue };
-                let Some(current) = ordered.get(&layer) else { continue };
+                let Some(lower) = ordered.get(&(layer + 1)) else {
+                    continue;
+                };
+                let Some(current) = ordered.get(&layer) else {
+                    continue;
+                };
 
                 let mut bc: Vec<(NodeIndex, f64)> = current
                     .iter()
                     .map(|&node| {
-                        let (sum, count) = self.graph
+                        let (sum, count) = self
+                            .graph
                             .edges_directed(node, petgraph::Direction::Outgoing)
                             .filter(|e| !feedback_arcs.contains(&(node, e.target())))
                             .filter_map(|e| lower.iter().position(|&n| n == e.target()))
@@ -598,19 +643,25 @@ impl<'a> SugiyamaLayout<'a> {
 
         // ---- Pass 1: 水平压缩 — 保证层内节点不重叠 ----
         for layer in 0..=max_layer {
-            let Some(nodes) = ordered.get(&layer) else { continue };
+            let Some(nodes) = ordered.get(&layer) else {
+                continue;
+            };
 
             let mut sorted: Vec<NodeIndex> = nodes.clone();
             sorted.sort_by(|a, b| {
-                avg_x.get(a).unwrap_or(&0.0)
+                avg_x
+                    .get(a)
+                    .unwrap_or(&0.0)
                     .partial_cmp(avg_x.get(b).unwrap_or(&0.0))
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
 
             let mut cur_left = self.config.padding;
             for &node in &sorted {
-                let size = node_sizes.get(&node).copied()
-                    .unwrap_or(NodeSize { width: 100.0, height: 50.0 });
+                let size = node_sizes.get(&node).copied().unwrap_or(NodeSize {
+                    width: 100.0,
+                    height: 50.0,
+                });
                 let cx = avg_x.get(&node).copied().unwrap_or(0.0);
                 let half_w = size.width / 2.0;
                 let left = cx - half_w;
@@ -626,12 +677,16 @@ impl<'a> SugiyamaLayout<'a> {
         // 计算每层实际左右边界
         let mut layer_centers: HashMap<usize, f64> = HashMap::new();
         for layer in 0..=max_layer {
-            let Some(nodes) = ordered.get(&layer) else { continue };
+            let Some(nodes) = ordered.get(&layer) else {
+                continue;
+            };
             let mut leftmost = f64::MAX;
             let mut rightmost = f64::MIN;
             for &node in nodes {
-                let size = node_sizes.get(&node).copied()
-                    .unwrap_or(NodeSize { width: 100.0, height: 50.0 });
+                let size = node_sizes.get(&node).copied().unwrap_or(NodeSize {
+                    width: 100.0,
+                    height: 50.0,
+                });
                 let cx = avg_x.get(&node).copied().unwrap_or(0.0);
                 leftmost = leftmost.min(cx - size.width / 2.0);
                 rightmost = rightmost.max(cx + size.width / 2.0);
@@ -640,10 +695,12 @@ impl<'a> SugiyamaLayout<'a> {
         }
 
         // 取最宽层的中心作为全局中心参考线
-        let global_center = layer_centers.iter()
+        let global_center = layer_centers
+            .iter()
             .map(|(&layer, &center)| {
                 let nodes = ordered.get(&layer).unwrap();
-                let total_w: f64 = nodes.iter()
+                let total_w: f64 = nodes
+                    .iter()
                     .filter_map(|n| node_sizes.get(n))
                     .map(|s| s.width)
                     .sum();
@@ -656,7 +713,9 @@ impl<'a> SugiyamaLayout<'a> {
 
         // 将每层节点平移到全局中心线对齐
         for layer in 0..=max_layer {
-            let Some(nodes) = ordered.get(&layer) else { continue };
+            let Some(nodes) = ordered.get(&layer) else {
+                continue;
+            };
             let layer_center = layer_centers.get(&layer).copied().unwrap_or(0.0);
             let shift = global_center - layer_center;
             if shift.abs() > 0.001 {
@@ -671,15 +730,21 @@ impl<'a> SugiyamaLayout<'a> {
         // ---- Pass 2b: SCC 水平排布 ----
         // 对多节点 SCC，让入口节点保持在中线，其它节点水平排列到右侧
         for scc in sccs {
-            if scc.len() <= 1 { continue; }
+            if scc.len() <= 1 {
+                continue;
+            }
 
             // 找到入口节点（有外部入边的节点）和出口节点（有外部出边的节点）
             let mut entry_nodes: Vec<NodeIndex> = Vec::new();
             let mut other_nodes: Vec<NodeIndex> = Vec::new();
             for &node in scc {
-                let has_outside_in = self.graph
+                let has_outside_in = self
+                    .graph
                     .edges_directed(node, petgraph::Direction::Incoming)
-                    .any(|e| scc_id.get(&e.source()).copied().unwrap_or(-1) != *scc_id.get(&node).unwrap_or(&-1));
+                    .any(|e| {
+                        scc_id.get(&e.source()).copied().unwrap_or(-1)
+                            != *scc_id.get(&node).unwrap_or(&-1)
+                    });
                 if has_outside_in {
                     entry_nodes.push(node);
                 } else {
@@ -698,8 +763,10 @@ impl<'a> SugiyamaLayout<'a> {
             // 取第一个入口节点作为"锚点"，保持其当前 X
             let anchor = entry_nodes[0];
             let anchor_cx = avg_x.get(&anchor).copied().unwrap_or(0.0);
-            let anchor_size = node_sizes.get(&anchor)
-                .copied().unwrap_or(NodeSize { width: 100.0, height: 50.0 });
+            let anchor_size = node_sizes.get(&anchor).copied().unwrap_or(NodeSize {
+                width: 100.0,
+                height: 50.0,
+            });
 
             // 按节点名排序其它节点
             other_nodes.sort_by(|a, b| self.graph[*a].cmp(&self.graph[*b]));
@@ -707,8 +774,10 @@ impl<'a> SugiyamaLayout<'a> {
             // 从锚点右侧开始排列其它节点
             let mut cur_x = anchor_cx + anchor_size.width / 2.0 + self.config.node_gap;
             for &node in &other_nodes {
-                let size = node_sizes.get(&node)
-                    .copied().unwrap_or(NodeSize { width: 100.0, height: 50.0 });
+                let size = node_sizes.get(&node).copied().unwrap_or(NodeSize {
+                    width: 100.0,
+                    height: 50.0,
+                });
                 let cx = cur_x + size.width / 2.0;
                 avg_x.insert(node, cx);
                 cur_x += size.width + self.config.node_gap;
@@ -716,8 +785,10 @@ impl<'a> SugiyamaLayout<'a> {
 
             // 如果有多个入口节点，将其它入口节点也排到右侧
             for &node in entry_nodes.iter().skip(1) {
-                let size = node_sizes.get(&node)
-                    .copied().unwrap_or(NodeSize { width: 100.0, height: 50.0 });
+                let size = node_sizes.get(&node).copied().unwrap_or(NodeSize {
+                    width: 100.0,
+                    height: 50.0,
+                });
                 let cx = cur_x + size.width / 2.0;
                 avg_x.insert(node, cx);
                 cur_x += size.width + self.config.node_gap;
@@ -726,9 +797,13 @@ impl<'a> SugiyamaLayout<'a> {
             // 对齐所有 SCC 节点的外部出边目标节点（对齐到锚点 X）
             let mut aligned_nodes: HashSet<NodeIndex> = HashSet::new();
             for &node in scc.iter() {
-                let outgoing: Vec<NodeIndex> = self.graph
+                let outgoing: Vec<NodeIndex> = self
+                    .graph
                     .edges_directed(node, petgraph::Direction::Outgoing)
-                    .filter(|e| scc_id.get(&e.target()).copied().unwrap_or(-1) != *scc_id.get(&node).unwrap_or(&-1))
+                    .filter(|e| {
+                        scc_id.get(&e.target()).copied().unwrap_or(-1)
+                            != *scc_id.get(&node).unwrap_or(&-1)
+                    })
                     .map(|e| e.target())
                     .collect();
                 for &target in &outgoing {
@@ -744,9 +819,13 @@ impl<'a> SugiyamaLayout<'a> {
 
             // 对齐所有 SCC 节点的外部入边源节点（对齐到锚点 X）
             for &node in scc.iter() {
-                let incoming: Vec<NodeIndex> = self.graph
+                let incoming: Vec<NodeIndex> = self
+                    .graph
                     .edges_directed(node, petgraph::Direction::Incoming)
-                    .filter(|e| scc_id.get(&e.source()).copied().unwrap_or(-1) != *scc_id.get(&node).unwrap_or(&-1))
+                    .filter(|e| {
+                        scc_id.get(&e.source()).copied().unwrap_or(-1)
+                            != *scc_id.get(&node).unwrap_or(&-1)
+                    })
                     .map(|e| e.source())
                     .collect();
                 for &source in &incoming {
@@ -764,20 +843,26 @@ impl<'a> SugiyamaLayout<'a> {
             // 对新对齐的节点，如果其下游节点只有它一个前驱，也对其到中心线
             let mut propagate_queue: VecDeque<NodeIndex> = aligned_nodes.iter().copied().collect();
             while let Some(current) = propagate_queue.pop_front() {
-                for e in self.graph.edges_directed(current, petgraph::Direction::Outgoing) {
+                for e in self
+                    .graph
+                    .edges_directed(current, petgraph::Direction::Outgoing)
+                {
                     let target = e.target();
-                    if scc.contains(&target) { continue; }
-                    let predecessor_count = self.graph
+                    if scc.contains(&target) {
+                        continue;
+                    }
+                    let predecessor_count = self
+                        .graph
                         .edges_directed(target, petgraph::Direction::Incoming)
                         .filter(|ie| !feedback_arcs.contains(&(ie.source(), target)))
                         .count();
-                    if predecessor_count <= 1 {
-                        if let Some(tx) = avg_x.get_mut(&target) {
-                            let old_x = *tx;
-                            *tx = anchor_cx;
-                            if (old_x - anchor_cx).abs() > 0.5 {
-                                propagate_queue.push_back(target);
-                            }
+                    if predecessor_count <= 1
+                        && let Some(tx) = avg_x.get_mut(&target)
+                    {
+                        let old_x = *tx;
+                        *tx = anchor_cx;
+                        if (old_x - anchor_cx).abs() > 0.5 {
+                            propagate_queue.push_back(target);
                         }
                     }
                 }
@@ -789,7 +874,9 @@ impl<'a> SugiyamaLayout<'a> {
         let mut cur_y = self.config.padding;
 
         for layer in 0..=max_layer {
-            let Some(nodes) = ordered.get(&layer) else { continue };
+            let Some(nodes) = ordered.get(&layer) else {
+                continue;
+            };
 
             let max_h = nodes
                 .iter()
@@ -836,13 +923,23 @@ impl<'a> SugiyamaLayout<'a> {
         };
 
         for &layer in &layer_range {
-            let Some(nodes) = ordered.get(&layer) else { continue };
+            let Some(nodes) = ordered.get(&layer) else {
+                continue;
+            };
 
             // 相邻层（对齐参考层）
             let adj_layer = if top_down {
-                if layer == 0 { None } else { ordered.get(&(layer - 1)) }
+                if layer == 0 {
+                    None
+                } else {
+                    ordered.get(&(layer - 1))
+                }
             } else {
-                if layer == max_layer { None } else { ordered.get(&(layer + 1)) }
+                if layer == max_layer {
+                    None
+                } else {
+                    ordered.get(&(layer + 1))
+                }
             };
 
             // 计算每个节点的理想 X
@@ -853,16 +950,17 @@ impl<'a> SugiyamaLayout<'a> {
                     self.median_neighbor_x(node, prev, &xs, top_down)
                         .unwrap_or_else(|| {
                             // 回退：相邻层平均 X
-                            let avg = prev.iter()
-                                .filter_map(|n| xs.get(n))
-                                .sum::<f64>() / prev.len().max(1) as f64;
-                            avg
+
+                            prev.iter().filter_map(|n| xs.get(n)).sum::<f64>()
+                                / prev.len().max(1) as f64
                         })
                 } else {
                     // 首层：按层内位置排布
                     let pos = nodes.iter().position(|&n| n == node).unwrap_or(0) as f64;
-                    let size = node_sizes.get(&node).copied()
-                        .unwrap_or(NodeSize { width: 100.0, height: 50.0 });
+                    let size = node_sizes.get(&node).copied().unwrap_or(NodeSize {
+                        width: 100.0,
+                        height: 50.0,
+                    });
                     pos * (size.width + self.config.node_gap)
                 };
                 desired.push((node, ideal_x));
@@ -884,8 +982,10 @@ impl<'a> SugiyamaLayout<'a> {
 
             let mut cur_x = self.config.padding;
             for (node, _) in order {
-                let size = node_sizes.get(node).copied()
-                    .unwrap_or(NodeSize { width: 100.0, height: 50.0 });
+                let size = node_sizes.get(node).copied().unwrap_or(NodeSize {
+                    width: 100.0,
+                    height: 50.0,
+                });
                 let cx = cur_x + size.width / 2.0;
                 xs.insert(*node, cx);
                 cur_x += size.width + self.config.node_gap;
@@ -952,10 +1052,9 @@ impl<'a> SugiyamaLayout<'a> {
         _scc_id: &HashMap<NodeIndex, i32>,
     ) -> HashMap<(NodeIndex, NodeIndex), Vec<Point>> {
         // 计算图的最右边界（用于反馈弧绕行）
-        let max_right = positions.iter()
-            .filter_map(|(node, pos)| {
-                node_sizes.get(node).map(|s| pos.x + s.width / 2.0)
-            })
+        let max_right = positions
+            .iter()
+            .filter_map(|(node, pos)| node_sizes.get(node).map(|s| pos.x + s.width / 2.0))
             .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(self.config.padding + 100.0);
         let routing_margin = max_right + self.config.node_gap * 2.0;
@@ -978,7 +1077,9 @@ impl<'a> SugiyamaLayout<'a> {
                 let mid_y = (from_bottom + to_top) / 2.0;
 
                 // 判断源和目标是否在相邻层（层差 <= 1）
-                let layer_diff = layers.get(&from).zip(layers.get(&to))
+                let layer_diff = layers
+                    .get(&from)
+                    .zip(layers.get(&to))
                     .map(|(lf, lt)| (*lf as i64 - *lt as i64).abs())
                     .unwrap_or(0);
                 let adjacent_layers = layer_diff <= 1;
@@ -987,7 +1088,10 @@ impl<'a> SugiyamaLayout<'a> {
                 let route = if same_layer {
                     // 同层边（SCC 内节点间）：水平排布
                     if (fp.x - tp.x).abs() < 1.0 {
-                        vec![Point::new(fp.x, from_bottom), Point::new(tp.x, tp.y - ts.height / 2.0)]
+                        vec![
+                            Point::new(fp.x, from_bottom),
+                            Point::new(tp.x, tp.y - ts.height / 2.0),
+                        ]
                     } else if fp.x < tp.x {
                         // 正向：源右侧 → 目标左侧
                         vec![
@@ -1043,5 +1147,4 @@ impl<'a> SugiyamaLayout<'a> {
 
         routes
     }
-
-    }
+}

@@ -14,13 +14,18 @@ fn generate_svg(filename: &str, mermaid: &str) {
 
 fn main() {
     // flowchart
-    generate_svg("flow_shapes.svg", r#"flowchart TD
+    generate_svg(
+        "flow_shapes.svg",
+        r#"flowchart TD
     A[Start]
     B[End]
     A --> B
-"#);
+"#,
+    );
 
-    generate_svg("flow_branch.svg", r#"flowchart TD
+    generate_svg(
+        "flow_branch.svg",
+        r#"flowchart TD
     A[Start]
     B{Decision}
     C[Approved]
@@ -31,9 +36,12 @@ fn main() {
     B -->|No| D
     C --> E
     D --> E
-"#);
+"#,
+    );
 
-    generate_svg("flow_cycle.svg", r#"flowchart TD
+    generate_svg(
+        "flow_cycle.svg",
+        r#"flowchart TD
     A[Start]
     B[Process]
     C{Check}
@@ -44,9 +52,12 @@ fn main() {
     C -->|Pass| D
     C -->|Fail| B
     D --> E
-"#);
+"#,
+    );
 
-    generate_svg("flow_loop.svg", r#"flowchart TD
+    generate_svg(
+        "flow_loop.svg",
+        r#"flowchart TD
     A[Start]
     B{Continue}
     C[Process]
@@ -55,17 +66,23 @@ fn main() {
     B -->|Yes| C
     C --> B
     B -->|No| D
-"#);
+"#,
+    );
 
     // state diagrams
-    generate_svg("state_basic.svg", r#"stateDiagram-v2
+    generate_svg(
+        "state_basic.svg",
+        r#"stateDiagram-v2
     [*] --> Idle
     Idle --> Processing
     Processing --> Done
     Done --> [*]
-"#);
+"#,
+    );
 
-    generate_svg("state_branch.svg", r#"stateDiagram-v2
+    generate_svg(
+        "state_branch.svg",
+        r#"stateDiagram-v2
     [*] --> Review
     Review --> Approved
     Review --> Rejected
@@ -73,28 +90,37 @@ fn main() {
     Rejected --> Closed
     Merged --> [*]
     Closed --> [*]
-"#);
+"#,
+    );
 
-    generate_svg("state_desc.svg", r#"stateDiagram-v2
+    generate_svg(
+        "state_desc.svg",
+        r#"stateDiagram-v2
     [*] --> Idle
     Idle --> Processing : start
     Processing --> Done : finish
     Processing --> Error : fail
     Done --> [*]
     Error --> Idle : retry
-"#);
+"#,
+    );
 
-    generate_svg("state_labeled.svg", r#"stateDiagram-v2
+    generate_svg(
+        "state_labeled.svg",
+        r#"stateDiagram-v2
     [*] --> Still : enter
     Still --> [*] : exit
     Still --> Moving
     Moving --> Still : push
     Moving --> Crash
     Crash --> [*]
-"#);
+"#,
+    );
 
     // class diagram
-    generate_svg("class_basic.svg", r#"classDiagram
+    generate_svg(
+        "class_basic.svg",
+        r#"classDiagram
     class Animal {
         +name : String
         +makeSound()
@@ -103,34 +129,46 @@ fn main() {
     class Cat
     Animal <|-- Dog
     Animal <|-- Cat
-"#);
+"#,
+    );
 
     // er diagram
-    generate_svg("er_basic.svg", r#"erDiagram
+    generate_svg(
+        "er_basic.svg",
+        r#"erDiagram
     CUSTOMER ||--o{ ORDER : places
     ORDER ||--|{ LINE_ITEM : contains
-"#);
+"#,
+    );
 
     // sequence diagram
-    generate_svg("seq_basic.svg", r#"sequenceDiagram
+    generate_svg(
+        "seq_basic.svg",
+        r#"sequenceDiagram
     Alice->>John: Hello John
     John-->>Alice: Hi Alice
     Alice->>John: How are you?
     John-->>Alice: I'm fine
-"#);
+"#,
+    );
 
     // timeline
-    generate_svg("timeline_basic.svg", r#"timeline
+    generate_svg(
+        "timeline_basic.svg",
+        r#"timeline
     title History of Computing
     1940s : First computers
     1950s : Transistors
     1960s : Integrated circuits
     1970s : Microprocessors
     1980s : Personal computers
-"#);
+"#,
+    );
 
     // gitgraph
-    generate_svg("git_basic.svg", r#"gitGraph
+    generate_svg(
+        "git_basic.svg",
+        r#"gitGraph
     commit tag: "init"
     branch develop
     commit tag: "feat-1"
@@ -138,16 +176,20 @@ fn main() {
     commit tag: "fix-1"
     merge develop
     commit tag: "release"
-"#);
+"#,
+    );
 
     // pie chart
-    generate_svg("pie_basic.svg", r#"pie
+    generate_svg(
+        "pie_basic.svg",
+        r#"pie
     title Languages
     "Rust" : 40
     "Python" : 30
     "TypeScript" : 20
     "Other" : 10
-"#);
+"#,
+    );
 
     println!("\nDone! SVGs generated.");
 }

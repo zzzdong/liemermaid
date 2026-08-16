@@ -87,7 +87,7 @@ use std::collections::HashMap;
 
 use vello_cpu::kurbo::{Point, Rect};
 
-use crate::ast::{Edge, NodeShape, Direction};
+use crate::ast::{Direction, Edge, NodeShape};
 use crate::builder::types::OutputConfig;
 use crate::error::DiagramResult;
 use crate::visual::{Color, VisualElement};

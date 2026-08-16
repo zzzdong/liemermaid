@@ -1,0 +1,13 @@
+feat: unify rendering through lievisual + clippy cleanup for 0.1.0-alpha.1
+
+- Remove own render backends (render/mod.rs, pixmap.rs, svg.rs); all output
+  now goes through lievisual::Scene IR (SvgRenderer / VelloPixmapRenderer).
+- scene_ext: adapter VisualElement -> lievisual::Scene; use native RoundedRect.
+- lib: render()/render_png() now the only public render entry points.
+- Add lievisual_backend example; update tests for lievisual output.
+- Fix all clippy lints (clippy --fix + manual: map_entry, vec_init_then_push,
+  collapsible_if, question_mark, manual_strip, manual_clamp, unnecessary_unwrap,
+  large_enum_variant via Box, too_many_arguments allows).
+- Bump to 0.1.0-alpha.1, add metadata (description/license/readme/repository).
+- Add LICENSE (Apache-2.0), README.md.
+- Drop image dependency (PNG encoding now via lievisual).

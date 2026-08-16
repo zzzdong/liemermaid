@@ -10,16 +10,16 @@ pub const DEFAULT_FONT_FAMILY: &str = "sans-serif";
 
 /// 调色板（用于多种图表的系列色）
 pub const PALETTE: &[Color] = &[
-    Color::new(31, 119, 180),   // 蓝
-    Color::new(255, 127, 14),   // 橙
-    Color::new(44, 160, 44),    // 绿
-    Color::new(148, 103, 189),  // 紫
-    Color::new(140, 86, 75),    // 棕
-    Color::new(227, 119, 194),  // 粉
-    Color::new(127, 127, 127),  // 灰
-    Color::new(188, 189, 34),   // 黄绿
-    Color::new(23, 190, 207),   // 青
-    Color::new(214, 39, 40),    // 红
+    Color::new(31, 119, 180),  // 蓝
+    Color::new(255, 127, 14),  // 橙
+    Color::new(44, 160, 44),   // 绿
+    Color::new(148, 103, 189), // 紫
+    Color::new(140, 86, 75),   // 棕
+    Color::new(227, 119, 194), // 粉
+    Color::new(127, 127, 127), // 灰
+    Color::new(188, 189, 34),  // 黄绿
+    Color::new(23, 190, 207),  // 青
+    Color::new(214, 39, 40),   // 红
 ];
 
 /// 全局输出配置

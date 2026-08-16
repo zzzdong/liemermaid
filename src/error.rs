@@ -12,7 +12,11 @@ pub enum ParseError {
     UnsupportedDiagram,
 
     #[error("invalid syntax at line {line}, column {col}: {message}")]
-    InvalidSyntax { line: usize, col: usize, message: String },
+    InvalidSyntax {
+        line: usize,
+        col: usize,
+        message: String,
+    },
 }
 
 #[derive(Error, Debug)]

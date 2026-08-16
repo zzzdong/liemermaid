@@ -1,5 +1,3 @@
-use liemermaid;
-
 fn main() {
     // 1. 所有节点形状
     let shapes = r#"flowchart TD
@@ -42,7 +40,8 @@ fn main() {
         ("flow_bt", "BT", 600, 500),
         ("flow_rl", "RL", 900, 300),
     ] {
-        let dsl = format!(r#"flowchart {}
+        let dsl = format!(
+            r#"flowchart {}
     A[Start]
     B[Process]
     C[Decision]
@@ -52,8 +51,10 @@ fn main() {
     B --> C
     C --> D
     D --> E
-"#, dir);
-        let svg = liemermaid::render(&dsl, w, h).expect(&format!("render {}", dir));
+"#,
+            dir
+        );
+        let svg = liemermaid::render(&dsl, w, h).unwrap_or_else(|_| panic!("render {}", dir));
         let path = format!("{}.svg", name);
         std::fs::write(&path, svg).expect("write svg file");
         println!("{}.svg generated", name);

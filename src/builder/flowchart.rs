@@ -7,11 +7,10 @@ use crate::{
     ast::{Direction, Flowchart, NodeShape},
     builder::types::OutputConfig,
     error::DiagramResult,
-    text::{create_text_layout, compute_text_offset},
+    text::{compute_text_offset, create_text_layout},
     visual::{
-        draw_arrow_head, theme,
-        FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle, VisualElement,
-        Z_AXIS, Z_LABEL, Z_SERIES,
+        FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle, VisualElement, Z_AXIS,
+        Z_LABEL, Z_SERIES, draw_arrow_head, theme,
     },
 };
 
@@ -20,7 +19,7 @@ use super::layout::{
     layers::assign_layers,
     measure::{measure_groups, measure_nodes},
     position::compute_positions,
-    recognize::{recognize_structure, compute_flowchart_back_edges},
+    recognize::{compute_flowchart_back_edges, recognize_structure},
     sugiyama::{NodeSize, SugiyamaConfig, SugiyamaLayout},
     types::{
         Layout, LayoutEdge, LayoutEngine, LayoutMetadata, LayoutNode, NodeMetrics, NodePosition,
@@ -49,7 +48,10 @@ fn compute_content_bounds(
     let mut max_y = f64::MIN;
 
     for (node_id, pos) in positions {
-        let size = metrics.get(node_id).map(|m| m.size).unwrap_or(Size::new(140.0, 50.0));
+        let size = metrics
+            .get(node_id)
+            .map(|m| m.size)
+            .unwrap_or(Size::new(140.0, 50.0));
         min_x = min_x.min(pos.center.x - size.width / 2.0);
         min_y = min_y.min(pos.center.y - size.height / 2.0);
         max_x = max_x.max(pos.center.x + size.width / 2.0);
@@ -100,25 +102,25 @@ fn render_sugiyama_flowchart(
 
     // 绘制边（使用 Sugiyama 路由结果）
     for edge in fc.edges.iter() {
-        if let (Some(&from_idx), Some(&to_idx)) = (indices.get(&edge.source), indices.get(&edge.target)) {
-            if let Some(route) = result.edge_routes.get(&(from_idx, to_idx)) {
-                if route.len() >= 2 {
-                    elements.push(VisualElement::Polyline {
-                        points: route.clone(),
-                        style: EDGE_STROKE,
-                        z_index: Z_AXIS,
-                    });
-                    // 箭头：最后一段方向
-                    let last = route.last().unwrap();
-                    let prev = route[route.len() - 2];
-                    let dx = last.x - prev.x;
-                    let dy = last.y - prev.y;
-                    let len = (dx * dx + dy * dy).sqrt();
-                    if len > 0.0 {
-                        let ud = Point::new(dx / len, dy / len);
-                        draw_arrow_head(&mut elements, last, &ud, &EDGE_STROKE);
-                    }
-                }
+        if let (Some(&from_idx), Some(&to_idx)) =
+            (indices.get(&edge.source), indices.get(&edge.target))
+            && let Some(route) = result.edge_routes.get(&(from_idx, to_idx))
+            && route.len() >= 2
+        {
+            elements.push(VisualElement::Polyline {
+                points: route.clone(),
+                style: EDGE_STROKE,
+                z_index: Z_AXIS,
+            });
+            // 箭头：最后一段方向
+            let last = route.last().unwrap();
+            let prev = route[route.len() - 2];
+            let dx = last.x - prev.x;
+            let dy = last.y - prev.y;
+            let len = (dx * dx + dy * dy).sqrt();
+            if len > 0.0 {
+                let ud = Point::new(dx / len, dy / len);
+                draw_arrow_head(&mut elements, last, &ud, &EDGE_STROKE);
             }
         }
     }
@@ -323,10 +325,13 @@ impl<'a> LayoutEngine for FlowchartEngine<'a> {
             for node in &fc.nodes {
                 if let Some(&idx) = _indices.get(&node.id) {
                     let nm = &node_metrics[&node.id];
-                    sugiyama_sizes.insert(idx, NodeSize {
-                        width: nm.size.width,
-                        height: nm.size.height,
-                    });
+                    sugiyama_sizes.insert(
+                        idx,
+                        NodeSize {
+                            width: nm.size.width,
+                            height: nm.size.height,
+                        },
+                    );
                 }
             }
 
@@ -389,10 +394,7 @@ fn draw_layout_node(
     offset_x: f64,
     offset_y: f64,
 ) {
-    let size = Size::new(
-        node.bounds.width(),
-        node.bounds.height(),
-    );
+    let size = Size::new(node.bounds.width(), node.bounds.height());
     let center = Point::new(
         (node.bounds.x0 + node.bounds.x1) / 2.0 + offset_x,
         (node.bounds.y0 + node.bounds.y1) / 2.0 + offset_y,
@@ -407,7 +409,9 @@ fn draw_layout_node(
 
     let fill = node.style.fill_color.unwrap_or(theme::flowchart::FILL);
     let stroke = node.style.stroke_color.unwrap_or(theme::flowchart::STROKE);
-    let style = FillStrokeStyle::new().with_fill(fill).with_stroke(stroke, node.style.stroke_width);
+    let style = FillStrokeStyle::new()
+        .with_fill(fill)
+        .with_stroke(stroke, node.style.stroke_width);
 
     match node.shape {
         Some(NodeShape::Circle) => {
@@ -444,16 +448,28 @@ fn draw_layout_node(
             path.move_to(Point::new(center.x - w + r, center.y - h));
             path.line_to(Point::new(center.x + w - r, center.y - h));
             for i in 0..=segments {
-                let a = std::f64::consts::FRAC_PI_2 * i as f64 / segments as f64 - std::f64::consts::FRAC_PI_2;
-                path.line_to(Point::new(center.x + w - r + r * a.cos(), center.y + r * a.sin()));
+                let a = std::f64::consts::FRAC_PI_2 * i as f64 / segments as f64
+                    - std::f64::consts::FRAC_PI_2;
+                path.line_to(Point::new(
+                    center.x + w - r + r * a.cos(),
+                    center.y + r * a.sin(),
+                ));
             }
             path.line_to(Point::new(center.x - w + r, center.y + h));
             for i in 0..=segments {
-                let a = std::f64::consts::FRAC_PI_2 * i as f64 / segments as f64 + std::f64::consts::FRAC_PI_2;
-                path.line_to(Point::new(center.x - w + r + r * a.cos(), center.y + r * a.sin()));
+                let a = std::f64::consts::FRAC_PI_2 * i as f64 / segments as f64
+                    + std::f64::consts::FRAC_PI_2;
+                path.line_to(Point::new(
+                    center.x - w + r + r * a.cos(),
+                    center.y + r * a.sin(),
+                ));
             }
             path.close_path();
-            elements.push(VisualElement::Path { path, style, z_index: Z_SERIES });
+            elements.push(VisualElement::Path {
+                path,
+                style,
+                z_index: Z_SERIES,
+            });
         }
         Some(NodeShape::Cylinder) => {
             let w = size.width / 2.0;
@@ -467,19 +483,26 @@ fn draw_layout_node(
             body.close_path();
             elements.push(VisualElement::Path {
                 path: body,
-                style: FillStrokeStyle::new().with_fill(fill).with_stroke(stroke, 2.0),
+                style: FillStrokeStyle::new()
+                    .with_fill(fill)
+                    .with_stroke(stroke, 2.0),
                 z_index: Z_SERIES,
             });
             let mut top = BezPath::new();
             top.move_to(Point::new(center.x - w, center.y - h * 0.7));
             for i in 0..=ellipse_segments {
                 let a = std::f64::consts::PI * i as f64 / ellipse_segments as f64;
-                top.line_to(Point::new(center.x - w + w * (1.0 + a.cos()), center.y - h * 0.7 + (h * 0.3) * a.sin()));
+                top.line_to(Point::new(
+                    center.x - w + w * (1.0 + a.cos()),
+                    center.y - h * 0.7 + (h * 0.3) * a.sin(),
+                ));
             }
             top.close_path();
             elements.push(VisualElement::Path {
                 path: top,
-                style: FillStrokeStyle::new().with_fill(fill).with_stroke(stroke, 2.0),
+                style: FillStrokeStyle::new()
+                    .with_fill(fill)
+                    .with_stroke(stroke, 2.0),
                 z_index: Z_SERIES,
             });
         }
@@ -495,7 +518,11 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x - w + notch, center.y + h));
             path.line_to(Point::new(center.x - w, center.y));
             path.close_path();
-            elements.push(VisualElement::Path { path, style, z_index: Z_SERIES });
+            elements.push(VisualElement::Path {
+                path,
+                style,
+                z_index: Z_SERIES,
+            });
         }
         Some(NodeShape::Diamond) => {
             let w = size.width / 2.0;
@@ -506,7 +533,11 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x, center.y + h));
             path.line_to(Point::new(center.x - w, center.y));
             path.close_path();
-            elements.push(VisualElement::Path { path, style, z_index: Z_SERIES });
+            elements.push(VisualElement::Path {
+                path,
+                style,
+                z_index: Z_SERIES,
+            });
         }
         Some(NodeShape::Hexagon) => {
             let w = size.width / 2.0;
@@ -520,7 +551,11 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x - w + inset, center.y + h));
             path.line_to(Point::new(center.x - w, center.y));
             path.close_path();
-            elements.push(VisualElement::Path { path, style, z_index: Z_SERIES });
+            elements.push(VisualElement::Path {
+                path,
+                style,
+                z_index: Z_SERIES,
+            });
         }
         Some(NodeShape::Asymmetric) => {
             let w = size.width / 2.0;
@@ -534,7 +569,11 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x - w + q, center.y + h));
             path.line_to(Point::new(center.x - w, center.y));
             path.close_path();
-            elements.push(VisualElement::Path { path, style, z_index: Z_SERIES });
+            elements.push(VisualElement::Path {
+                path,
+                style,
+                z_index: Z_SERIES,
+            });
         }
         Some(NodeShape::Parallelogram) => {
             let w = size.width / 2.0;
@@ -546,7 +585,11 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x + w - skew, center.y + h));
             path.line_to(Point::new(center.x - w, center.y + h));
             path.close_path();
-            elements.push(VisualElement::Path { path, style, z_index: Z_SERIES });
+            elements.push(VisualElement::Path {
+                path,
+                style,
+                z_index: Z_SERIES,
+            });
         }
         Some(NodeShape::ParallelogramAlt) => {
             let w = size.width / 2.0;
@@ -558,7 +601,11 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x + w, center.y + h));
             path.line_to(Point::new(center.x - w + skew, center.y + h));
             path.close_path();
-            elements.push(VisualElement::Path { path, style, z_index: Z_SERIES });
+            elements.push(VisualElement::Path {
+                path,
+                style,
+                z_index: Z_SERIES,
+            });
         }
         Some(NodeShape::Trapezoid) => {
             let w = size.width / 2.0;
@@ -570,7 +617,11 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x + w, center.y + h));
             path.line_to(Point::new(center.x - w, center.y + h));
             path.close_path();
-            elements.push(VisualElement::Path { path, style, z_index: Z_SERIES });
+            elements.push(VisualElement::Path {
+                path,
+                style,
+                z_index: Z_SERIES,
+            });
         }
         Some(NodeShape::TrapezoidAlt) => {
             let w = size.width / 2.0;
@@ -582,7 +633,11 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x + w - inset, center.y + h));
             path.line_to(Point::new(center.x - w + inset, center.y + h));
             path.close_path();
-            elements.push(VisualElement::Path { path, style, z_index: Z_SERIES });
+            elements.push(VisualElement::Path {
+                path,
+                style,
+                z_index: Z_SERIES,
+            });
         }
         _ => {
             elements.push(VisualElement::Rect {
@@ -604,7 +659,11 @@ fn draw_layout_node(
         color: theme::flowchart::TEXT,
         ..Default::default()
     };
-    let max_w = if size.width > 20.0 { Some(size.width - 10.0) } else { None };
+    let max_w = if size.width > 20.0 {
+        Some(size.width - 10.0)
+    } else {
+        None
+    };
     let layout = create_text_layout(text, &text_style, max_w);
 
     let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
@@ -620,7 +679,7 @@ fn draw_layout_node(
         },
         rotation: 0.0,
         max_width: max_w,
-        layout: Some(layout),
+        layout: Some(Box::new(layout)),
         z_index: Z_LABEL,
     });
 }

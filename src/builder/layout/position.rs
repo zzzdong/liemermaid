@@ -1,18 +1,18 @@
+// 内部布局辅助函数接收大量上下文参数（metrics / config / next_id / positions），
+// 参数数量是该领域 API 的合理设计，统一 allow 而非逐个拆分。
+#![allow(clippy::too_many_arguments)]
+
 use std::collections::HashMap;
 
 use vello_cpu::kurbo::Point;
 
-use crate::{
-    ast::Direction,
-    builder::types::OutputConfig,
-};
+use crate::{ast::Direction, builder::types::OutputConfig};
 
 use super::{
     coord::NodeAnchors,
     types::{
-        ChainItem, GroupId, GroupMetrics, InternalLayout, LayoutTree,
-        LogicalGroup,
-        NodeId, NodeMetrics, NodePosition, Size,
+        ChainItem, GroupId, GroupMetrics, InternalLayout, LayoutTree, LogicalGroup, NodeId,
+        NodeMetrics, NodePosition, Size,
     },
 };
 
@@ -61,9 +61,27 @@ fn position_group(
     let is_horizontal = direction == Direction::LR || direction == Direction::RL;
 
     if is_horizontal {
-        position_group_horizontal(group, node_metrics, group_metrics, next_id, config, direction, start_main, positions)
+        position_group_horizontal(
+            group,
+            node_metrics,
+            group_metrics,
+            next_id,
+            config,
+            direction,
+            start_main,
+            positions,
+        )
     } else {
-        position_group_vertical(group, node_metrics, gmetrics, next_id, config, direction, start_main, positions)
+        position_group_vertical(
+            group,
+            node_metrics,
+            gmetrics,
+            next_id,
+            config,
+            direction,
+            start_main,
+            positions,
+        )
     }
 }
 
@@ -79,23 +97,50 @@ fn position_group_vertical(
 ) -> f64 {
     match group {
         LogicalGroup::Chain { items } => position_chain_vertical(
-            items, node_metrics, gmetrics, next_id, config, direction, start_main, positions,
+            items,
+            node_metrics,
+            gmetrics,
+            next_id,
+            config,
+            direction,
+            start_main,
+            positions,
         ),
-        LogicalGroup::Branch {
-            source, arms, sink,
-        } => position_branch_vertical(
-            source, arms, sink, node_metrics, gmetrics, config, start_main, positions,
+        LogicalGroup::Branch { source, arms, sink } => position_branch_vertical(
+            source,
+            arms,
+            sink,
+            node_metrics,
+            gmetrics,
+            config,
+            start_main,
+            positions,
         ),
         LogicalGroup::Cycle {
-            condition, body, exit,
+            condition,
+            body,
+            exit,
         } => position_cycle_vertical(
-            condition, body, exit, node_metrics, next_id, config, start_main, positions,
+            condition,
+            body,
+            exit,
+            node_metrics,
+            next_id,
+            config,
+            start_main,
+            positions,
         ),
         LogicalGroup::Leaf { node_id } => {
             let nm = node_metrics.get(node_id).unwrap();
             let size = nm.size;
             let center = Point::new(config.width / 2.0, start_main + size.height / 2.0);
-            positions.insert(node_id.clone(), NodePosition { center, anchors: NodeAnchors::new((size.width, size.height)) });
+            positions.insert(
+                node_id.clone(),
+                NodePosition {
+                    center,
+                    anchors: NodeAnchors::new((size.width, size.height)),
+                },
+            );
             start_main + size.height
         }
     }
@@ -123,16 +168,29 @@ fn position_chain_vertical(
 
     for item in chain_items {
         if let Some(node_id) = &item.node_id {
-            let nm = node_metrics.get(node_id).unwrap_or_else(|| {
-                unreachable!("Node metrics not found for {}", node_id)
-            });
+            let nm = node_metrics
+                .get(node_id)
+                .unwrap_or_else(|| unreachable!("Node metrics not found for {}", node_id));
             let size = nm.size;
             let center = Point::new(canvas_center, cur_main + size.height / 2.0);
-            positions.insert(node_id.clone(), NodePosition { center, anchors: NodeAnchors::new((size.width, size.height)) });
+            positions.insert(
+                node_id.clone(),
+                NodePosition {
+                    center,
+                    anchors: NodeAnchors::new((size.width, size.height)),
+                },
+            );
             cur_main += size.height + V_GAP;
         } else if let Some(sub) = &item.sub_group {
             cur_main = position_group_vertical(
-                sub, node_metrics, gmetrics, next_id, config, direction.clone(), cur_main, positions,
+                sub,
+                node_metrics,
+                gmetrics,
+                next_id,
+                config,
+                direction.clone(),
+                cur_main,
+                positions,
             );
         }
     }
@@ -156,7 +214,13 @@ fn position_branch_vertical(
 
     // source 居中
     let source_center = Point::new(canvas_center, start_main + source_size.height / 2.0);
-    positions.insert(source.clone(), NodePosition { center: source_center, anchors: NodeAnchors::new((source_size.width, source_size.height)) });
+    positions.insert(
+        source.clone(),
+        NodePosition {
+            center: source_center,
+            anchors: NodeAnchors::new((source_size.width, source_size.height)),
+        },
+    );
 
     // branches
     let branch_main = start_main + source_size.height + V_GAP;
@@ -195,7 +259,13 @@ fn position_branch_vertical(
         let arm_center_x = cur_x + arm_size.width / 2.0;
         // 所有 arm 的第一个节点在同一水平线上对齐
         let arm_center_y = branch_main + first_node_max_h / 2.0;
-        position_arm(&arm.body, node_metrics, arm_center_x, arm_center_y, positions);
+        position_arm(
+            &arm.body,
+            node_metrics,
+            arm_center_x,
+            arm_center_y,
+            positions,
+        );
         cur_x += arm_size.width + H_GAP;
     }
 
@@ -215,7 +285,13 @@ fn position_branch_vertical(
         let ss = sink_nm.size;
         let sink_main = branch_main + branch_max_h + V_GAP;
         let sink_center = Point::new(canvas_center, sink_main + ss.height / 2.0);
-        positions.insert(sink_node.clone(), NodePosition { center: sink_center, anchors: NodeAnchors::new((ss.width, ss.height)) });
+        positions.insert(
+            sink_node.clone(),
+            NodePosition {
+                center: sink_center,
+                anchors: NodeAnchors::new((ss.width, ss.height)),
+            },
+        );
         return sink_main + ss.height;
     }
 
@@ -253,7 +329,13 @@ fn position_cycle_vertical(
 
     // condition 居中
     let cond_center = Point::new(canvas_center, start_main + cond_size.height / 2.0);
-    positions.insert(condition.clone(), NodePosition { center: cond_center, anchors: NodeAnchors::new((cond_size.width, cond_size.height)) });
+    positions.insert(
+        condition.clone(),
+        NodePosition {
+            center: cond_center,
+            anchors: NodeAnchors::new((cond_size.width, cond_size.height)),
+        },
+    );
 
     // body 在 condition 左侧，与 condition 垂直居中对齐
     let body_first = get_first_node_id(body);
@@ -265,17 +347,22 @@ fn position_cycle_vertical(
 
     // exit 在 condition 下方
     let cycle_h = cond_size.height.max(body_size.height);
-    let exit_main = if let Some(exit_node) = exit {
+
+    if let Some(exit_node) = exit {
         let exit_nm = node_metrics.get(exit_node).unwrap_or(cond_nm);
         let exit_size = exit_nm.size;
         let y = start_main + cycle_h + V_GAP + exit_size.height / 2.0;
-        positions.insert(exit_node.clone(), NodePosition { center: Point::new(canvas_center, y), anchors: NodeAnchors::new((exit_size.width, exit_size.height)) });
+        positions.insert(
+            exit_node.clone(),
+            NodePosition {
+                center: Point::new(canvas_center, y),
+                anchors: NodeAnchors::new((exit_size.width, exit_size.height)),
+            },
+        );
         y + exit_size.height / 2.0
     } else {
         start_main + cycle_h
-    };
-
-    exit_main
+    }
 }
 
 fn position_group_horizontal(
@@ -305,7 +392,13 @@ fn position_group_horizontal(
                     let nm = node_metrics.get(node_id).unwrap();
                     let size = nm.size;
                     let center = Point::new(cur_main + size.width / 2.0, canvas_center);
-                    positions.insert(node_id.clone(), NodePosition { center, anchors: NodeAnchors::new((size.width, size.height)) });
+                    positions.insert(
+                        node_id.clone(),
+                        NodePosition {
+                            center,
+                            anchors: NodeAnchors::new((size.width, size.height)),
+                        },
+                    );
                     cur_main += size.width + H_GAP;
                 }
             }
@@ -316,10 +409,25 @@ fn position_group_horizontal(
             let nm = node_metrics.get(node_id).unwrap();
             let size = nm.size;
             let center = Point::new(start_main + size.width / 2.0, config.height / 2.0);
-            positions.insert(node_id.clone(), NodePosition { center, anchors: NodeAnchors::new((size.width, size.height)) });
+            positions.insert(
+                node_id.clone(),
+                NodePosition {
+                    center,
+                    anchors: NodeAnchors::new((size.width, size.height)),
+                },
+            );
             start_main + size.width
         }
-        _ => position_group_vertical(group, node_metrics, None, next_id, config, direction, start_main, positions),
+        _ => position_group_vertical(
+            group,
+            node_metrics,
+            None,
+            next_id,
+            config,
+            direction,
+            start_main,
+            positions,
+        ),
     }
 }
 
@@ -334,7 +442,13 @@ fn position_arm(
         LogicalGroup::Leaf { node_id } => {
             let nm = node_metrics.get(node_id).unwrap();
             let size = nm.size;
-            positions.insert(node_id.clone(), NodePosition { center: Point::new(center_x, center_y), anchors: NodeAnchors::new((size.width, size.height)) });
+            positions.insert(
+                node_id.clone(),
+                NodePosition {
+                    center: Point::new(center_x, center_y),
+                    anchors: NodeAnchors::new((size.width, size.height)),
+                },
+            );
         }
         LogicalGroup::Chain { items } => {
             let mut cur_y = center_y;
@@ -342,8 +456,18 @@ fn position_arm(
                 if let Some(node_id) = &item.node_id {
                     let nm = node_metrics.get(node_id).unwrap();
                     let size = nm.size;
-                    let node_center_y = if j == 0 { cur_y } else { cur_y + size.height / 2.0 };
-                    positions.insert(node_id.clone(), NodePosition { center: Point::new(center_x, node_center_y), anchors: NodeAnchors::new((size.width, size.height)) });
+                    let node_center_y = if j == 0 {
+                        cur_y
+                    } else {
+                        cur_y + size.height / 2.0
+                    };
+                    positions.insert(
+                        node_id.clone(),
+                        NodePosition {
+                            center: Point::new(center_x, node_center_y),
+                            anchors: NodeAnchors::new((size.width, size.height)),
+                        },
+                    );
                     cur_y = node_center_y + size.height / 2.0 + V_GAP;
                 }
             }
@@ -352,7 +476,13 @@ fn position_arm(
             let node_id = get_first_node_id(group);
             let nm = node_metrics.get(&node_id).unwrap();
             let size = nm.size;
-            positions.insert(node_id, NodePosition { center: Point::new(center_x, center_y), anchors: NodeAnchors::new((size.width, size.height)) });
+            positions.insert(
+                node_id,
+                NodePosition {
+                    center: Point::new(center_x, center_y),
+                    anchors: NodeAnchors::new((size.width, size.height)),
+                },
+            );
         }
     }
 }
@@ -360,7 +490,10 @@ fn position_arm(
 fn get_first_node_id(group: &LogicalGroup) -> NodeId {
     match group {
         LogicalGroup::Leaf { node_id } => node_id.clone(),
-        LogicalGroup::Chain { items } => items.first().and_then(|i| i.node_id.clone()).unwrap_or_default(),
+        LogicalGroup::Chain { items } => items
+            .first()
+            .and_then(|i| i.node_id.clone())
+            .unwrap_or_default(),
         LogicalGroup::Branch { source, .. } => source.clone(),
         LogicalGroup::Cycle { condition, .. } => condition.clone(),
     }

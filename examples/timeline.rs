@@ -1,5 +1,3 @@
-use liemermaid;
-
 fn main() {
     // 1. 基础时间线
     let basic = r#"timeline

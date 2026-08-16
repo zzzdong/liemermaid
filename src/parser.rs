@@ -44,7 +44,11 @@ impl MermaidParser {
             Err(err) => {
                 if std::env::var("LIEMERMAID_DEBUG_PARSE").is_ok() {
                     eprintln!("pest file parse failed: {:?}", err);
-                    eprintln!("input len={}, bytes={:?}", parse_input.len(), parse_input.as_bytes());
+                    eprintln!(
+                        "input len={}, bytes={:?}",
+                        parse_input.len(),
+                        parse_input.as_bytes()
+                    );
                     match Self::parse(Rule::flowchart_diagram, parse_input) {
                         Ok(pairs) => eprintln!("rule=flowchart_diagram ok, pairs={}", pairs.len()),
                         Err(e2) => eprintln!("rule=flowchart_diagram failed: {:?}", e2),
@@ -76,7 +80,9 @@ impl MermaidParser {
 
     fn extract_string(pair: pest::iterators::Pair<Rule>) -> String {
         let s = pair.as_str();
-        if pair.as_rule() == Rule::quoted_id || (s.starts_with('"') && s.ends_with('"') && s.len() >= 2) {
+        if pair.as_rule() == Rule::quoted_id
+            || (s.starts_with('"') && s.ends_with('"') && s.len() >= 2)
+        {
             s[1..s.len() - 1].to_string()
         } else {
             s.to_string()
@@ -236,12 +242,14 @@ impl MermaidParser {
                 Rule::edge_arrow => {
                     arrow_type = Self::parse_edge_arrow(inner.clone())?;
                     for arrow_inner in inner.into_inner() {
-                        if arrow_inner.as_rule() == Rule::edge_arrow_labeled {
-                            if let Some(label_pair) = arrow_inner.into_inner().find(|p| p.as_rule() == Rule::edge_label) {
-                                let label_text = label_pair.as_str().to_string();
-                                label = Some(label_text.clone());
-                                arrow_type = ArrowType::Labeled(label_text);
-                            }
+                        if arrow_inner.as_rule() == Rule::edge_arrow_labeled
+                            && let Some(label_pair) = arrow_inner
+                                .into_inner()
+                                .find(|p| p.as_rule() == Rule::edge_label)
+                        {
+                            let label_text = label_pair.as_str().to_string();
+                            label = Some(label_text.clone());
+                            arrow_type = ArrowType::Labeled(label_text);
                         }
                     }
                 }
@@ -292,7 +300,8 @@ impl MermaidParser {
         let mut participants = Vec::new();
         let mut messages = Vec::new();
         let mut notes = Vec::new();
-        let mut participant_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut participant_names: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
 
         for inner in pair.into_inner() {
             // Handle sequence_statement wrapper
@@ -444,7 +453,10 @@ impl MermaidParser {
                         let class_name = ids[0].clone();
                         let member_type = ids[1].clone();
                         // Find or create the class
-                        if let Some(class) = classes.iter_mut().find(|c: &&mut Class| c.name == class_name) {
+                        if let Some(class) = classes
+                            .iter_mut()
+                            .find(|c: &&mut Class| c.name == class_name)
+                        {
                             class.members.push(ClassMember {
                                 visibility: None,
                                 name: member_type.clone(),
@@ -473,10 +485,8 @@ impl MermaidParser {
     }
 
     fn parse_class_decl(pair: pest::iterators::Pair<Rule>) -> Result<Class> {
-        let name =
-            Self::extract_optional_string(pair.clone(), Rule::identifier).ok_or_else(|| {
-                Self::invalid_syntax(&pair, "Class missing name")
-            })?;
+        let name = Self::extract_optional_string(pair.clone(), Rule::identifier)
+            .ok_or_else(|| Self::invalid_syntax(&pair, "Class missing name"))?;
         let members = Self::collect_class_members(pair);
         Ok(Class { name, members })
     }
@@ -486,10 +496,10 @@ impl MermaidParser {
         for inner in pair.into_inner() {
             if inner.as_rule() == Rule::class_members {
                 for member_pair in inner.into_inner() {
-                    if member_pair.as_rule() == Rule::class_member {
-                        if let Ok(m) = Self::parse_class_member(member_pair) {
-                            members.push(m);
-                        }
+                    if member_pair.as_rule() == Rule::class_member
+                        && let Ok(m) = Self::parse_class_member(member_pair)
+                    {
+                        members.push(m);
                     }
                 }
             }
@@ -526,7 +536,8 @@ impl MermaidParser {
             }
         }
 
-        let name = name.ok_or_else(|| Self::invalid_syntax(&err_pair, "Class member missing name"))?;
+        let name =
+            name.ok_or_else(|| Self::invalid_syntax(&err_pair, "Class member missing name"))?;
         let is_method = full_str.contains('(');
 
         Ok(ClassMember {
@@ -540,7 +551,10 @@ impl MermaidParser {
     fn parse_relation(pair: pest::iterators::Pair<Rule>) -> Result<Relation> {
         let ids = Self::collect_strings(pair.clone(), Rule::identifier);
         if ids.len() < 2 {
-            return Err(Self::invalid_syntax(&pair, "Relation missing source or target"));
+            return Err(Self::invalid_syntax(
+                &pair,
+                "Relation missing source or target",
+            ));
         }
         let source = ids[0].clone();
         let target = ids[1].clone();
@@ -661,8 +675,10 @@ impl MermaidParser {
             }
         }
 
-        let from = from.ok_or_else(|| Self::invalid_syntax(&err_pair, "Transition missing 'from' state"))?;
-        let to = to.ok_or_else(|| Self::invalid_syntax(&err_pair, "Transition missing 'to' state"))?;
+        let from =
+            from.ok_or_else(|| Self::invalid_syntax(&err_pair, "Transition missing 'from' state"))?;
+        let to =
+            to.ok_or_else(|| Self::invalid_syntax(&err_pair, "Transition missing 'to' state"))?;
 
         Ok(Transition { from, to, label })
     }
@@ -687,10 +703,8 @@ impl MermaidParser {
     }
 
     fn parse_er_entity(pair: pest::iterators::Pair<Rule>) -> Result<ErEntity> {
-        let name =
-            Self::extract_optional_string(pair.clone(), Rule::identifier).ok_or_else(|| {
-                Self::invalid_syntax(&pair, "Entity missing name")
-            })?;
+        let name = Self::extract_optional_string(pair.clone(), Rule::identifier)
+            .ok_or_else(|| Self::invalid_syntax(&pair, "Entity missing name"))?;
         let attributes = Self::collect_attributes(pair);
         Ok(ErEntity { name, attributes })
     }
@@ -698,10 +712,10 @@ impl MermaidParser {
     fn collect_attributes(pair: pest::iterators::Pair<Rule>) -> Vec<ErAttribute> {
         let mut attrs = Vec::new();
         for inner in pair.into_inner() {
-            if inner.as_rule() == Rule::attribute {
-                if let Ok(attr) = Self::parse_attribute(inner) {
-                    attrs.push(attr);
-                }
+            if inner.as_rule() == Rule::attribute
+                && let Ok(attr) = Self::parse_attribute(inner)
+            {
+                attrs.push(attr);
             }
         }
         attrs
@@ -710,7 +724,10 @@ impl MermaidParser {
     fn parse_attribute(pair: pest::iterators::Pair<Rule>) -> Result<ErAttribute> {
         let ids = Self::collect_strings(pair.clone(), Rule::identifier);
         if ids.len() < 2 {
-            return Err(Self::invalid_syntax(&pair, "Attribute missing type or name"));
+            return Err(Self::invalid_syntax(
+                &pair,
+                "Attribute missing type or name",
+            ));
         }
         Ok(ErAttribute {
             type_: ids[0].clone(),
@@ -773,8 +790,8 @@ impl MermaidParser {
             match inner.as_rule() {
                 Rule::pie_modifier => {
                     let s = inner.as_str();
-                    if s.starts_with("title ") {
-                        title = Some(s[6..].to_string());
+                    if let Some(stripped) = s.strip_prefix("title ") {
+                        title = Some(stripped.to_string());
                     } else if s == "showData" {
                         show_data = true;
                     }
@@ -792,7 +809,11 @@ impl MermaidParser {
             }
         }
 
-        Ok(PieDiagram { title, show_data, data })
+        Ok(PieDiagram {
+            title,
+            show_data,
+            data,
+        })
     }
 
     // ========== 时间线解析 ==========
@@ -805,14 +826,14 @@ impl MermaidParser {
             match inner.as_rule() {
                 Rule::tl_title => {
                     let s = inner.as_str();
-                    if s.starts_with("title ") {
-                        title = Some(s[6..].to_string());
+                    if let Some(stripped) = s.strip_prefix("title ") {
+                        title = Some(stripped.to_string());
                     }
                 }
                 Rule::tl_section => {
                     let s = inner.as_str();
-                    if s.starts_with("section ") {
-                        let name = s[8..].to_string();
+                    if let Some(stripped) = s.strip_prefix("section ") {
+                        let name = stripped.to_string();
                         current_section = Some(name);
                     }
                 }
@@ -822,7 +843,10 @@ impl MermaidParser {
                     if parts.len() == 2 {
                         let section_name = current_section.clone().unwrap_or_default();
                         let event = parts[1].trim().to_string();
-                        if let Some(section) = sections.iter_mut().find(|sec: &&mut TimelineSection| sec.name == section_name) {
+                        if let Some(section) = sections
+                            .iter_mut()
+                            .find(|sec: &&mut TimelineSection| sec.name == section_name)
+                        {
                             section.events.push(event);
                         } else {
                             sections.push(TimelineSection {
@@ -848,16 +872,17 @@ impl MermaidParser {
                 for stmt in inner.into_inner() {
                     match stmt.as_rule() {
                         Rule::gg_commit => {
-                            let tag = stmt.into_inner()
-                                .find(|p| p.as_rule() == Rule::gg_tag)
-                                .map(|p| {
-                                    let s = p.as_str();
-                                    if s.starts_with("tag:") {
-                                        s[4..].trim().to_string()
-                                    } else {
-                                        s.to_string()
-                                    }
-                                });
+                            let tag =
+                                stmt.into_inner()
+                                    .find(|p| p.as_rule() == Rule::gg_tag)
+                                    .map(|p| {
+                                        let s = p.as_str();
+                                        if let Some(stripped) = s.strip_prefix("tag:") {
+                                            stripped.trim().to_string()
+                                        } else {
+                                            s.to_string()
+                                        }
+                                    });
                             statements.push(GitGraphStatement::Commit { tag });
                         }
                         Rule::gg_branch => {
@@ -884,7 +909,6 @@ impl MermaidParser {
         Ok(GitGraphDiagram { statements })
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -961,7 +985,10 @@ mod tests {
             Diagram::Flowchart(flowchart) => {
                 assert_eq!(flowchart.edges.len(), 1);
                 assert_eq!(flowchart.edges[0].label.as_deref(), Some("hello"));
-                assert_eq!(flowchart.edges[0].arrow_type, ArrowType::Labeled("hello".to_string()));
+                assert_eq!(
+                    flowchart.edges[0].arrow_type,
+                    ArrowType::Labeled("hello".to_string())
+                );
             }
             _ => panic!("expected Flowchart"),
         }
@@ -1065,8 +1092,11 @@ mod tests {
                 assert_eq!(class_diag.classes.len(), 1);
                 assert_eq!(class_diag.classes[0].name, "Animal");
                 assert_eq!(class_diag.classes[0].members.len(), 3);
-                assert_eq!(class_diag.classes[0].members[0].visibility, Some(Visibility::Public));
-                assert_eq!(class_diag.classes[0].members[2].is_method, true);
+                assert_eq!(
+                    class_diag.classes[0].members[0].visibility,
+                    Some(Visibility::Public)
+                );
+                assert!(class_diag.classes[0].members[2].is_method);
             }
             _ => panic!("expected Class"),
         }
@@ -1097,7 +1127,8 @@ mod tests {
 
     #[test]
     fn parses_state_diagram_with_description() {
-        let input = "stateDiagram\n[*] --> Idle\nIdle --> Processing: start\nProcessing --> [*]: done";
+        let input =
+            "stateDiagram\n[*] --> Idle\nIdle --> Processing: start\nProcessing --> [*]: done";
         match MermaidParser::parse_mermaid(input).unwrap() {
             Diagram::State(state_diag) => {
                 assert_eq!(state_diag.transitions.len(), 3);
@@ -1193,7 +1224,11 @@ mod tests {
             let diagram = MermaidParser::parse_mermaid(&input).unwrap();
             match diagram {
                 Diagram::Sequence(seq) => {
-                    assert_eq!(seq.messages[0].arrow, *expected, "failed for arrow {}", arrow);
+                    assert_eq!(
+                        seq.messages[0].arrow, *expected,
+                        "failed for arrow {}",
+                        arrow
+                    );
                 }
                 _ => panic!("expected Sequence"),
             }
@@ -1229,8 +1264,14 @@ mod tests {
         match MermaidParser::parse_mermaid(input).unwrap() {
             Diagram::Er(er) => {
                 assert_eq!(er.relationships.len(), 1);
-                assert_eq!(er.relationships[0].cardinality_first, Cardinality::ZeroOrOne);
-                assert_eq!(er.relationships[0].cardinality_second, Cardinality::OneOrMany);
+                assert_eq!(
+                    er.relationships[0].cardinality_first,
+                    Cardinality::ZeroOrOne
+                );
+                assert_eq!(
+                    er.relationships[0].cardinality_second,
+                    Cardinality::OneOrMany
+                );
             }
             _ => panic!("expected ER"),
         }
@@ -1320,11 +1361,31 @@ mod tests {
             Diagram::GitGraph(gg) => {
                 assert_eq!(gg.statements.len(), 6);
                 assert_eq!(gg.statements[0], GitGraphStatement::Commit { tag: None });
-                assert_eq!(gg.statements[1], GitGraphStatement::Branch { name: "feature".to_string() });
-                assert_eq!(gg.statements[2], GitGraphStatement::Checkout { branch: "feature".to_string() });
+                assert_eq!(
+                    gg.statements[1],
+                    GitGraphStatement::Branch {
+                        name: "feature".to_string()
+                    }
+                );
+                assert_eq!(
+                    gg.statements[2],
+                    GitGraphStatement::Checkout {
+                        branch: "feature".to_string()
+                    }
+                );
                 assert_eq!(gg.statements[3], GitGraphStatement::Commit { tag: None });
-                assert_eq!(gg.statements[4], GitGraphStatement::Checkout { branch: "main".to_string() });
-                assert_eq!(gg.statements[5], GitGraphStatement::Merge { branch: "feature".to_string() });
+                assert_eq!(
+                    gg.statements[4],
+                    GitGraphStatement::Checkout {
+                        branch: "main".to_string()
+                    }
+                );
+                assert_eq!(
+                    gg.statements[5],
+                    GitGraphStatement::Merge {
+                        branch: "feature".to_string()
+                    }
+                );
             }
             _ => panic!("expected GitGraph"),
         }
@@ -1336,7 +1397,12 @@ mod tests {
         match MermaidParser::parse_mermaid(input).unwrap() {
             Diagram::GitGraph(gg) => {
                 assert_eq!(gg.statements.len(), 2);
-                assert_eq!(gg.statements[0], GitGraphStatement::Commit { tag: Some("\"v1.0\"".to_string()) });
+                assert_eq!(
+                    gg.statements[0],
+                    GitGraphStatement::Commit {
+                        tag: Some("\"v1.0\"".to_string())
+                    }
+                );
                 assert_eq!(gg.statements[1], GitGraphStatement::Commit { tag: None });
             }
             _ => panic!("expected GitGraph"),

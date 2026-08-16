@@ -2,16 +2,12 @@ use vello_cpu::kurbo::Point;
 
 use crate::{
     ast::TimelineDiagram,
-    builder::{
-        layout::types::LayoutEngine,
-        types::OutputConfig,
-    },
+    builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
     text::{compute_text_offset, create_text_layout},
     visual::{
-        theme,
-        FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle,
-        VisualElement, Z_AXIS, Z_LABEL, Z_SERIES, Z_TITLE,
+        FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle, VisualElement, Z_AXIS,
+        Z_LABEL, Z_SERIES, Z_TITLE, theme,
     },
 };
 
@@ -61,10 +57,14 @@ pub fn build_timeline_elements(
         elements.push(VisualElement::TextRun {
             text: title.clone(),
             position: Point::new(config.width / 2.0 + x_off, cur_y + y_off),
-            style: TextStyle { align: TextAlign::Left, vertical_align: TextBaseline::Top, ..ts },
+            style: TextStyle {
+                align: TextAlign::Left,
+                vertical_align: TextBaseline::Top,
+                ..ts
+            },
             rotation: 0.0,
             max_width: Some(config.width - 80.0),
-            layout: Some(layout),
+            layout: Some(Box::new(layout)),
             z_index: Z_TITLE,
         });
         cur_y += 50.0;
@@ -77,7 +77,10 @@ pub fn build_timeline_elements(
     elements.push(VisualElement::Line {
         start: Point::new(left_margin, line_y),
         end: Point::new(right_margin, line_y),
-        style: StrokeStyle { color: theme::timeline::LINE, width: 2.5 },
+        style: StrokeStyle {
+            color: theme::timeline::LINE,
+            width: 2.5,
+        },
         z_index: Z_AXIS,
     });
 
@@ -114,10 +117,14 @@ pub fn build_timeline_elements(
         elements.push(VisualElement::TextRun {
             text: section.name.clone(),
             position: Point::new(cx - (section_spacing - 10.0) / 2.0, cur_y),
-            style: TextStyle { align: TextAlign::Left, vertical_align: TextBaseline::Top, ..ts },
+            style: TextStyle {
+                align: TextAlign::Left,
+                vertical_align: TextBaseline::Top,
+                ..ts
+            },
             rotation: 0.0,
             max_width: Some(section_spacing - 10.0),
-            layout: Some(layout),
+            layout: Some(Box::new(layout)),
             z_index: Z_LABEL,
         });
 
@@ -137,7 +144,10 @@ pub fn build_timeline_elements(
             elements.push(VisualElement::Line {
                 start: Point::new(cx, cur_y + estimated_h),
                 end: Point::new(cx, event_y + 4.0),
-                style: StrokeStyle { color: theme::timeline::LINE, width: 1.0 },
+                style: StrokeStyle {
+                    color: theme::timeline::LINE,
+                    width: 1.0,
+                },
                 z_index: Z_AXIS,
             });
 
@@ -153,10 +163,14 @@ pub fn build_timeline_elements(
             elements.push(VisualElement::TextRun {
                 text: event.clone(),
                 position: Point::new(cx + 10.0, event_y),
-                style: TextStyle { align: TextAlign::Left, vertical_align: TextBaseline::Top, ..ets },
+                style: TextStyle {
+                    align: TextAlign::Left,
+                    vertical_align: TextBaseline::Top,
+                    ..ets
+                },
                 rotation: 0.0,
                 max_width: Some(section_spacing - 25.0),
-                layout: Some(el),
+                layout: Some(Box::new(el)),
                 z_index: Z_LABEL,
             });
 

@@ -1,16 +1,6 @@
-use liemermaid::{
-    MermaidParser,
-    builder::{build_diagram_with_config, types::OutputConfig},
-    render::SvgRenderer,
-};
-
-/// 辅助：解析 Mermaid 文本并渲染为 SVG 字符串
+/// 辅助：解析 Mermaid 文本并通过 lievisual 后端渲染为 SVG 字符串
 fn render(mermaid: &str, width: u32, height: u32) -> String {
-    let diagram = MermaidParser::parse_mermaid(mermaid).expect("parse");
-    let config = OutputConfig { width: width as f64, height: height as f64, ..OutputConfig::default() };
-    let elements = build_diagram_with_config(&diagram, &config).expect("build");
-    let renderer = SvgRenderer::new();
-    renderer.render(&elements, width, height).expect("render")
+    liemermaid::render(mermaid, width, height).expect("render")
 }
 
 // ============================================================
@@ -19,39 +9,80 @@ fn render(mermaid: &str, width: u32, height: u32) -> String {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Rect {
-    x: f64, y: f64, w: f64, h: f64,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
 }
 
 impl Rect {
-    fn center_x(&self) -> f64 { self.x + self.w / 2.0 }
-    fn center_y(&self) -> f64 { self.y + self.h / 2.0 }
+    fn center_x(&self) -> f64 {
+        self.x + self.w / 2.0
+    }
+    fn center_y(&self) -> f64 {
+        self.y + self.h / 2.0
+    }
     fn contains(&self, px: f64, py: f64) -> bool {
         px >= self.x && px <= self.x + self.w && py >= self.y && py <= self.y + self.h
     }
     fn intersects(&self, other: &Rect) -> bool {
-        !(self.x + self.w <= other.x || other.x + other.w <= self.x
-            || self.y + self.h <= other.y || other.y + other.h <= self.y)
+        !(self.x + self.w <= other.x
+            || other.x + other.w <= self.x
+            || self.y + self.h <= other.y
+            || other.y + other.h <= self.y)
     }
     fn segment_crosses(&self, x1: f64, y1: f64, x2: f64, y2: f64) -> bool {
         let inside1 = self.contains(x1, y1);
         let inside2 = self.contains(x2, y2);
-        if inside1 && inside2 { return false; }
-        if inside1 || inside2 { return true;  }
-        cohen_sutherland_clip(x1, y1, x2, y2, self.x, self.x + self.w, self.y, self.y + self.h).is_some()
+        if inside1 && inside2 {
+            return false;
+        }
+        if inside1 || inside2 {
+            return true;
+        }
+        cohen_sutherland_clip(
+            x1,
+            y1,
+            x2,
+            y2,
+            self.x,
+            self.x + self.w,
+            self.y,
+            self.y + self.h,
+        )
+        .is_some()
     }
 }
 
+#[allow(clippy::too_many_arguments)] // 纯函数式裁剪算法，参数即输入坐标与裁剪窗口
 fn cohen_sutherland_clip(
-    x1: f64, y1: f64, x2: f64, y2: f64,
-    xmin: f64, xmax: f64, ymin: f64, ymax: f64,
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    xmin: f64,
+    xmax: f64,
+    ymin: f64,
+    ymax: f64,
 ) -> Option<(f64, f64, f64, f64)> {
-    const INSIDE: u8 = 0; const LEFT: u8 = 1; const RIGHT: u8 = 2;
-    const BOTTOM: u8 = 4; const TOP: u8 = 8;
+    const INSIDE: u8 = 0;
+    const LEFT: u8 = 1;
+    const RIGHT: u8 = 2;
+    const BOTTOM: u8 = 4;
+    const TOP: u8 = 8;
 
     let code = |x: f64, y: f64| -> u8 {
         let mut c = INSIDE;
-        if x < xmin { c |= LEFT; } else if x > xmax { c |= RIGHT; }
-        if y < ymin { c |= BOTTOM; } else if y > ymax { c |= TOP; }
+        if x < xmin {
+            c |= LEFT;
+        } else if x > xmax {
+            c |= RIGHT;
+        }
+        if y < ymin {
+            c |= BOTTOM;
+        } else if y > ymax {
+            c |= TOP;
+        }
         c
     };
 
@@ -59,8 +90,12 @@ fn cohen_sutherland_clip(
     loop {
         let c1 = code(x1, y1);
         let c2 = code(x2, y2);
-        if c1 | c2 == 0 { return Some((x1, y1, x2, y2)); }
-        if c1 & c2 != 0 { return None; }
+        if c1 | c2 == 0 {
+            return Some((x1, y1, x2, y2));
+        }
+        if c1 & c2 != 0 {
+            return None;
+        }
         let outcode = if c1 != 0 { c1 } else { c2 };
         let (x, y) = if outcode & TOP != 0 {
             (x1 + (x2 - x1) * (ymax - y1) / (y2 - y1), ymax)
@@ -71,45 +106,75 @@ fn cohen_sutherland_clip(
         } else {
             (xmin, y1 + (y2 - y1) * (xmin - x1) / (x2 - x1))
         };
-        if outcode == c1 { x1 = x; y1 = y; } else { x2 = x; y2 = y; }
+        if outcode == c1 {
+            x1 = x;
+            y1 = y;
+        } else {
+            x2 = x;
+            y2 = y;
+        }
     }
 }
 
+/// 从 `<svg ... width="W" height="H">` 根元素解析画布尺寸。
+fn parse_canvas_size(svg: &str) -> Option<(f64, f64)> {
+    let root = svg.lines().find(|l| l.contains("<svg"))?;
+    let w = parse_attr(root, " width=\"")?;
+    let h = parse_attr(root, " height=\"")?;
+    Some((w, h))
+}
+
 /// 从 SVG 文本中提取节点矩形和边线段
+#[allow(clippy::type_complexity)] // 测试辅助：矩形 + 线段集合
 fn parse_svg(svg: &str) -> (Vec<Rect>, Vec<(f64, f64, f64, f64)>) {
     let mut raw_rects = Vec::new();
     let mut segs = Vec::new();
 
+    // lievisual 会输出一个铺满画布的背景 <rect>，需排除，避免被当作节点矩形。
+    let canvas = parse_canvas_size(svg);
+
     for line in svg.lines() {
-        if line.contains("<rect ") {
-            if let (Some(x), Some(y), Some(w), Some(h)) = (
-                parse_attr(line, " x=\""), parse_attr(line, " y=\""),
-                parse_attr(line, " width=\""), parse_attr(line, " height=\""),
-            ) {
-                raw_rects.push(Rect { x, y, w, h });
+        if line.contains("<rect ")
+            && let (Some(x), Some(y), Some(w), Some(h)) = (
+                parse_attr(line, " x=\""),
+                parse_attr(line, " y=\""),
+                parse_attr(line, " width=\""),
+                parse_attr(line, " height=\""),
+            )
+        {
+            // 跳过铺满画布的背景矩形
+            if let Some((cw, ch)) = canvas
+                && (w - cw).abs() < 0.5
+                && (h - ch).abs() < 0.5
+            {
+                continue;
             }
+            raw_rects.push(Rect { x, y, w, h });
         }
-        if line.contains("<line ") {
-            if let (Some(x1), Some(y1), Some(x2), Some(y2)) = (
-                parse_attr(line, " x1=\""), parse_attr(line, " y1=\""),
-                parse_attr(line, " x2=\""), parse_attr(line, " y2=\""),
-            ) {
-                segs.push((x1, y1, x2, y2));
-            }
+        if line.contains("<line ")
+            && let (Some(x1), Some(y1), Some(x2), Some(y2)) = (
+                parse_attr(line, " x1=\""),
+                parse_attr(line, " y1=\""),
+                parse_attr(line, " x2=\""),
+                parse_attr(line, " y2=\""),
+            )
+        {
+            segs.push((x1, y1, x2, y2));
         }
-        if line.contains("<polyline ") {
-            if let Some(pts_str) = extract_polyline_points(line) {
-                let pts: Vec<(f64, f64)> = pts_str.split(' ')
-                    .filter_map(|p| {
-                        let mut parts = p.splitn(2, ',');
-                        let x = parts.next()?.parse::<f64>().ok()?;
-                        let y = parts.next()?.parse::<f64>().ok()?;
-                        Some((x, y))
-                    })
-                    .collect();
-                for i in 1..pts.len() {
-                    segs.push((pts[i-1].0, pts[i-1].1, pts[i].0, pts[i].1));
-                }
+        if line.contains("<polyline ")
+            && let Some(pts_str) = extract_polyline_points(line)
+        {
+            let pts: Vec<(f64, f64)> = pts_str
+                .split(' ')
+                .filter_map(|p| {
+                    let mut parts = p.splitn(2, ',');
+                    let x = parts.next()?.parse::<f64>().ok()?;
+                    let y = parts.next()?.parse::<f64>().ok()?;
+                    Some((x, y))
+                })
+                .collect();
+            for i in 1..pts.len() {
+                segs.push((pts[i - 1].0, pts[i - 1].1, pts[i].0, pts[i].1));
             }
         }
     }
@@ -124,8 +189,10 @@ fn dedup_rects(rects: &[Rect]) -> Vec<Rect> {
     let mut out = Vec::new();
     for r in rects {
         if !out.iter().any(|o: &Rect| {
-            (o.x - r.x).abs() < 0.5 && (o.y - r.y).abs() < 0.5
-                && (o.w - r.w).abs() < 0.5 && (o.h - r.h).abs() < 0.5
+            (o.x - r.x).abs() < 0.5
+                && (o.y - r.y).abs() < 0.5
+                && (o.w - r.w).abs() < 0.5
+                && (o.h - r.h).abs() < 0.5
         }) {
             out.push(*r);
         }
@@ -152,7 +219,7 @@ fn extract_polyline_points(s: &str) -> Option<&str> {
 // ============================================================
 
 /// 检测 1: 边不得穿越任何节点
-fn check_no_edge_crosses_node(rects: &[Rect], segs: &[(f64,f64,f64,f64)], svg_name: &str) {
+fn check_no_edge_crosses_node(rects: &[Rect], segs: &[(f64, f64, f64, f64)], svg_name: &str) {
     let mut violations = Vec::new();
     for (x1, y1, x2, y2) in segs {
         for (i, r) in rects.iter().enumerate() {
@@ -160,15 +227,21 @@ fn check_no_edge_crosses_node(rects: &[Rect], segs: &[(f64,f64,f64,f64)], svg_na
                 (x == r.x || x == r.x + r.w) && y >= r.y && y <= r.y + r.h
                     || (y == r.y || y == r.y + r.h) && x >= r.x && x <= r.x + r.w
             };
-            if on_edge(*x1, *y1, r) || on_edge(*x2, *y2, r) { continue; }
+            if on_edge(*x1, *y1, r) || on_edge(*x2, *y2, r) {
+                continue;
+            }
             if r.segment_crosses(*x1, *y1, *x2, *y2) {
                 violations.push((i, *x1, *y1, *x2, *y2));
             }
         }
     }
-    assert!(violations.is_empty(),
+    assert!(
+        violations.is_empty(),
         "{}: {} edge segment(s) cross through node rects! Violations: {:?}",
-        svg_name, violations.len(), violations);
+        svg_name,
+        violations.len(),
+        violations
+    );
 }
 
 /// 检测 2: 同层节点中心 Y 偏差 < 1px
@@ -183,32 +256,56 @@ fn check_same_layer_y_alignment(rects: &[Rect], svg_name: &str) {
                 break;
             }
         }
-        if !found { layers.push(vec![r]); }
+        if !found {
+            layers.push(vec![r]);
+        }
     }
     for layer in &layers {
-        if layer.len() <= 1 { continue; }
+        if layer.len() <= 1 {
+            continue;
+        }
         let centers: Vec<f64> = layer.iter().map(|r| r.center_y()).collect();
-        let max_cy = centers.iter().cloned().max_by(|a,b| a.partial_cmp(b).unwrap()).unwrap();
-        let min_cy = centers.iter().cloned().min_by(|a,b| a.partial_cmp(b).unwrap()).unwrap();
-        assert!((max_cy - min_cy).abs() < 1.0,
+        let max_cy = centers
+            .iter()
+            .cloned()
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap();
+        let min_cy = centers
+            .iter()
+            .cloned()
+            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap();
+        assert!(
+            (max_cy - min_cy).abs() < 1.0,
             "{}: same-layer Y deviation {:.2}px (min={:.2}, max={:.2})",
-            svg_name, max_cy - min_cy, min_cy, max_cy);
+            svg_name,
+            max_cy - min_cy,
+            min_cy,
+            max_cy
+        );
     }
 }
 
 /// 检测 3: 无节点重叠（去重后的 rect 应互不重叠）
 fn check_no_node_overlap(rects: &[Rect], svg_name: &str) {
     for i in 0..rects.len() {
-        for j in i+1..rects.len() {
+        for j in i + 1..rects.len() {
             let r1 = &rects[i];
             let r2 = &rects[j];
             let is_touching = (r1.x + r1.w - r2.x).abs() < 0.5
                 || (r2.x + r2.w - r1.x).abs() < 0.5
                 || (r1.y + r1.h - r2.y).abs() < 0.5
                 || (r2.y + r2.h - r1.y).abs() < 0.5;
-            if is_touching { continue; }
-            assert!(!r1.intersects(r2),
-                "{}: nodes overlap! {:?} vs {:?}", svg_name, r1, r2);
+            if is_touching {
+                continue;
+            }
+            assert!(
+                !r1.intersects(r2),
+                "{}: nodes overlap! {:?} vs {:?}",
+                svg_name,
+                r1,
+                r2
+            );
         }
     }
 }
@@ -219,7 +316,8 @@ fn check_no_node_overlap(rects: &[Rect], svg_name: &str) {
 
 #[test]
 fn flowchart_loop_no_edge_crosses() {
-    let svg = render("\
+    let svg = render(
+        "\
 flowchart TD
     A[\"Start\"]
     B[\"Continue\"]
@@ -229,7 +327,10 @@ flowchart TD
     B -->|Yes| C
     C --> B
     B -->|No| D\
-    ", 800, 600);
+    ",
+        800,
+        600,
+    );
     let (rects, segs) = parse_svg(&svg);
     check_no_edge_crosses_node(&rects, &segs, "flow_loop");
     check_same_layer_y_alignment(&rects, "flow_loop");
@@ -238,7 +339,8 @@ flowchart TD
 
 #[test]
 fn flowchart_cycle_no_edge_crosses() {
-    let svg = render("\
+    let svg = render(
+        "\
 flowchart TD
     A[\"Start\"]
     B[\"Process\"]
@@ -250,7 +352,10 @@ flowchart TD
     C -->|Yes| D
     C -->|No| B
     D --> E\
-    ", 800, 600);
+    ",
+        800,
+        600,
+    );
     let (rects, segs) = parse_svg(&svg);
     check_no_edge_crosses_node(&rects, &segs, "flow_cycle");
     check_same_layer_y_alignment(&rects, "flow_cycle");
@@ -259,7 +364,8 @@ flowchart TD
 
 #[test]
 fn flowchart_branch_no_edge_crosses() {
-    let svg = render("\
+    let svg = render(
+        "\
 flowchart TD
     S[\"Start\"]
     D{\"Decision\"}
@@ -271,7 +377,10 @@ flowchart TD
     D -->|No| R
     A --> E
     R --> E\
-    ", 800, 600);
+    ",
+        800,
+        600,
+    );
     let (rects, segs) = parse_svg(&svg);
     check_no_edge_crosses_node(&rects, &segs, "flow_branch");
     check_same_layer_y_alignment(&rects, "flow_branch");
@@ -283,10 +392,21 @@ fn flowchart_chain_alignment() {
     let svg = render("flowchart TD\nA --> B\nB --> C", 600, 400);
     let (rects, _segs) = parse_svg(&svg);
     let cx: Vec<f64> = rects.iter().map(|r| r.center_x()).collect();
-    let max_cx = cx.iter().cloned().max_by(|a,b| a.partial_cmp(b).unwrap()).unwrap();
-    let min_cx = cx.iter().cloned().min_by(|a,b| a.partial_cmp(b).unwrap()).unwrap();
-    assert!((max_cx - min_cx).abs() < 1.0,
-        "Chain nodes not aligned! deviation={:.2}px", max_cx - min_cx);
+    let max_cx = cx
+        .iter()
+        .cloned()
+        .max_by(|a, b| a.partial_cmp(b).unwrap())
+        .unwrap();
+    let min_cx = cx
+        .iter()
+        .cloned()
+        .min_by(|a, b| a.partial_cmp(b).unwrap())
+        .unwrap();
+    assert!(
+        (max_cx - min_cx).abs() < 1.0,
+        "Chain nodes not aligned! deviation={:.2}px",
+        max_cx - min_cx
+    );
 }
 
 // ============================================================
@@ -295,7 +415,8 @@ fn flowchart_chain_alignment() {
 
 #[test]
 fn class_relations_no_edge_crosses() {
-    let svg = render("\
+    let svg = render(
+        "\
 classDiagram
     class A
     class B
@@ -307,7 +428,10 @@ classDiagram
     A o-- D : Aggregation
     A --> E : Association
     A ..> B : Dependency\
-    ", 900, 400);
+    ",
+        900,
+        400,
+    );
     let (rects, segs) = parse_svg(&svg);
     check_no_edge_crosses_node(&rects, &segs, "class_relations");
     check_same_layer_y_alignment(&rects, "class_relations");
@@ -316,7 +440,8 @@ classDiagram
 
 #[test]
 fn class_relations_layering() {
-    let svg = render("\
+    let svg = render(
+        "\
 classDiagram
     class A
     class B
@@ -327,27 +452,40 @@ classDiagram
     A *-- C
     A o-- D
     A --> E\
-    ", 900, 400);
+    ",
+        900,
+        400,
+    );
     let (rects, _segs) = parse_svg(&svg);
     // 去重后应有 5 个 rect
-    assert_eq!(rects.len(), 5, "Expected 5 unique class rects, got {}", rects.len());
+    assert_eq!(
+        rects.len(),
+        5,
+        "Expected 5 unique class rects, got {}",
+        rects.len()
+    );
 
     // 按 y 排序
     let mut by_y: Vec<&Rect> = rects.iter().collect();
-    by_y.sort_by(|a,b| a.y.partial_cmp(&b.y).unwrap());
+    by_y.sort_by(|a, b| a.y.partial_cmp(&b.y).unwrap());
 
     // A 在第一层
     let a_rect = by_y[0];
     let rest = &by_y[1..];
     for r in rest {
-        assert!((r.y - a_rect.y).abs() > 10.0,
-            "A and another class on same layer");
+        assert!(
+            (r.y - a_rect.y).abs() > 10.0,
+            "A and another class on same layer"
+        );
     }
     // B/C/D/E 在同一层
     let base_y = rest[0].y;
     for r in rest {
-        assert!((r.y - base_y).abs() < 5.0,
-            "B/C/D/E should be same layer, y diff {:.2}", r.y - base_y);
+        assert!(
+            (r.y - base_y).abs() < 5.0,
+            "B/C/D/E should be same layer, y diff {:.2}",
+            r.y - base_y
+        );
     }
 }
 
@@ -359,7 +497,8 @@ classDiagram
 #[test]
 fn regression_same_layer_y_alignment() {
     // flow_loop: Continue 和 Process 同层
-    let svg = render("\
+    let svg = render(
+        "\
 flowchart TD
     A[\"Start\"]
     B[\"Continue\"]
@@ -369,29 +508,44 @@ flowchart TD
     B -->|Yes| C
     C --> B
     B -->|No| D\
-    ", 800, 600);
+    ",
+        800,
+        600,
+    );
     let (rects, _) = parse_svg(&svg);
     // B(Continue) 和 C(Process) 应在同层且 Y 中心一致
     let by_y: Vec<&Rect> = {
         let mut v: Vec<&Rect> = rects.iter().collect();
-        v.sort_by(|a,b| a.y.partial_cmp(&b.y).unwrap());
+        v.sort_by(|a, b| a.y.partial_cmp(&b.y).unwrap());
         v
     };
     // 找到 B 和 C 对应的 rect（它们是第二层的两个节点）
     assert!(by_y.len() >= 3, "Expected at least 3 unique rects");
-    let layer1_rects: Vec<&Rect> = by_y.iter().filter(|r| (r.y - by_y[1].y).abs() < 5.0).copied().collect();
-    assert!(layer1_rects.len() >= 2, "Layer 1 should have at least 2 nodes");
+    let layer1_rects: Vec<&Rect> = by_y
+        .iter()
+        .filter(|r| (r.y - by_y[1].y).abs() < 5.0)
+        .copied()
+        .collect();
+    assert!(
+        layer1_rects.len() >= 2,
+        "Layer 1 should have at least 2 nodes"
+    );
     let cy1 = layer1_rects[0].center_y();
     for r in &layer1_rects {
-        assert!((r.center_y() - cy1).abs() < 1.0,
-            "Same-layer nodes Y misaligned: {:.2} vs {:.2}", r.center_y(), cy1);
+        assert!(
+            (r.center_y() - cy1).abs() < 1.0,
+            "Same-layer nodes Y misaligned: {:.2} vs {:.2}",
+            r.center_y(),
+            cy1
+        );
     }
 }
 
 /// 边不穿越节点回归测试
 #[test]
 fn regression_edges_avoid_nodes() {
-    let svg = render("\
+    let svg = render(
+        "\
 classDiagram
     class A
     class B
@@ -402,7 +556,10 @@ classDiagram
     A *-- C
     A o-- D
     A --> E\
-    ", 900, 400);
+    ",
+        900,
+        400,
+    );
     let (rects, segs) = parse_svg(&svg);
     check_no_edge_crosses_node(&rects, &segs, "regression_class");
 }

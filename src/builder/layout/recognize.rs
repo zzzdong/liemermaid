@@ -1,17 +1,15 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use petgraph::Direction;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
-use petgraph::Direction;
 
 use crate::ast::Flowchart;
 
 use super::types::{BranchArm, ChainItem, GroupEdge, LayoutTree, LogicalGroup, NodeId};
 
 /// 使用 petgraph 构建流程图的有向图
-fn build_petgraph(
-    fc: &Flowchart,
-) -> (DiGraph<NodeId, ()>, HashMap<NodeId, NodeIndex>) {
+fn build_petgraph(fc: &Flowchart) -> (DiGraph<NodeId, ()>, HashMap<NodeId, NodeIndex>) {
     let mut graph = DiGraph::new();
     let mut id_to_idx = HashMap::new();
 
@@ -31,9 +29,7 @@ fn build_petgraph(
 }
 
 /// 在 petgraph 图上用 BFS 分配层级，检测回边
-fn find_back_edge_indices(
-    graph: &DiGraph<NodeId, ()>,
-) -> HashMap<NodeIndex, NodeIndex> {
+fn find_back_edge_indices(graph: &DiGraph<NodeId, ()>) -> HashMap<NodeIndex, NodeIndex> {
     let mut layers: HashMap<NodeIndex, usize> = HashMap::new();
     let mut queue = VecDeque::new();
 
@@ -44,11 +40,11 @@ fn find_back_edge_indices(
         }
     }
 
-    if queue.is_empty() {
-        if let Some(first) = graph.node_indices().next() {
-            layers.insert(first, 0);
-            queue.push_back(first);
-        }
+    if queue.is_empty()
+        && let Some(first) = graph.node_indices().next()
+    {
+        layers.insert(first, 0);
+        queue.push_back(first);
     }
 
     while let Some(cur) = queue.pop_front() {
@@ -86,9 +82,7 @@ pub fn compute_flowchart_back_edges(fc: &Flowchart) -> HashSet<(NodeId, NodeId)>
 }
 
 /// 构建 petgraph 图供外部使用
-pub fn build_flowchart_graph(
-    fc: &Flowchart,
-) -> (DiGraph<NodeId, ()>, HashMap<NodeId, NodeIndex>) {
+pub fn build_flowchart_graph(fc: &Flowchart) -> (DiGraph<NodeId, ()>, HashMap<NodeId, NodeIndex>) {
     build_petgraph(fc)
 }
 
@@ -149,8 +143,7 @@ pub fn recognize_structure(fc: &Flowchart) -> LayoutTree {
     let orphan_edges = fc
         .edges
         .iter()
-        .enumerate()
-        .map(|(_i, e)| GroupEdge {
+        .map(|e| GroupEdge {
             from: e.source.clone(),
             to: e.target.clone(),
             edge: e.clone(),
@@ -281,14 +274,11 @@ fn find_common_sink(
         return None;
     }
 
-    let first = match terminals[0] {
-        Some(ref id) => id.clone(),
-        None => return None,
-    };
+    let first = terminals[0].clone()?;
 
     if terminals
         .iter()
-        .all(|t| t.as_ref().map_or(false, |id| *id == first))
+        .all(|t| t.as_ref().is_some_and(|id| *id == first))
     {
         Some(first)
     } else {
@@ -311,7 +301,7 @@ fn recognize_from_entry_stop_at(
             break;
         }
 
-        if stop_at.map_or(false, |sa| cur == *sa) {
+        if stop_at.is_some_and(|sa| cur == *sa) {
             break;
         }
 
@@ -330,7 +320,7 @@ fn recognize_from_entry_stop_at(
                 visited.insert(cur.clone());
                 break;
             }
-            if stop_at.map_or(false, |sa| *next == *sa) {
+            if stop_at.is_some_and(|sa| *next == *sa) {
                 chain_items.push(ChainItem::leaf(cur.clone()));
                 visited.insert(cur.clone());
                 break;
