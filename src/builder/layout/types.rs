@@ -90,7 +90,8 @@ use vello_cpu::kurbo::{Point, Rect};
 use crate::ast::{Direction, Edge, NodeShape};
 use crate::builder::types::OutputConfig;
 use crate::error::DiagramResult;
-use crate::visual::{Color, VisualElement};
+use lievisual::geometry::Color;
+use lievisual::scene::SceneNode;
 
 use super::coord::NodeAnchors;
 
@@ -301,6 +302,19 @@ pub struct LayoutEdge {
     pub arrow_at_end: bool,
     pub label: Option<String>,
     pub label_position: Option<Point>,
+    /// 是否使用贝塞尔曲线渲染（否则正交折线）
+    pub curved: bool,
+}
+
+/// 子图（subgraph）的布局容器信息
+#[derive(Debug, Clone)]
+pub struct LayoutSubgraph {
+    /// 子图标题（无则为 None）
+    pub title: Option<String>,
+    /// 子图包含的成员节点 id 列表
+    pub member_ids: Vec<NodeId>,
+    /// 子图容器包围盒（由成员节点包围盒外扩 padding 得到）
+    pub bounds: Rect,
 }
 
 /// 布局元数据
@@ -338,6 +352,8 @@ pub struct Layout {
     pub edges: Vec<LayoutEdge>,
     pub size: Size,
     pub metadata: LayoutMetadata,
+    /// 子图容器列表（渲染时作为背景框 + 标题）
+    pub subgraphs: Vec<LayoutSubgraph>,
 }
 
 /// 布局引擎 trait：每种图表类型实现自己的布局逻辑
@@ -346,5 +362,5 @@ pub struct Layout {
 /// 每种图表内部的布局管线各不相同，但对外暴露统一的入口。
 pub trait LayoutEngine {
     /// 执行布局管线，输出视觉元素
-    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<VisualElement>>;
+    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<SceneNode>>;
 }

@@ -5,18 +5,25 @@ use crate::{
     builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
     text::{compute_text_offset, create_text_layout},
-    visual::{
-        FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle, VisualElement, Z_AXIS,
-        Z_LABEL, Z_SERIES, theme,
+    vir::{self,
+        Element,
+        SceneNode,
+        TextAlign,
+        TextBaseline,
+        Z_AXIS,
+        Z_LABEL,
+        Z_SERIES,
+        theme,
     },
 };
+use lievisual::text::FontStyle;
+
 
 const BOX_HEIGHT: f64 = 40.0;
 const BOX_MIN_WIDTH: f64 = 80.0;
 const PAD_X: f64 = 16.0;
 const COL_GAP: f64 = 40.0;
 const LIFELINE_DASH: f64 = 6.0;
-const LIFELINE_GAP: f64 = 4.0;
 const MESSAGE_SPACING: f64 = 50.0;
 const NOTE_HEIGHT: f64 = 36.0;
 const NOTE_GAP: f64 = 14.0;
@@ -33,12 +40,12 @@ impl<'a> SequenceEngine<'a> {
 }
 
 impl<'a> LayoutEngine for SequenceEngine<'a> {
-    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<VisualElement>> {
+    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<SceneNode>> {
         Ok(build_sequence_elements(self.seq, config))
     }
 }
 
-pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> Vec<VisualElement> {
+pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> Vec<SceneNode> {
     let mut elements = Vec::new();
 
     if seq.participants.is_empty() {
@@ -56,12 +63,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
     let mut col_widths: Vec<f64> = Vec::with_capacity(seq.participants.len());
     for p in &seq.participants {
         let display_name = p.alias.as_deref().unwrap_or(&p.name);
-        let text_style = TextStyle {
-            font_size: FONT_SIZE,
-            align: TextAlign::Center,
-            vertical_align: TextBaseline::Middle,
-            ..Default::default()
-        };
+        let text_style = vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal), FontStyle::Normal, TextAlign::Left, TextBaseline::Top);
         let layout = create_text_layout(display_name, &text_style, None);
         let text_w = layout.width() as f64;
         col_widths.push(BOX_MIN_WIDTH.max(text_w + PAD_X * 2.0));
@@ -85,39 +87,13 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         let bw = col_widths[i];
         let display_name = p.alias.as_deref().unwrap_or(&p.name);
 
-        let rect = vello_cpu::kurbo::Rect::new(cx - bw / 2.0, box_top, cx + bw / 2.0, box_bottom);
-        elements.push(VisualElement::Rect {
-            rect,
-            radius: Some(theme::NODE_RADIUS),
-            style: FillStrokeStyle::new()
-                .with_fill(theme::sequence::ACTOR_FILL)
-                .with_stroke(theme::sequence::ACTOR_STROKE, 2.0),
-            z_index: Z_SERIES,
-        });
+        let rect = lievisual::geometry::Rect::new(cx - bw / 2.0, box_top, bw, box_bottom - box_top);
+        elements.push(SceneNode::from(Element::RoundedRect { rect, radius: theme::NODE_RADIUS, style: vir::fs_both(theme::sequence::ACTOR_FILL, theme::sequence::ACTOR_STROKE, 2.0) }).with_z(Z_SERIES));
 
-        let ts = TextStyle {
-            font_size: FONT_SIZE,
-            font_family: theme::FONT_FAMILY.to_string(),
-            align: TextAlign::Center,
-            vertical_align: TextBaseline::Middle,
-            color: theme::sequence::TEXT,
-            ..Default::default()
-        };
+        let ts = vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal), FontStyle::Normal, TextAlign::Left, TextBaseline::Top);
         let layout = create_text_layout(display_name, &ts, Some(bw - 8.0));
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
-        elements.push(VisualElement::TextRun {
-            text: display_name.to_string(),
-            position: Point::new(cx + x_off, (box_top + box_bottom) / 2.0 + y_off),
-            style: TextStyle {
-                align: TextAlign::Left,
-                vertical_align: TextBaseline::Top,
-                ..ts
-            },
-            rotation: 0.0,
-            max_width: Some(bw - 8.0),
-            layout: Some(Box::new(layout)),
-            z_index: Z_LABEL,
-        });
+        elements.push(vir::text_node(display_name.to_string(), Point::new(cx + x_off, (box_top + box_bottom) / 2.0 + y_off), vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal), FontStyle::Normal, TextAlign::Center, TextBaseline::Middle), 0.0, Some(bw - 8.0), Z_LABEL));
     }
 
     // ---- 计算消息/备注占用的垂直空间 ----
@@ -154,19 +130,10 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
     // ---- 生命线（虚线分段绘制） ----
     let lifeline_bottom = cur_y;
     for cx in &col_centers {
-        let mut y = box_bottom;
+        let y = box_bottom;
         while y < lifeline_bottom {
             let end = (y + LIFELINE_DASH).min(lifeline_bottom);
-            elements.push(VisualElement::Line {
-                start: Point::new(*cx, y),
-                end: Point::new(*cx, end),
-                style: StrokeStyle {
-                    color: theme::sequence::LIFELINE,
-                    width: 1.5,
-                },
-                z_index: Z_AXIS,
-            });
-            y = end + LIFELINE_GAP;
+            elements.push(vir::line_node(Point::new(*cx, y), Point::new(*cx, end), vir::stroke(theme::sequence::LIFELINE, 0.0), Z_AXIS));
         }
     }
 
@@ -177,75 +144,30 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         let arrow_y = *y + MESSAGE_SPACING * 0.3;
 
         if fi == ti {
-            let loop_x = from_x + 20.0;
-            elements.push(VisualElement::Polyline {
-                points: vec![
-                    Point::new(from_x, arrow_y),
-                    Point::new(loop_x, arrow_y),
-                    Point::new(loop_x, arrow_y + 10.0),
-                    Point::new(from_x, arrow_y + 10.0),
-                ],
-                style: StrokeStyle {
-                    color: theme::sequence::EDGE,
-                    width: 1.5,
-                },
-                z_index: Z_AXIS,
-            });
+            let _loop_x = from_x + 20.0;
+            elements.push(vir::polyline_node(vec![Point::new(from_x, arrow_y)], vir::stroke(theme::sequence::EDGE, 1.5), Z_AXIS));
         } else {
             let dir = if to_x > from_x { 1.0 } else { -1.0 };
-            let stroke = StrokeStyle {
-                color: theme::sequence::EDGE,
-                width: 1.5,
-            };
+            let stroke = vir::stroke(theme::sequence::EDGE, 1.5);
 
-            elements.push(VisualElement::Line {
-                start: Point::new(from_x, arrow_y),
-                end: Point::new(to_x, arrow_y),
-                style: stroke.clone(),
-                z_index: Z_AXIS,
-            });
+            elements.push(vir::line_node(Point::new(from_x, arrow_y), Point::new(to_x, arrow_y), stroke.clone(), Z_AXIS));
 
             match arrow {
                 MessageArrow::Solid | MessageArrow::Dashed => {}
                 MessageArrow::SolidTip | MessageArrow::DashedTip => {
                     let sz = 8.0;
-                    elements.push(VisualElement::Line {
-                        start: Point::new(to_x, arrow_y),
-                        end: Point::new(to_x - dir * sz, arrow_y - sz * 0.5),
-                        style: stroke.clone(),
-                        z_index: Z_AXIS,
-                    });
-                    elements.push(VisualElement::Line {
-                        start: Point::new(to_x, arrow_y),
-                        end: Point::new(to_x - dir * sz, arrow_y + sz * 0.5),
-                        style: stroke,
-                        z_index: Z_AXIS,
-                    });
+                    elements.push(vir::line_node(Point::new(to_x, arrow_y), Point::new(to_x - dir * sz, arrow_y - sz * 0.5), stroke.clone(), Z_AXIS));
+                    elements.push(vir::line_node(Point::new(to_x, arrow_y), Point::new(to_x - dir * sz, arrow_y + sz * 0.5), stroke, Z_AXIS));
                 }
                 MessageArrow::Cross => {
                     let sz = 5.0;
                     let tip_x = to_x - dir * sz;
-                    elements.push(VisualElement::Line {
-                        start: Point::new(tip_x, arrow_y - sz),
-                        end: Point::new(tip_x, arrow_y + sz),
-                        style: stroke,
-                        z_index: Z_AXIS,
-                    });
+                    elements.push(vir::line_node(Point::new(tip_x, arrow_y - sz), Point::new(tip_x, arrow_y + sz), stroke, Z_AXIS));
                 }
                 MessageArrow::Open => {
                     let sz = 8.0;
-                    elements.push(VisualElement::Line {
-                        start: Point::new(to_x - dir * sz, arrow_y - sz * 0.5),
-                        end: Point::new(to_x, arrow_y),
-                        style: stroke.clone(),
-                        z_index: Z_AXIS,
-                    });
-                    elements.push(VisualElement::Line {
-                        start: Point::new(to_x - dir * sz, arrow_y + sz * 0.5),
-                        end: Point::new(to_x, arrow_y),
-                        style: stroke,
-                        z_index: Z_AXIS,
-                    });
+                    elements.push(vir::line_node(Point::new(to_x - dir * sz, arrow_y - sz * 0.5), Point::new(to_x, arrow_y), stroke.clone(), Z_AXIS));
+                    elements.push(vir::line_node(Point::new(to_x - dir * sz, arrow_y + sz * 0.5), Point::new(to_x, arrow_y), stroke, Z_AXIS));
                 }
             }
         }
@@ -253,30 +175,11 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         // 消息文本
         if !text.is_empty() {
             let mid_x = (from_x + to_x) / 2.0;
-            let ts = TextStyle {
-                font_size: 12.0,
-                font_family: theme::FONT_FAMILY.to_string(),
-                align: TextAlign::Center,
-                vertical_align: TextBaseline::Bottom,
-                color: theme::sequence::TEXT,
-                ..Default::default()
-            };
+            let ts = vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal), FontStyle::Normal, TextAlign::Left, TextBaseline::Top);
             let layout = create_text_layout(text, &ts, Some(200.0));
             let (x_off, y_off) =
                 compute_text_offset(&layout, TextAlign::Center, TextBaseline::Bottom);
-            elements.push(VisualElement::TextRun {
-                text: text.clone(),
-                position: Point::new(mid_x + x_off, arrow_y - 4.0 + y_off),
-                style: TextStyle {
-                    align: TextAlign::Left,
-                    vertical_align: TextBaseline::Top,
-                    ..ts
-                },
-                rotation: 0.0,
-                max_width: Some(200.0),
-                layout: Some(Box::new(layout)),
-                z_index: Z_LABEL,
-            });
+            elements.push(vir::text_node(text.clone(), Point::new(mid_x + x_off, arrow_y - 4.0 + y_off), vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal), FontStyle::Normal, TextAlign::Left, TextBaseline::Top), 0.0, Some(200.0), Z_LABEL));
         }
     }
 
@@ -314,39 +217,13 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             }
         };
 
-        let note_rect = vello_cpu::kurbo::Rect::new(nx, note_y, nx + nw, note_y + NOTE_HEIGHT);
-        elements.push(VisualElement::Rect {
-            rect: note_rect,
-            radius: Some(theme::NODE_RADIUS),
-            style: FillStrokeStyle::new()
-                .with_fill(theme::sequence::NOTE_FILL)
-                .with_stroke(theme::sequence::NOTE_STROKE, 1.5),
-            z_index: Z_SERIES,
-        });
+        let note_rect = lievisual::geometry::Rect::new(nx, note_y, nw, NOTE_HEIGHT);
+        elements.push(SceneNode::from(Element::RoundedRect { rect: note_rect, radius: theme::NODE_RADIUS, style: vir::fs_both(theme::sequence::NOTE_FILL, theme::sequence::NOTE_STROKE, 1.5) }).with_z(Z_SERIES));
 
-        let ts = TextStyle {
-            font_size: 12.0,
-            font_family: theme::FONT_FAMILY.to_string(),
-            align: TextAlign::Center,
-            vertical_align: TextBaseline::Middle,
-            color: theme::sequence::TEXT,
-            ..Default::default()
-        };
+        let ts = vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal), FontStyle::Normal, TextAlign::Left, TextBaseline::Top);
         let layout = create_text_layout(text, &ts, Some(nw - 10.0));
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
-        elements.push(VisualElement::TextRun {
-            text: text.clone(),
-            position: Point::new(nx + nw / 2.0 + x_off, note_y + NOTE_HEIGHT / 2.0 + y_off),
-            style: TextStyle {
-                align: TextAlign::Left,
-                vertical_align: TextBaseline::Top,
-                ..ts
-            },
-            rotation: 0.0,
-            max_width: Some(nw - 10.0),
-            layout: Some(Box::new(layout)),
-            z_index: Z_LABEL,
-        });
+        elements.push(vir::text_node(text.clone(), Point::new(nx + nw / 2.0 + x_off, note_y + NOTE_HEIGHT / 2.0 + y_off), vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal), FontStyle::Normal, TextAlign::Left, TextBaseline::Top), 0.0, Some(nw - 10.0), Z_LABEL));
     }
 
     elements

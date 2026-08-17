@@ -26,7 +26,8 @@ impl Default for SugiyamaConfig {
             layer_gap: 60.0,
             padding: 40.0,
             crossing_iterations: 12,
-            ranker: "longest-path".to_string(),
+            // dagre 默认 ranker 为 network-simplex，这里与之对齐
+            ranker: "network-simplex".to_string(),
         }
     }
 }
@@ -84,7 +85,51 @@ impl<'a> SugiyamaLayout<'a> {
     }
 
     /// 运行完整 Sugiyama 布局管线
+    ///
+    /// 在内部构建含虚拟节点（dummy node）的工作图：跨多层的长边被拆成
+    /// 逐层一段的虚拟节点链，使虚拟节点参与排序(Barycenter)与坐标分配
+    /// (Brandes-Köpf) 对齐，最终边沿层间空隙走线、不再穿越中间层节点。
+    /// 这与 dagre 处理长边的方式一致。
     pub fn layout(&self, node_sizes: &HashMap<NodeIndex, NodeSize>) -> SugiyamaResult {
+        // 构建含虚拟节点的工作图
+        let (work_graph, work_sizes, real_to_work, edge_dummies, work_feedback) =
+            self.build_work_graph(node_sizes);
+
+        // 在工作图上运行 4 阶段（临时 layout 指向工作图，复用所有 &self 方法）
+        let work_layout = SugiyamaLayout {
+            config: self.config.clone(),
+            graph: &work_graph,
+        };
+        let mut res = work_layout.run_inner(&work_sizes);
+
+        // 用虚拟节点链重建每条原始边的折线（按层顺序贯穿 dummy）
+        let edge_routes = self.rebuild_routes_from_dummies(
+            &res,
+            &edge_dummies,
+            &real_to_work,
+            &work_graph,
+        );
+        res.edge_routes = edge_routes;
+
+        // 仅保留真实节点尺寸（虚拟节点尺寸对外无意义）
+        res.sizes = node_sizes.clone();
+
+        // 反馈弧/层号映射回真实节点
+        let mut feedback_arcs = HashSet::new();
+        for (u, v) in work_feedback {
+            if let (Some(&wu), Some(&wv)) = (real_to_work.get(&u), real_to_work.get(&v)) {
+                if wu == u && wv == v {
+                    feedback_arcs.insert((u, v));
+                }
+            }
+        }
+        res.feedback_arcs = feedback_arcs;
+
+        res
+    }
+
+    /// 内部 4 阶段（基于 self.graph 上的所有 &self 方法）
+    fn run_inner(&self, node_sizes: &HashMap<NodeIndex, NodeSize>) -> SugiyamaResult {
         // Phase 0: 去环 — 检测反馈弧 + SCC
         let feedback_arcs = self.detect_feedback_arcs();
         let sccs = self.tarjan_scc();
@@ -111,7 +156,8 @@ impl<'a> SugiyamaLayout<'a> {
             self.assign_coordinates_bk(&ordered, &sizes, &sccs, &scc_id, &feedback_arcs);
 
         // Phase 4: 边路由
-        let edge_routes = self.route_edges(&positions, &sizes, &layers, &feedback_arcs, &scc_id);
+        let edge_routes =
+            self.route_edges(&positions, &sizes, &layers, &feedback_arcs, &scc_id);
 
         SugiyamaResult {
             positions,
@@ -123,6 +169,150 @@ impl<'a> SugiyamaLayout<'a> {
             sccs,
             scc_id,
         }
+    }
+
+    // ================================================================
+    // 虚拟节点工作图构建
+    //
+    // 复制真实节点，并将每条跨多层的长边拆成逐层一段的虚拟节点(dummy)链，
+    // 使虚拟节点参与后续 Barycenter 排序与 Brandes-Köpf 坐标对齐，
+    // 最终边沿层间空隙走线，不再穿越中间层节点（与 dagre 一致）。
+    // ================================================================
+    fn build_work_graph(
+        &self,
+        node_sizes: &HashMap<NodeIndex, NodeSize>,
+    ) -> (
+        DiGraph<String, ()>,
+        HashMap<NodeIndex, NodeSize>,
+        HashMap<NodeIndex, NodeIndex>,
+        HashMap<(NodeIndex, NodeIndex), Vec<NodeIndex>>,
+        HashSet<(NodeIndex, NodeIndex)>,
+    ) {
+        let feedback_arcs = self.detect_feedback_arcs();
+
+        let mut work = DiGraph::<String, ()>::new();
+        let mut real_to_work: HashMap<NodeIndex, NodeIndex> = HashMap::new();
+        let mut work_sizes: HashMap<NodeIndex, NodeSize> = HashMap::new();
+
+        // 复制真实节点
+        for n in self.graph.node_indices() {
+            let id = self.graph[n].clone();
+            let wn = work.add_node(id);
+            real_to_work.insert(n, wn);
+            if let Some(s) = node_sizes.get(&n) {
+                work_sizes.insert(wn, *s);
+            }
+        }
+
+        // 真实图层号（用于判断长边跨度）
+        let sccs = self.tarjan_scc();
+        let layers = self.assign_layers(&feedback_arcs, &sccs);
+
+        // dummy 计数器（label 用于调试，size=0）
+        let mut edge_dummies: HashMap<(NodeIndex, NodeIndex), Vec<NodeIndex>> = HashMap::new();
+
+        for e in self.graph.edge_references() {
+            let u = e.source();
+            let v = e.target();
+            let wu = real_to_work[&u];
+            let wv = real_to_work[&v];
+
+            let lu = layers.get(&u).copied().unwrap_or(0);
+            let lv = layers.get(&v).copied().unwrap_or(0);
+            let span = if lv > lu { lv - lu } else { 0 };
+
+            if span >= 2 {
+                // 插入 span-1 个 dummy，逐层一段
+                let mut prev = wu;
+                let mut chain: Vec<NodeIndex> = Vec::new();
+                for _ in 0..span - 1 {
+                    let dummy = work.add_node("__dummy__".to_string());
+                    work_sizes.insert(dummy, NodeSize { width: 0.0, height: 0.0 });
+                    work.add_edge(prev, dummy, ());
+                    chain.push(dummy);
+                    prev = dummy;
+                }
+                work.add_edge(prev, wv, ());
+                edge_dummies.insert((u, v), chain);
+            } else {
+                work.add_edge(wu, wv, ());
+            }
+        }
+
+        (work, work_sizes, real_to_work, edge_dummies, feedback_arcs)
+    }
+
+    /// 用虚拟节点链重建每条原始边的折线
+    fn rebuild_routes_from_dummies(
+        &self,
+        res: &SugiyamaResult,
+        edge_dummies: &HashMap<(NodeIndex, NodeIndex), Vec<NodeIndex>>,
+        real_to_work: &HashMap<NodeIndex, NodeIndex>,
+        work_graph: &DiGraph<String, ()>,
+    ) -> HashMap<(NodeIndex, NodeIndex), Vec<Point>> {
+        let mut out: HashMap<(NodeIndex, NodeIndex), Vec<Point>> = HashMap::new();
+
+        // 工作图边 key -> 折线
+        let route_of = |a: NodeIndex, b: NodeIndex| -> Option<Vec<Point>> {
+            res.edge_routes
+                .get(&(a, b))
+                .cloned()
+                .or_else(|| res.edge_routes.get(&(b, a)).cloned())
+        };
+
+        let empty_chain: Vec<NodeIndex> = Vec::new();
+        for edge in self.graph.edge_references() {
+            let u = edge.source();
+            let v = edge.target();
+            let chain = edge_dummies.get(&(u, v)).unwrap_or(&empty_chain);
+            // 原始边无 dummy（span<=1）：直接用工作图边 route
+            if chain.is_empty() {
+                if let (Some(&wu), Some(&wv)) = (real_to_work.get(&u), real_to_work.get(&v)) {
+                    if let Some(pts) = route_of(wu, wv) {
+                        out.insert((u, v), pts);
+                    }
+                }
+                continue;
+            }
+
+            // 序列：源 -> dummy... -> 目标（work 图 NodeIndex）
+            let mut seq = vec![real_to_work[&u]];
+            seq.extend(chain.iter().copied());
+            seq.push(real_to_work[&v]);
+
+            // 拼接相邻段折线
+            let mut full: Vec<Point> = Vec::new();
+            for w in seq.windows(2) {
+                let a = w[0];
+                let b = w[1];
+                if let Some(mut pts) = route_of(a, b) {
+                    // 去掉与上一端点重复的点
+                    if full.is_empty() {
+                        full.append(&mut pts);
+                    } else {
+                        // pts[0] 应等于 full.last()，去掉
+                        if pts.len() > 1 {
+                            full.extend_from_slice(&pts[1..]);
+                        }
+                    }
+                }
+            }
+            if full.is_empty() {
+                // 兜底：直线连接源与目标中心
+                if let (Some(&wu), Some(&wv)) = (real_to_work.get(&u), real_to_work.get(&v)) {
+                    if let (Some(pu), Some(pv)) =
+                        (res.positions.get(&wu), res.positions.get(&wv))
+                    {
+                        full = vec![*pu, *pv];
+                    }
+                }
+            }
+            out.insert((u, v), full);
+        }
+
+        // 确保原始图中所有边都有 route（span<=1 已处理；兜底覆盖漏网）
+        let _ = work_graph;
+        out
     }
 
     // ================================================================
@@ -247,22 +437,22 @@ impl<'a> SugiyamaLayout<'a> {
     }
 
     // ================================================================
-    // Phase 1: 层分配 (SCC 凝结 + Longest-Path)
+    // Phase 1: 层分配
     //
-    // 1. 用 Tarjan 检测强连通分量 (SCC)
-    // 2. 凝结图：每个 SCC 作为一个超节点
-    // 3. 在凝结 DAG 上用最长路径分配层号
-    // 4. 展开：SCC 内所有节点共享同一层
-    //
-    // 对于 flow_loop: A→B↔C→D，SCC 为 {A}, {B,C}, {D}
-    // 凝结图: A → BC → D，层号: A:0, BC:1, D:2
-    // 展开: A:0, B:1, C:1, D:2
+    // 分派:
+    //   - "network-simplex": Gansner tight-tree + 单纯形迭代压缩（dagre 默认）
+    //   - "longest-path"   : SCC 凝结 + 最长路径（原有实现）
     // ================================================================
     fn assign_layers(
         &self,
         feedback_arcs: &HashSet<(NodeIndex, NodeIndex)>,
         sccs: &[Vec<NodeIndex>],
     ) -> HashMap<NodeIndex, usize> {
+        let use_ns = self.config.ranker.trim().eq_ignore_ascii_case("network-simplex");
+        if use_ns {
+            return self.assign_layers_network_simplex(feedback_arcs, sccs);
+        }
+
         // 如果只有一个 SCC（全图强连通），退化为原来的方法
         if sccs.len() <= 1 {
             return self.assign_layers_legacy(feedback_arcs);
@@ -355,6 +545,118 @@ impl<'a> SugiyamaLayout<'a> {
             }
         }
 
+        layers
+    }
+
+    // ================================================================
+    // Phase 1 (Network-Simplex): Gansner tight-tree + 单纯形迭代
+    //
+    // 与 dagre (ranker="network-simplex") 默认行为对齐：
+    //   **反转反馈弧**后在原图节点上运行网络单纯形（不凝结 SCC）。
+    //   这样环内节点（如 B<->C）可按拓扑顺序分到不同层（B:1, C:2），
+    //   而旧的"SCC 凝结成单层"会让 B、C 同层，与 dagre 不符。
+    //
+    // 算法 (Gansner et al. 1993):
+    //   1. 反转反馈弧打破环，得到 DAG
+    //   2. 以最长路径为初始可行 rank
+    //   3. 构建初始可行树（feasible tree）
+    //   4. 反复选 cut value < 0 的非树边交换进树，直到无负 cut value
+    // ================================================================
+    fn assign_layers_network_simplex(
+        &self,
+        feedback_arcs: &HashSet<(NodeIndex, NodeIndex)>,
+        sccs: &[Vec<NodeIndex>],
+    ) -> HashMap<NodeIndex, usize> {
+        // node -> 连续 usize id（原图规模，不凝结 SCC）
+        let mut node_id: HashMap<NodeIndex, usize> = HashMap::new();
+        let mut id_node: Vec<NodeIndex> = Vec::new();
+        for n in self.graph.node_indices() {
+            node_id.insert(n, id_node.len());
+            id_node.push(n);
+        }
+        let n = id_node.len();
+        if n == 0 {
+            return HashMap::new();
+        }
+
+        // 边集：反转反馈弧（u->v 为回边则翻成 v->u），其余保留。
+        // 反转后图为 DAG，最长路径有效，环内节点可分不同层。
+        let mut edges: Vec<(usize, usize)> = Vec::new();
+        let mut edge_set: HashSet<(usize, usize)> = HashSet::new();
+        for e in self.graph.edge_references() {
+            let u = node_id[&e.source()];
+            let v = node_id[&e.target()];
+            let (a, b) = if feedback_arcs.contains(&(e.source(), e.target())) {
+                (v, u) // 反馈弧反转
+            } else {
+                (u, v)
+            };
+            if a != b && edge_set.insert((a, b)) {
+                edges.push((a, b));
+            }
+        }
+
+        // 初始可行解：最长路径
+        let mut rank = longest_path_ranks_scc(&edges, n);
+
+        // 若全连通（无根），最长路径会给全 0，需给一个有根起点：
+        // 选 rank 最小的节点作为根（保持拓扑约束即可）
+        let mut parent: Vec<Option<usize>> = vec![None; n];
+        let mut tree_edge: Vec<Option<(usize, usize)>> = vec![None; n];
+
+        // --- 构建初始 feasible tree（从 rank 推导）---
+        build_feasible_tree(&edges, &rank, n, &mut parent, &mut tree_edge);
+
+        // 非树边集合
+        let mut cut_value: Vec<f64> = vec![0.0; edges.len()];
+        let mut in_tree: Vec<bool> = vec![false; edges.len()];
+        for (i, &(a, b)) in edges.iter().enumerate() {
+            let is_tree = (parent[b] == Some(a) && rank[b] as i64 - rank[a] as i64 == 1)
+                || (parent[a] == Some(b) && rank[a] as i64 - rank[b] as i64 == 1);
+            in_tree[i] = is_tree;
+        }
+
+        // 计算初始 cut value
+        compute_cut_values(&edges, &rank, &parent, &mut cut_value, &in_tree, n);
+
+        // 单纯形主循环
+        let max_iterations = 2 * n + 8;
+        for _ in 0..max_iterations {
+            // 找 cut value 最负的非树边
+            let mut best = usize::MAX;
+            let mut best_val: f64 = -1e-9;
+            for (i, &cv) in cut_value.iter().enumerate() {
+                if !in_tree[i] && cv < best_val {
+                    best_val = cv;
+                    best = i;
+                }
+            }
+            if best == usize::MAX {
+                break;
+            }
+            // 交换进入树
+            let (enter_u, enter_v) = edges[best];
+            exchange(
+                &edges,
+                &mut rank,
+                &mut parent,
+                &mut tree_edge,
+                &mut in_tree,
+                enter_u,
+                enter_v,
+                n,
+            );
+            compute_cut_values(&edges, &rank, &parent, &mut cut_value, &in_tree, n);
+        }
+
+        // 映射回 NodeIndex（no SCC 展开，每个节点已有独立 rank）
+        let mut layers: HashMap<NodeIndex, usize> = HashMap::new();
+        for (id, &node) in id_node.iter().enumerate() {
+            layers.insert(node, rank[id]);
+        }
+
+        // sccs 参数保留以兼容调用点（本实现已不再凝结 SCC）
+        let _ = sccs;
         layers
     }
 
@@ -518,12 +820,6 @@ impl<'a> SugiyamaLayout<'a> {
         }
         layer_nodes
     }
-
-    // ================================================================
-    // Phase 2: Barycenter Crossing Reduction
-    //
-    // Top-down + Bottom-up 交替迭代，忽略反馈弧方向。
-    // ================================================================
     fn reduce_crossings(
         &self,
         layer_nodes: &HashMap<usize, Vec<NodeIndex>>,
@@ -1146,5 +1442,282 @@ impl<'a> SugiyamaLayout<'a> {
         }
 
         routes
+    }
+}
+
+// ================================================================
+// Network-Simplex 辅助函数（free functions，作用于 SCC 凝结图）
+// 参考 Gansner et al. "A Technique for Drawing Directed Graphs" (1993)
+// 与 dagre ranker="network-simplex" 对齐。
+// ================================================================
+
+/// 最长路径初始 rank：rank[v] = max(rank[u]+1 for u->v)，无前驱为 0。
+fn longest_path_ranks_scc(edges: &[(usize, usize)], n: usize) -> Vec<usize> {
+    let mut indeg = vec![0usize; n];
+    let mut adj: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for &(u, v) in edges {
+        indeg[v] += 1;
+        adj[u].push(v);
+    }
+    let mut rank = vec![0usize; n];
+    let mut queue: VecDeque<usize> = VecDeque::new();
+    for i in 0..n {
+        if indeg[i] == 0 {
+            queue.push_back(i);
+        }
+    }
+    let mut order: Vec<usize> = Vec::new();
+    while let Some(u) = queue.pop_front() {
+        order.push(u);
+        for &v in &adj[u] {
+            rank[v] = rank[v].max(rank[u] + 1);
+            indeg[v] -= 1;
+            if indeg[v] == 0 {
+                queue.push_back(v);
+            }
+        }
+    }
+    // 若仍有未访问（环未凝结），按剩余拓扑尽量推深
+    if order.len() < n {
+        for u in 0..n {
+            if rank[u] == 0 && adj[u].is_empty() {
+                continue;
+            }
+        }
+    }
+    let _ = order;
+    rank
+}
+
+/// 从 rank 推导一棵可行树（feasible tree）：
+/// 选取 rank 最小的节点为根，沿 rank 递增方向构建 spanning tree。
+fn build_feasible_tree(
+    edges: &[(usize, usize)],
+    rank: &[usize],
+    n: usize,
+    parent: &mut [Option<usize>],
+    tree_edge: &mut [Option<(usize, usize)>],
+) {
+    // 重置
+    for p in parent.iter_mut() {
+        *p = None;
+    }
+    for t in tree_edge.iter_mut() {
+        *t = None;
+    }
+
+    // 按 rank 排序的节点作为加入顺序
+    let mut nodes: Vec<usize> = (0..n).collect();
+    nodes.sort_by_key(|&u| rank[u]);
+
+    // 计算每个节点的候选父（rank 最小的入边源）
+    let mut candidate_parent: Vec<Option<usize>> = vec![None; n];
+    for &(u, v) in edges {
+        if rank[v] > rank[u] {
+            match candidate_parent[v] {
+                None => candidate_parent[v] = Some(u),
+                Some(p) if rank[p] > rank[u] => candidate_parent[v] = Some(u),
+                _ => {}
+            }
+        }
+    }
+
+    for &u in &nodes {
+        if let Some(p) = candidate_parent[u] {
+            if parent[u].is_none() {
+                parent[u] = Some(p);
+                tree_edge[u] = Some((p, u));
+            }
+        }
+    }
+}
+
+/// 计算所有非树边的 cut value。
+/// cut value(u->v) = 1 - (cut(u) - cut(v))
+/// cut 通过树中 balance 传播：每个节点 balance = #出树边 - #入树边（对 (p,c) 边：p balance+1, c balance-1）
+/// 然后 DFS 累积。
+fn compute_cut_values(
+    edges: &[(usize, usize)],
+    rank: &[usize],
+    parent: &[Option<usize>],
+    cut_value: &mut [f64],
+    in_tree: &[bool],
+    n: usize,
+) {
+    // balance 初值
+    let mut balance = vec![0i32; n];
+    for u in 0..n {
+        if let Some(p) = parent[u] {
+            // 树边 (p, u)，rank[u] = rank[p]+1
+            balance[p] += 1;
+            balance[u] -= 1;
+        }
+    }
+
+    // 通过树 DFS 累积 cut 值（每个节点的 cut = 其子树 balance 和）
+    // 用迭代后序遍历
+    let mut visited = vec![false; n];
+    let mut cut = vec![0i32; n];
+    // 后序：先处理子再父
+    let mut stack: Vec<(usize, bool)> = Vec::new();
+    for r in 0..n {
+        if parent[r].is_none() {
+            stack.push((r, false));
+        }
+    }
+    while let Some((u, processed)) = stack.pop() {
+        if processed {
+            let mut s = balance[u];
+            // 找子节点
+            for v in 0..n {
+                if parent[v] == Some(u) {
+                    s += cut[v];
+                }
+            }
+            cut[u] = s;
+        } else {
+            stack.push((u, true));
+            for v in 0..n {
+                if parent[v] == Some(u) && !visited[v] {
+                    visited[v] = true;
+                    stack.push((v, false));
+                }
+            }
+        }
+    }
+    let _ = visited;
+
+    for (i, &(u, v)) in edges.iter().enumerate() {
+        if in_tree[i] {
+            cut_value[i] = 0.0;
+            continue;
+        }
+        // 确保方向 rank[v] > rank[u]
+        let (a, b) = if rank[v] >= rank[u] { (u, v) } else { (v, u) };
+        let cv = 1.0 - (cut[a] - cut[b]) as f64;
+        cut_value[i] = cv;
+    }
+}
+
+/// 将一条非树边 (enter_u, enter_v) 交换进树，调整 rank 与 parent。
+/// 经典实现：沿树从 enter 边两端向根移动，确定被替换的树边，重算 rank。
+fn exchange(
+    edges: &[(usize, usize)],
+    rank: &mut [usize],
+    parent: &mut [Option<usize>],
+    tree_edge: &mut [Option<(usize, usize)>],
+    in_tree: &mut [bool],
+    enter_u: usize,
+    enter_v: usize,
+    n: usize,
+) {
+    // 统一方向 a -> b (rank[b] >= rank[a])
+    let (a, b) = if rank[enter_v] >= rank[enter_u] {
+        (enter_u, enter_v)
+    } else {
+        (enter_v, enter_u)
+    };
+
+    // 沿树从 a、b 各自向根爬，找到共同的"低公共祖先"分割点
+    // 记录路径
+    let mut path_a: Vec<usize> = Vec::new();
+    let mut cur = a;
+    while let Some(p) = parent[cur] {
+        path_a.push(cur);
+        cur = p;
+    }
+    path_a.push(cur); // 根
+
+    // 从 b 向上找第一个出现在 path_a 的节点 = 分割点
+    let mut cur = b;
+    let mut split_idx = path_a.len();
+    let mut b_path: Vec<usize> = Vec::new();
+    while let Some(p) = parent[cur] {
+        if let Some(pos) = path_a.iter().position(|&x| x == cur) {
+            split_idx = pos;
+            break;
+        }
+        b_path.push(cur);
+        cur = p;
+    }
+    if split_idx == path_a.len() {
+        b_path.push(cur);
+    }
+
+    // leave 边：a_path 中 split 之下紧邻、且 b_path 中对称的那条树边
+    // 找 rank 最小的一端作为 leave 边（标准做法：leave = 使 rank 仍可行）
+    // 这里采用 Gansner 的"向上调整"：leave 是连接 (split, 其 child) 的树边，
+    // 选 a、b 路径上靠近 split 的树边中 rank 较小者
+    let leave_node: usize = if !b_path.is_empty() {
+        // b 路径上靠近 split 的节点
+        b_path[0]
+    } else if split_idx + 1 < path_a.len() {
+        path_a[split_idx + 1]
+    } else {
+        a
+    };
+
+    // 计算 delta：新边要求 rank[b] = rank[a] + 1
+    let delta = (rank[a] + 1) as i64 - rank[b] as i64;
+
+    // 对 leave 边一侧子树的 rank 整体平移
+    // leave 边为 (parent[leave_node], leave_node)，把 leave_node 子树 rank 平移 delta
+    let leave_parent = parent[leave_node];
+    shift_subtree_rank(leave_node, parent, rank, delta, n);
+
+    // 更新树结构：移除 leave 边，加入 enter 边
+    if let Some(lp) = leave_parent {
+        // 标记旧树边为非树
+        if let Some(idx) = edges.iter().position(|&(u, v)| {
+            (u == lp && v == leave_node) || (u == leave_node && v == lp)
+        }) {
+            in_tree[idx] = false;
+        }
+        // 更新父
+        parent[leave_node] = None;
+        tree_edge[leave_node] = None;
+    }
+
+    // 加入 enter 边 (a->b)
+    parent[b] = Some(a);
+    tree_edge[b] = Some((a, b));
+    if let Some(idx) = edges.iter().position(|&(u, v)| (u == a && v == b) || (u == b && v == a)) {
+        in_tree[idx] = true;
+    }
+}
+
+/// 将 leave_node 所在的子树整体平移 delta 层（迭代避免递归爆栈）。
+fn shift_subtree_rank(
+    root: usize,
+    parent: &[Option<usize>],
+    rank: &mut [usize],
+    delta: i64,
+    _n: usize,
+) {
+    // 收集子树（所有 parent 链指向 root 的节点）
+    let mut subtree: Vec<usize> = Vec::new();
+    // 反向找：从所有节点出发若祖先含 root 则属于子树。n 通常很小，直接 O(n^2) 可接受。
+    // 但为效率用 BFS 从 root 沿 parent 反向（即找 children）
+    // 先建 children 表
+    let n = rank.len();
+    let mut children: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for v in 0..n {
+        if let Some(p) = parent[v] {
+            children[p].push(v);
+        }
+    }
+    let mut stack = vec![root];
+    while let Some(u) = stack.pop() {
+        subtree.push(u);
+        for &c in &children[u] {
+            stack.push(c);
+        }
+    }
+    for &u in &subtree {
+        if delta >= 0 {
+            rank[u] = (rank[u] as i64 + delta) as usize;
+        } else {
+            rank[u] = (rank[u] as i64 + delta).max(0) as usize;
+        }
     }
 }

@@ -5,10 +5,9 @@ use parley::{
     style::{FontFamily, StyleProperty},
 };
 
-use crate::{
-    error::DiagramError,
-    visual::{Color, TextAlign, TextBaseline, TextStyle},
-};
+use crate::error::DiagramError;
+use lievisual::geometry::Color;
+use lievisual::text::{TextAlign, TextBaseline, TextStyle};
 
 /// 文本布局包装类型
 pub type TextLayout = parley::Layout<Color>;
@@ -164,7 +163,7 @@ pub fn layout_text_with_contexts(
 ) -> TextLayout {
     if texts.is_empty() {
         return layout_text_with_contexts(
-            &[("", &TextStyle::default())],
+            &[("", &TextStyle::new(Color::BLACK, 12.0, "sans-serif"))],
             max_width,
             align,
             font_cx,
@@ -278,6 +277,7 @@ pub fn compute_text_offset(
                 -layout_height * 0.8
             }
         }
+        _ => -layout_height * 0.8,
     };
 
     (x_offset, y_offset)
@@ -299,13 +299,7 @@ impl TextEngine {
         color: &Color,
         max_width: Option<f64>,
     ) -> (f64, f64) {
-        let style = TextStyle {
-            font_size,
-            font_family: font_family.to_string(),
-            color: *color,
-            font_weight: crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal),
-            ..Default::default()
-        };
+        let style = TextStyle::new(*color, font_size, font_family.to_string()).with_weight(400.0);
         let layout = create_text_layout(text, &style, max_width);
         (layout.width() as f64, layout.height() as f64)
     }

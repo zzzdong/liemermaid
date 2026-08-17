@@ -5,11 +5,12 @@ use crate::{
     builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
     text::{compute_text_offset, create_text_layout},
-    visual::{
-        FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle, VisualElement, Z_AXIS,
-        Z_LABEL, Z_SERIES, Z_TITLE, theme,
+    vir::{self, SceneNode, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, Z_TITLE,
+        theme,
     },
+    option::{FontWeight, FontWeightNamed},
 };
+use lievisual::text::FontStyle;
 
 const TITLE_SIZE: f64 = 22.0;
 const SECTION_SIZE: f64 = 14.0;
@@ -26,7 +27,7 @@ impl<'a> TimelineEngine<'a> {
 }
 
 impl<'a> LayoutEngine for TimelineEngine<'a> {
-    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<VisualElement>> {
+    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<SceneNode>> {
         Ok(build_timeline_elements(self.timeline, config))
     }
 }
@@ -34,7 +35,7 @@ impl<'a> LayoutEngine for TimelineEngine<'a> {
 pub fn build_timeline_elements(
     timeline: &TimelineDiagram,
     config: &OutputConfig,
-) -> Vec<VisualElement> {
+) -> Vec<SceneNode> {
     let mut elements = Vec::new();
 
     if timeline.sections.is_empty() {
@@ -44,29 +45,25 @@ pub fn build_timeline_elements(
     // Title
     let mut cur_y = 30.0;
     if let Some(title) = &timeline.title {
-        let ts = TextStyle {
-            font_size: TITLE_SIZE,
-            font_family: theme::FONT_FAMILY.to_string(),
-            align: TextAlign::Center,
-            vertical_align: TextBaseline::Top,
-            color: theme::timeline::TITLE,
-            ..Default::default()
-        };
+        let ts = vir::text_style(
+            theme::timeline::TITLE,
+            TITLE_SIZE,
+            theme::FONT_FAMILY.to_string(),
+            FontWeight::Named(FontWeightNamed::Normal),
+            FontStyle::Normal,
+            TextAlign::Center,
+            TextBaseline::Top,
+        );
         let layout = create_text_layout(title, &ts, Some(config.width - 80.0));
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Top);
-        elements.push(VisualElement::TextRun {
-            text: title.clone(),
-            position: Point::new(config.width / 2.0 + x_off, cur_y + y_off),
-            style: TextStyle {
-                align: TextAlign::Left,
-                vertical_align: TextBaseline::Top,
-                ..ts
-            },
-            rotation: 0.0,
-            max_width: Some(config.width - 80.0),
-            layout: Some(Box::new(layout)),
-            z_index: Z_TITLE,
-        });
+        elements.push(vir::text_node(
+            title.clone(),
+            Point::new(config.width / 2.0 + x_off, cur_y + y_off),
+            ts.clone().with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+            0.0,
+            Some(config.width - 80.0),
+            Z_TITLE,
+        ));
         cur_y += 50.0;
     }
 
@@ -74,15 +71,12 @@ pub fn build_timeline_elements(
     let line_y = cur_y + 10.0;
     let left_margin = 40.0;
     let right_margin = config.width - 40.0;
-    elements.push(VisualElement::Line {
-        start: Point::new(left_margin, line_y),
-        end: Point::new(right_margin, line_y),
-        style: StrokeStyle {
-            color: theme::timeline::LINE,
-            width: 2.5,
-        },
-        z_index: Z_AXIS,
-    });
+    elements.push(vir::line_node(
+        Point::new(left_margin, line_y),
+        Point::new(right_margin, line_y),
+        vir::stroke(theme::timeline::LINE, 2.5),
+        Z_AXIS,
+    ));
 
     // Sections and events
     let section_spacing = (right_margin - left_margin) / timeline.sections.len() as f64;
@@ -92,87 +86,74 @@ pub fn build_timeline_elements(
         let cx = left_margin + section_spacing * (i as f64 + 0.5);
 
         // Dot on timeline
-        elements.push(VisualElement::Circle {
-            center: Point::new(cx, line_y),
-            radius: 5.0,
-            style: FillStrokeStyle::new()
-                .with_fill(theme::timeline::LINE)
-                .with_stroke(theme::timeline::LINE, 2.0),
-            z_index: Z_SERIES,
-        });
+        elements.push(vir::circle_node(
+            Point::new(cx, line_y),
+            5.0,
+            vir::fs_both(theme::timeline::LINE, theme::timeline::LINE, 2.0),
+            Z_SERIES,
+        ));
 
         // Section name
-        let ts = TextStyle {
-            font_size: SECTION_SIZE,
-            font_family: theme::FONT_FAMILY.to_string(),
-            align: TextAlign::Center,
-            vertical_align: TextBaseline::Top,
-            color: theme::timeline::TEXT,
-            ..Default::default()
-        };
+        let ts = vir::text_style(
+            theme::timeline::TEXT,
+            SECTION_SIZE,
+            theme::FONT_FAMILY.to_string(),
+            FontWeight::Named(FontWeightNamed::Normal),
+            FontStyle::Normal,
+            TextAlign::Center,
+            TextBaseline::Top,
+        );
         let layout = create_text_layout(&section.name, &ts, Some(section_spacing - 10.0));
         let line_count = layout.lines().count().max(1);
         let estimated_h = line_count as f64 * 20.0;
 
-        elements.push(VisualElement::TextRun {
-            text: section.name.clone(),
-            position: Point::new(cx - (section_spacing - 10.0) / 2.0, cur_y),
-            style: TextStyle {
-                align: TextAlign::Left,
-                vertical_align: TextBaseline::Top,
-                ..ts
-            },
-            rotation: 0.0,
-            max_width: Some(section_spacing - 10.0),
-            layout: Some(Box::new(layout)),
-            z_index: Z_LABEL,
-        });
+        elements.push(vir::text_node(
+            section.name.clone(),
+            Point::new(cx - (section_spacing - 10.0) / 2.0, cur_y),
+            ts.clone().with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+            0.0,
+            Some(section_spacing - 10.0),
+            Z_LABEL,
+        ));
 
         let mut event_y = cur_y + estimated_h + 10.0;
 
         // Events
         for event in &section.events {
             // Event dot
-            elements.push(VisualElement::Circle {
-                center: Point::new(cx, event_y + 4.0),
-                radius: 3.0,
-                style: FillStrokeStyle::new().with_fill(theme::timeline::LINE),
-                z_index: Z_SERIES,
-            });
+            elements.push(vir::circle_node(
+                Point::new(cx, event_y + 4.0),
+                3.0,
+                vir::fs_fill(theme::timeline::LINE),
+                Z_SERIES,
+            ));
 
             // Vertical connector line
-            elements.push(VisualElement::Line {
-                start: Point::new(cx, cur_y + estimated_h),
-                end: Point::new(cx, event_y + 4.0),
-                style: StrokeStyle {
-                    color: theme::timeline::LINE,
-                    width: 1.0,
-                },
-                z_index: Z_AXIS,
-            });
+            elements.push(vir::line_node(
+                Point::new(cx, cur_y + estimated_h),
+                Point::new(cx, event_y + 4.0),
+                vir::stroke(theme::timeline::LINE, 1.0),
+                Z_AXIS,
+            ));
 
-            let ets = TextStyle {
-                font_size: EVENT_SIZE,
-                font_family: theme::FONT_FAMILY.to_string(),
-                align: TextAlign::Left,
-                vertical_align: TextBaseline::Top,
-                color: theme::timeline::TEXT,
-                ..Default::default()
-            };
-            let el = create_text_layout(event, &ets, Some(section_spacing - 25.0));
-            elements.push(VisualElement::TextRun {
-                text: event.clone(),
-                position: Point::new(cx + 10.0, event_y),
-                style: TextStyle {
-                    align: TextAlign::Left,
-                    vertical_align: TextBaseline::Top,
-                    ..ets
-                },
-                rotation: 0.0,
-                max_width: Some(section_spacing - 25.0),
-                layout: Some(Box::new(el)),
-                z_index: Z_LABEL,
-            });
+            let ets = vir::text_style(
+                theme::timeline::TEXT,
+                EVENT_SIZE,
+                theme::FONT_FAMILY.to_string(),
+                FontWeight::Named(FontWeightNamed::Normal),
+                FontStyle::Normal,
+                TextAlign::Left,
+                TextBaseline::Top,
+            );
+            let _el = create_text_layout(event, &ets, Some(section_spacing - 25.0));
+            elements.push(vir::text_node(
+                event.clone(),
+                Point::new(cx + 10.0, event_y),
+                ets.clone().with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+                0.0,
+                Some(section_spacing - 25.0),
+                Z_LABEL,
+            ));
 
             event_y += 22.0;
         }

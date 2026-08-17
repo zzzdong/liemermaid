@@ -1,6 +1,6 @@
 use vello_cpu::kurbo::Point;
 
-use crate::visual::Color;
+use lievisual::geometry::Color;
 
 /// 风格的默认配置
 pub const DEFAULT_WIDTH: f64 = 800.0;
@@ -10,16 +10,16 @@ pub const DEFAULT_FONT_FAMILY: &str = "sans-serif";
 
 /// 调色板（用于多种图表的系列色）
 pub const PALETTE: &[Color] = &[
-    Color::new(31, 119, 180),  // 蓝
-    Color::new(255, 127, 14),  // 橙
-    Color::new(44, 160, 44),   // 绿
-    Color::new(148, 103, 189), // 紫
-    Color::new(140, 86, 75),   // 棕
-    Color::new(227, 119, 194), // 粉
-    Color::new(127, 127, 127), // 灰
-    Color::new(188, 189, 34),  // 黄绿
-    Color::new(23, 190, 207),  // 青
-    Color::new(214, 39, 40),   // 红
+    Color::new(31 as f64 / 255.0, 119 as f64 / 255.0, 180 as f64 / 255.0, 1.0),  // 蓝
+    Color::new(255 as f64 / 255.0, 127 as f64 / 255.0, 14 as f64 / 255.0, 1.0),  // 橙
+    Color::new(44 as f64 / 255.0, 160 as f64 / 255.0, 44 as f64 / 255.0, 1.0),   // 绿
+    Color::new(148 as f64 / 255.0, 103 as f64 / 255.0, 189 as f64 / 255.0, 1.0), // 紫
+    Color::new(140 as f64 / 255.0, 86 as f64 / 255.0, 75 as f64 / 255.0, 1.0),   // 棕
+    Color::new(227 as f64 / 255.0, 119 as f64 / 255.0, 194 as f64 / 255.0, 1.0), // 粉
+    Color::new(127 as f64 / 255.0, 127 as f64 / 255.0, 127 as f64 / 255.0, 1.0), // 灰
+    Color::new(188 as f64 / 255.0, 189 as f64 / 255.0, 34 as f64 / 255.0, 1.0),  // 黄绿
+    Color::new(23 as f64 / 255.0, 190 as f64 / 255.0, 207 as f64 / 255.0, 1.0),  // 青
+    Color::new(214 as f64 / 255.0, 39 as f64 / 255.0, 40 as f64 / 255.0, 1.0),   // 红
 ];
 
 /// 全局输出配置
@@ -42,7 +42,7 @@ impl Default for OutputConfig {
         Self {
             width: DEFAULT_WIDTH,
             height: DEFAULT_HEIGHT,
-            background: Color::new(255, 255, 255),
+            background: Color::new(255 as f64 / 255.0, 255 as f64 / 255.0, 255 as f64 / 255.0, 1.0),
             font_family: DEFAULT_FONT_FAMILY.to_string(),
             font_size: DEFAULT_FONT_SIZE,
         }

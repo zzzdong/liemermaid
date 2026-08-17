@@ -22,8 +22,7 @@ serde = { version = "1", features = ["derive"], optional = true }
 vello_cpu = "0.2"
 parley = "0.11"
 petgraph = "0.7"
-# 发布时用 crates.io 上的 lievisual；本地开发用 path
-lievisual = { version = "0.1.0-beta.1", path = "../lievisual" }
+lievisual = { path = "../lievisual" }
 
 [dev-dependencies]
 serde_json = "1"

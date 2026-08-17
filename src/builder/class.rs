@@ -8,11 +8,12 @@ use crate::{
     ast::{ClassDiagram, RelationKind, Visibility},
     builder::{layout::types::LayoutEngine, types::OutputConfig},
     text::{compute_text_offset, create_text_layout},
-    visual::{
-        Color, FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle, VisualElement,
-        Z_AXIS, Z_LABEL, Z_SERIES, theme,
+    vir::{self, Element, SceneNode,
+        Color, Stroke, TextAlign, TextBaseline, TextStyle, Z_AXIS, Z_LABEL, Z_SERIES,
+        theme,
     },
 };
+use lievisual::text::FontStyle;
 
 use crate::error::DiagramResult;
 
@@ -33,12 +34,12 @@ impl<'a> ClassEngine<'a> {
 }
 
 impl<'a> LayoutEngine for ClassEngine<'a> {
-    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<VisualElement>> {
+    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<SceneNode>> {
         Ok(build_class_elements(self.diagram, config))
     }
 }
 
-pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> Vec<VisualElement> {
+pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> Vec<SceneNode> {
     let mut elements = Vec::new();
 
     if diagram.classes.is_empty() {
@@ -57,13 +58,9 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
 
     let mut layouts: HashMap<String, ClassLayout> = HashMap::new();
     for cls in &diagram.classes {
-        let ts = TextStyle {
-            font_size: FONT_SIZE,
-            font_family: theme::FONT_FAMILY.to_string(),
-            align: TextAlign::Left,
-            vertical_align: TextBaseline::Top,
-            ..Default::default()
-        };
+        let ts = TextStyle::new(theme::class::TEXT, FONT_SIZE, theme::FONT_FAMILY.to_string())
+            .with_align(TextAlign::Left)
+            .with_baseline(TextBaseline::Top);
         let name_layout = create_text_layout(&cls.name, &ts, None);
         let name_w = name_layout.width() as f64 + CLASS_PAD * 2.0;
 
@@ -96,10 +93,7 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
         for line in attr_lines.iter().chain(method_lines.iter()) {
             let l = create_text_layout(
                 line,
-                &TextStyle {
-                    font_size: SMALL_FONT,
-                    ..ts.clone()
-                },
+                &TextStyle::new(theme::class::TEXT, SMALL_FONT, theme::FONT_FAMILY.to_string()),
                 None,
             );
             max_w = max_w.max(l.width() as f64 + CLASS_PAD * 2.0);
@@ -287,10 +281,8 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
                 Point::new(tp.x, to_r.y0)
             };
 
-            let stroke = StrokeStyle {
-                color: theme::class::EDGE,
-                width: 1.5,
-            };
+            let stroke = vir::stroke(theme::class::EDGE, 1.5,
+            );
 
             // 检查同层水平边是否有中间节点需要绕行
             let is_same_row_horizontal = is_from_left && (from_r.y0 - to_r.y0).abs() < 10.0;
@@ -320,12 +312,8 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
                     if is_dashed {
                         draw_dashed_line(&mut elements, seg_start, seg_end, &stroke);
                     } else {
-                        elements.push(VisualElement::Line {
-                            start: *seg_start,
-                            end: *seg_end,
-                            style: stroke.clone(),
-                            z_index: Z_AXIS,
-                        });
+                        elements.push(vir::line_node(*seg_start, *seg_end, stroke.clone(), Z_AXIS,
+                        ));
                     }
                 }
 
@@ -363,12 +351,7 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
                 if is_dashed {
                     draw_dashed_line(&mut elements, &start, &end, &stroke);
                 } else {
-                    elements.push(VisualElement::Line {
-                        start,
-                        end,
-                        style: stroke.clone(),
-                        z_index: Z_AXIS,
-                    });
+                    elements.push(vir::line_node(start, end, stroke.clone(), Z_AXIS));
                 }
 
                 let dir = Point::new(end.x - start.x, end.y - start.y);
@@ -402,133 +385,107 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
         let rect = class_rects[name];
 
         // Background
-        elements.push(VisualElement::Rect {
-            rect,
-            radius: None,
-            style: FillStrokeStyle::new()
-                .with_fill(theme::class::FILL)
-                .with_stroke(theme::class::STROKE, 2.0),
-            z_index: Z_SERIES,
-        });
+        elements.push(vir::rect_node(rect, None, vir::fs_both(theme::class::FILL, theme::class::STROKE, 2.0), Z_SERIES));
 
         // Header background
         let header_rect = Rect::new(rect.x0, rect.y0, rect.x1, rect.y0 + layout.header_h);
-        elements.push(VisualElement::Rect {
-            rect: header_rect,
-            radius: None,
-            style: FillStrokeStyle::new()
-                .with_fill(theme::class::HEADER_FILL)
-                .with_stroke(theme::class::STROKE, 2.0),
-            z_index: Z_SERIES,
-        });
+        elements.push(vir::rect_node(header_rect, None, vir::fs_both(theme::class::HEADER_FILL, theme::class::STROKE, 2.0), Z_SERIES));
 
         // Class name text (bold via slightly bigger size)
-        let ts = TextStyle {
-            font_size: FONT_SIZE,
-            font_family: theme::FONT_FAMILY.to_string(),
-            align: TextAlign::Center,
-            vertical_align: TextBaseline::Middle,
-            color: theme::class::TEXT,
-            ..Default::default()
-        };
+        let ts = TextStyle::new(theme::class::TEXT, FONT_SIZE, theme::FONT_FAMILY.to_string())
+            .with_align(TextAlign::Center)
+            .with_baseline(TextBaseline::Middle);
         let name_layout = create_text_layout(&layout.name, &ts, Some(layout.width - 8.0));
         let (x_off, y_off) =
             compute_text_offset(&name_layout, TextAlign::Center, TextBaseline::Middle);
-        elements.push(VisualElement::TextRun {
-            text: layout.name.clone(),
-            position: Point::new(
+        elements.push(vir::text_node(
+            layout.name.clone(),
+            Point::new(
                 rect.x0 + layout.width / 2.0 + x_off,
                 rect.y0 + layout.header_h / 2.0 + y_off,
             ),
-            style: TextStyle {
-                align: TextAlign::Left,
-                vertical_align: TextBaseline::Top,
-                ..ts
-            },
-            rotation: 0.0,
-            max_width: Some(layout.width - 8.0),
-            layout: Some(Box::new(name_layout)),
-            z_index: Z_LABEL,
-        });
+            vir::text_style(
+                theme::class::TEXT,
+                FONT_SIZE,
+                theme::FONT_FAMILY,
+                crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal),
+                FontStyle::Normal,
+                TextAlign::Left,
+                TextBaseline::Top,
+            ),
+            0.0,
+            Some(layout.width - 8.0),
+            Z_LABEL,
+        ));
 
         // Separator under header
-        elements.push(VisualElement::Line {
-            start: Point::new(rect.x0, rect.y0 + layout.header_h),
-            end: Point::new(rect.x1, rect.y0 + layout.header_h),
-            style: StrokeStyle {
-                color: theme::class::STROKE,
-                width: 1.5,
-            },
-            z_index: Z_AXIS,
-        });
+        elements.push(vir::line_node(
+            Point::new(rect.x0, rect.y0 + layout.header_h),
+            Point::new(rect.x1, rect.y0 + layout.header_h),
+            vir::stroke(theme::class::STROKE, 1.5),
+            Z_AXIS,
+        ));
 
         // Attributes
         let mut line_y = rect.y0 + layout.header_h + 4.0;
         for attr in &layout.attrs {
-            let ts = TextStyle {
-                font_size: SMALL_FONT,
-                font_family: theme::FONT_FAMILY.to_string(),
-                align: TextAlign::Left,
-                vertical_align: TextBaseline::Top,
-                color: theme::class::TEXT,
-                ..Default::default()
-            };
+            let ts = TextStyle::new(theme::class::TEXT, SMALL_FONT, theme::FONT_FAMILY.to_string())
+                .with_align(TextAlign::Left)
+                .with_baseline(TextBaseline::Top);
             let l = create_text_layout(attr, &ts, Some(layout.width - CLASS_PAD));
             let (x_off, y_off) = compute_text_offset(&l, TextAlign::Left, TextBaseline::Top);
-            elements.push(VisualElement::TextRun {
-                text: attr.to_string(),
-                position: Point::new(rect.x0 + CLASS_PAD + x_off, line_y + y_off),
-                style: TextStyle {
-                    align: TextAlign::Left,
-                    vertical_align: TextBaseline::Top,
-                    ..ts
-                },
-                rotation: 0.0,
-                max_width: Some(layout.width - CLASS_PAD),
-                layout: Some(Box::new(l)),
-                z_index: Z_LABEL,
-            });
+            elements.push(vir::text_node(
+                attr.to_string(),
+                Point::new(rect.x0 + CLASS_PAD + x_off, line_y + y_off),
+                vir::text_style(
+                    theme::class::TEXT,
+                    SMALL_FONT,
+                    theme::FONT_FAMILY,
+                    crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal),
+                    FontStyle::Normal,
+                    TextAlign::Left,
+                    TextBaseline::Top,
+                ),
+                0.0,
+                Some(layout.width - CLASS_PAD),
+                Z_LABEL,
+            ));
             line_y += 18.0;
         }
 
         // Separator before methods
         if !layout.attrs.is_empty() && !layout.methods.is_empty() {
-            elements.push(VisualElement::Line {
-                start: Point::new(rect.x0 + 4.0, line_y),
-                end: Point::new(rect.x1 - 4.0, line_y),
-                style: StrokeStyle {
-                    color: theme::class::SEPARATOR,
-                    width: 1.0,
-                },
-                z_index: Z_AXIS,
-            });
+            elements.push(vir::line_node(
+                Point::new(rect.x0 + 4.0, line_y),
+                Point::new(rect.x1 - 4.0, line_y),
+                vir::stroke(theme::class::SEPARATOR, 1.0),
+                Z_AXIS,
+            ));
         }
 
         // Methods
         for method in &layout.methods {
-            let ts = TextStyle {
-                font_size: SMALL_FONT,
-                font_family: theme::FONT_FAMILY.to_string(),
-                align: TextAlign::Left,
-                vertical_align: TextBaseline::Top,
-                color: theme::class::TEXT,
-                ..Default::default()
-            };
+            let ts = TextStyle::new(theme::class::TEXT, SMALL_FONT, theme::FONT_FAMILY.to_string())
+                .with_align(TextAlign::Left)
+                .with_baseline(TextBaseline::Top);
             let l = create_text_layout(method, &ts, Some(layout.width - CLASS_PAD));
             let (x_off, y_off) = compute_text_offset(&l, TextAlign::Left, TextBaseline::Top);
-            elements.push(VisualElement::TextRun {
-                text: method.to_string(),
-                position: Point::new(rect.x0 + CLASS_PAD + x_off, line_y + y_off),
-                style: TextStyle {
-                    align: TextAlign::Left,
-                    vertical_align: TextBaseline::Top,
-                    ..ts
-                },
-                rotation: 0.0,
-                max_width: Some(layout.width - CLASS_PAD),
-                layout: Some(Box::new(l)),
-                z_index: Z_LABEL,
-            });
+            elements.push(vir::text_node(
+                method.to_string(),
+                Point::new(rect.x0 + CLASS_PAD + x_off, line_y + y_off),
+                vir::text_style(
+                    theme::class::TEXT,
+                    SMALL_FONT,
+                    theme::FONT_FAMILY,
+                    crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal),
+                    FontStyle::Normal,
+                    TextAlign::Left,
+                    TextBaseline::Top,
+                ),
+                0.0,
+                Some(layout.width - CLASS_PAD),
+                Z_LABEL,
+            ));
             line_y += 18.0;
         }
     }
@@ -537,11 +494,11 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
 }
 
 fn draw_triangle_head(
-    elements: &mut Vec<VisualElement>,
+    elements: &mut Vec<SceneNode>,
     tip: &Point,
     dir: &Point,
     filled: bool,
-    style: &StrokeStyle,
+    style: &Stroke,
 ) {
     let sz = 10.0;
     let perp_x = -dir.y;
@@ -559,23 +516,17 @@ fn draw_triangle_head(
     let fill = if filled {
         Some(theme::class::EDGE)
     } else {
-        Some(Color::new(255, 255, 255))
+        Some(Color::rgb(255, 255, 255))
     };
-    elements.push(VisualElement::Path {
-        path,
-        style: FillStrokeStyle::new()
-            .with_fill(fill.unwrap())
-            .with_stroke(style.color, style.width),
-        z_index: Z_AXIS,
-    });
+    elements.push(SceneNode::from(Element::Path { path, style: vir::fs_both(fill.unwrap(), style.color, style.width), closed: true }).with_z(Z_AXIS));
 }
 
 fn draw_diamond_head(
-    elements: &mut Vec<VisualElement>,
+    elements: &mut Vec<SceneNode>,
     center: &Point,
     dir: &Point,
     filled: bool,
-    style: &StrokeStyle,
+    style: &Stroke,
 ) {
     let sz = 8.0;
     let perp_x = -dir.y;
@@ -595,22 +546,16 @@ fn draw_diamond_head(
     let fill = if filled {
         Some(theme::class::EDGE)
     } else {
-        Some(Color::new(255, 255, 255))
+        Some(Color::rgb(255, 255, 255))
     };
-    elements.push(VisualElement::Path {
-        path,
-        style: FillStrokeStyle::new()
-            .with_fill(fill.unwrap())
-            .with_stroke(style.color, style.width),
-        z_index: Z_AXIS,
-    });
+    elements.push(SceneNode::from(Element::Path { path, style: vir::fs_both(fill.unwrap(), style.color, style.width), closed: true }).with_z(Z_AXIS));
 }
 
 fn draw_dashed_line(
-    elements: &mut Vec<VisualElement>,
+    elements: &mut Vec<SceneNode>,
     start: &Point,
     end: &Point,
-    style: &StrokeStyle,
+    style: &Stroke,
 ) {
     let dx = end.x - start.x;
     let dy = end.y - start.y;
@@ -627,12 +572,8 @@ fn draw_dashed_line(
         let seg_end = (cur + dash).min(len);
         let s = Point::new(start.x + udx * cur, start.y + udy * cur);
         let e = Point::new(start.x + udx * seg_end, start.y + udy * seg_end);
-        elements.push(VisualElement::Line {
-            start: s,
-            end: e,
-            style: style.clone(),
-            z_index: Z_AXIS,
-        });
+        elements.push(vir::line_node(s, e, style.clone(), Z_AXIS,
+        ));
         cur = seg_end + gap;
     }
 }

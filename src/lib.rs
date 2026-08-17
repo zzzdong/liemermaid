@@ -5,7 +5,7 @@ pub mod option;
 pub mod parser;
 pub mod scene_ext;
 pub mod text;
-pub mod visual;
+pub mod vir;
 pub use ast::Diagram;
 pub use parser::MermaidParser;
 
@@ -13,8 +13,8 @@ use builder::{build_diagram_with_config, types::OutputConfig};
 
 /// 渲染 Mermaid 图表为 SVG 字符串。
 ///
-/// 底层将 liemermaid 的 `VisualElement` 中间表示转换为 [`lievisual::Scene`]，
-/// 交由 lievisual 的矢量后端（`SvgRenderer`）输出。这是唯一的渲染路径。
+/// builder 直接产出 [`lievisual::Scene`]，本函数交由 lievisual 的矢量后端
+/// （`SvgRenderer`）输出。这是唯一的渲染路径。
 ///
 /// # 参数
 /// - `mermaid_text`: Mermaid 语法文本
@@ -43,8 +43,7 @@ pub fn render(mermaid_text: &str, width: u32, height: u32) -> error::DiagramResu
         ..OutputConfig::default()
     };
 
-    let elements = build_diagram_with_config(&diagram, &config)?;
-    let scene = scene_ext::to_scene(&elements, width as f64, height as f64, config.background);
+    let scene = build_diagram_with_config(&diagram, &config)?;
     Ok(scene_ext::render_scene_svg(&scene))
 }
 
@@ -62,7 +61,6 @@ pub fn render_png(mermaid_text: &str, width: u32, height: u32) -> error::Diagram
         ..OutputConfig::default()
     };
 
-    let elements = build_diagram_with_config(&diagram, &config)?;
-    let scene = scene_ext::to_scene(&elements, width as f64, height as f64, config.background);
+    let scene = build_diagram_with_config(&diagram, &config)?;
     Ok(scene_ext::render_scene_png(&scene))
 }

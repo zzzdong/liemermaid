@@ -8,20 +8,49 @@ use crate::ast::Flowchart;
 
 use super::types::{BranchArm, ChainItem, GroupEdge, LayoutTree, LogicalGroup, NodeId};
 
-/// 使用 petgraph 构建流程图的有向图
+/// 收集流程图中所有参与布局的节点（顶层 + 各 subgraph 内部，按 id 去重）
+pub fn all_flowchart_nodes(fc: &Flowchart) -> Vec<crate::ast::Node> {
+    let mut seen: HashSet<NodeId> = HashSet::new();
+    let mut out: Vec<crate::ast::Node> = Vec::new();
+    let push = |n: &crate::ast::Node, seen: &mut HashSet<NodeId>, out: &mut Vec<crate::ast::Node>| {
+        if seen.insert(n.id.clone()) {
+            out.push(n.clone());
+        }
+    };
+    for node in &fc.nodes {
+        push(node, &mut seen, &mut out);
+    }
+    for sg in &fc.subgraphs {
+        for node in &sg.nodes {
+            push(node, &mut seen, &mut out);
+        }
+    }
+    out
+}
+
+/// 使用 petgraph 构建流程图的有向图（含 subgraph 内部节点与边）
 fn build_petgraph(fc: &Flowchart) -> (DiGraph<NodeId, ()>, HashMap<NodeId, NodeIndex>) {
     let mut graph = DiGraph::new();
     let mut id_to_idx = HashMap::new();
 
-    for node in &fc.nodes {
-        let idx = graph.add_node(node.id.clone());
-        id_to_idx.insert(node.id.clone(), idx);
+    for node in all_flowchart_nodes(fc) {
+        if !id_to_idx.contains_key(&node.id) {
+            let idx = graph.add_node(node.id.clone());
+            id_to_idx.insert(node.id.clone(), idx);
+        }
     }
 
-    for edge in &fc.edges {
-        if let (Some(&from), Some(&to)) = (id_to_idx.get(&edge.source), id_to_idx.get(&edge.target))
-        {
+    let add_edge = |edge: &crate::ast::Edge, id_to_idx: &mut HashMap<NodeId, NodeIndex>, graph: &mut DiGraph<NodeId, ()>| {
+        if let (Some(&from), Some(&to)) = (id_to_idx.get(&edge.source), id_to_idx.get(&edge.target)) {
             graph.add_edge(from, to, ());
+        }
+    };
+    for edge in &fc.edges {
+        add_edge(edge, &mut id_to_idx, &mut graph);
+    }
+    for sg in &fc.subgraphs {
+        for edge in &sg.edges {
+            add_edge(edge, &mut id_to_idx, &mut graph);
         }
     }
 
@@ -87,15 +116,14 @@ pub fn build_flowchart_graph(fc: &Flowchart) -> (DiGraph<NodeId, ()>, HashMap<No
 }
 
 pub fn recognize_structure(fc: &Flowchart) -> LayoutTree {
-    let (graph, id_to_idx) = build_petgraph(fc);
+    let (graph, _id_to_idx) = build_petgraph(fc);
     let back_edge_indices = find_back_edge_indices(&graph);
 
     // 从 petgraph 导出 out_edges HashMap（保持递归函数接口不变）
     let mut out_edges: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
-    for node in &fc.nodes {
-        let idx = id_to_idx[&node.id];
+    for idx in graph.node_indices() {
         let succs: Vec<NodeId> = graph.neighbors(idx).map(|n| graph[n].clone()).collect();
-        out_edges.insert(node.id.clone(), succs);
+        out_edges.insert(graph[idx].clone(), succs);
     }
 
     let mut back_edges: HashMap<NodeId, NodeId> = HashMap::new();
@@ -103,7 +131,7 @@ pub fn recognize_structure(fc: &Flowchart) -> LayoutTree {
         back_edges.insert(graph[*from_idx].clone(), graph[*to_idx].clone());
     }
 
-    let all_nodes: Vec<NodeId> = fc.nodes.iter().map(|n| n.id.clone()).collect();
+    let all_nodes: Vec<NodeId> = graph.node_indices().map(|idx| graph[idx].clone()).collect();
 
     // 使用 petgraph 查找入度为 0 的入口节点
     let entries: Vec<NodeId> = graph

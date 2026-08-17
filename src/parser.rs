@@ -136,32 +136,39 @@ impl MermaidParser {
                         _ => unreachable!(),
                     });
                 }
-                Rule::node_decl => {
-                    let node = Self::parse_node_decl(inner)?;
-                    if !node_ids.insert(node.id.clone()) {
-                        nodes.retain(|n: &Node| n.id != node.id);
+                Rule::flowchart_statement => {
+                    for stmt in inner.into_inner() {
+                        match stmt.as_rule() {
+                            Rule::node_decl => {
+                                let node = Self::parse_node_decl(stmt)?;
+                                if !node_ids.insert(node.id.clone()) {
+                                    nodes.retain(|n: &Node| n.id != node.id);
+                                }
+                                nodes.push(node);
+                            }
+                            Rule::edge => {
+                                let edge = Self::parse_edge(stmt)?;
+                                if node_ids.insert(edge.source.clone()) {
+                                    nodes.push(Node {
+                                        id: edge.source.clone(),
+                                        shape: None,
+                                        text: None,
+                                    });
+                                }
+                                if node_ids.insert(edge.target.clone()) {
+                                    nodes.push(Node {
+                                        id: edge.target.clone(),
+                                        shape: None,
+                                        text: None,
+                                    });
+                                }
+                                edges.push(edge);
+                            }
+                            Rule::subgraph => subgraphs.push(Self::parse_subgraph(stmt)?),
+                            _ => {}
+                        }
                     }
-                    nodes.push(node);
                 }
-                Rule::edge => {
-                    let edge = Self::parse_edge(inner)?;
-                    if node_ids.insert(edge.source.clone()) {
-                        nodes.push(Node {
-                            id: edge.source.clone(),
-                            shape: None,
-                            text: None,
-                        });
-                    }
-                    if node_ids.insert(edge.target.clone()) {
-                        nodes.push(Node {
-                            id: edge.target.clone(),
-                            shape: None,
-                            text: None,
-                        });
-                    }
-                    edges.push(edge);
-                }
-                Rule::subgraph => subgraphs.push(Self::parse_subgraph(inner)?),
                 _ => {}
             }
         }

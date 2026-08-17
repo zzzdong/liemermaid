@@ -12,11 +12,13 @@ use crate::{
     },
     error::DiagramResult,
     text::{compute_text_offset, create_text_layout},
-    visual::{
-        Color, FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle, VisualElement,
-        Z_AXIS, Z_LABEL, Z_SERIES, theme,
+    vir::{self, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, theme,
     },
+    option::{FontWeight, FontWeightNamed},
 };
+use lievisual::geometry::Color;
+use lievisual::scene::SceneNode;
+use lievisual::text::FontStyle;
 
 const STATE_PAD_X: f64 = 18.0;
 const STATE_PAD_Y: f64 = 10.0;
@@ -45,12 +47,12 @@ impl<'a> StateEngine<'a> {
 }
 
 impl<'a> LayoutEngine for StateEngine<'a> {
-    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<VisualElement>> {
+    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<SceneNode>> {
         Ok(build_state_elements(self.diagram, config))
     }
 }
 
-pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> Vec<VisualElement> {
+pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> Vec<SceneNode> {
     let mut elements = Vec::new();
 
     if diagram.transitions.is_empty() && diagram.states.is_empty() {
@@ -141,12 +143,15 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
         };
 
         // Measure text
-        let ts = TextStyle {
-            font_size: FONT_SIZE,
-            align: TextAlign::Center,
-            vertical_align: TextBaseline::Middle,
-            ..Default::default()
-        };
+        let ts = vir::text_style(
+            Color::BLACK,
+            FONT_SIZE,
+            String::new(),
+            FontWeight::Named(FontWeightNamed::Normal),
+            FontStyle::Normal,
+            TextAlign::Center,
+            TextBaseline::Middle,
+        );
         let layout = create_text_layout(&label, &ts, None);
         let text_w = layout.width() as f64;
         let text_h = layout.height() as f64;
@@ -154,10 +159,15 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
         let desc_text_h = if let Some(d) = &desc {
             let dl = create_text_layout(
                 d,
-                &TextStyle {
-                    font_size: SMALL_FONT,
-                    ..ts.clone()
-                },
+                &vir::text_style(
+                    Color::BLACK,
+                    SMALL_FONT,
+                    String::new(),
+                    FontWeight::Named(FontWeightNamed::Normal),
+                    FontStyle::Normal,
+                    TextAlign::Center,
+                    TextBaseline::Middle,
+                ),
                 None,
             );
             dl.height() as f64 + 4.0
@@ -280,10 +290,7 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
             };
             let mid_y = (from_bottom + to_top) / 2.0;
 
-            let stroke = StrokeStyle {
-                color: theme::state::EDGE,
-                width: 1.5,
-            };
+            let stroke = vir::stroke(theme::state::EDGE, 1.5);
 
             // Orthogonal routing:
             // - Same X: straight vertical line (2 points)
@@ -299,53 +306,46 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                 ]
             };
 
-            elements.push(VisualElement::Polyline {
-                points,
-                style: stroke.clone(),
-                z_index: Z_AXIS,
-            });
+            elements.push(vir::polyline_node(points, stroke.clone(), Z_AXIS));
 
             // Arrow head at target
             let sz = 7.0;
-            elements.push(VisualElement::Line {
-                start: Point::new(tp.x, to_top),
-                end: Point::new(tp.x - sz * 0.4, to_top - sz),
-                style: stroke.clone(),
-                z_index: Z_AXIS,
-            });
-            elements.push(VisualElement::Line {
-                start: Point::new(tp.x, to_top),
-                end: Point::new(tp.x + sz * 0.4, to_top - sz),
-                style: stroke,
-                z_index: Z_AXIS,
-            });
+            elements.push(vir::line_node(
+                Point::new(tp.x, to_top),
+                Point::new(tp.x - sz * 0.4, to_top - sz),
+                stroke.clone(),
+                Z_AXIS,
+            ));
+            elements.push(vir::line_node(
+                Point::new(tp.x, to_top),
+                Point::new(tp.x + sz * 0.4, to_top - sz),
+                stroke,
+                Z_AXIS,
+            ));
 
             // Transition label centered at the horizontal segment mid-point
             if let Some(label) = &t.label {
-                let ts = TextStyle {
-                    font_size: 12.0,
-                    align: TextAlign::Center,
-                    vertical_align: TextBaseline::Bottom,
-                    color: theme::state::TEXT,
-                    ..Default::default()
-                };
+                let ts = vir::text_style(
+                    theme::state::TEXT,
+                    12.0,
+                    String::new(),
+                    FontWeight::Named(FontWeightNamed::Normal),
+                    FontStyle::Normal,
+                    TextAlign::Center,
+                    TextBaseline::Bottom,
+                );
                 let layout = create_text_layout(label, &ts, Some(200.0));
                 let (x_off, y_off) =
                     compute_text_offset(&layout, TextAlign::Center, TextBaseline::Bottom);
                 let label_cx = (fp.x + tp.x) / 2.0;
-                elements.push(VisualElement::TextRun {
-                    text: label.clone(),
-                    position: Point::new(label_cx + x_off, mid_y - 4.0 + y_off),
-                    style: TextStyle {
-                        align: TextAlign::Left,
-                        vertical_align: TextBaseline::Top,
-                        ..ts
-                    },
-                    rotation: 0.0,
-                    max_width: Some(200.0),
-                    layout: Some(Box::new(layout)),
-                    z_index: Z_LABEL,
-                });
+                elements.push(vir::text_node(
+                    label.clone(),
+                    Point::new(label_cx + x_off, mid_y - 4.0 + y_off),
+                    ts.clone().with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+                    0.0,
+                    Some(200.0),
+                    Z_LABEL,
+                ));
             }
         }
     }
@@ -360,42 +360,36 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
             StateNode::Start => {
                 let r = 16.0;
                 // Outer circle (white fill, dark stroke)
-                elements.push(VisualElement::Circle {
-                    center: *pos,
-                    radius: r + 3.0,
-                    style: FillStrokeStyle::new()
-                        .with_fill(Color::new(255, 255, 255))
-                        .with_stroke(theme::state::START_FILL, 2.0),
-                    z_index: Z_SERIES,
-                });
+                elements.push(vir::circle_node(
+                    *pos,
+                    r + 3.0,
+                    vir::fs_both(Color::rgb(255, 255, 255), theme::state::START_FILL, 2.0),
+                    Z_SERIES,
+                ));
                 // Inner filled circle
-                elements.push(VisualElement::Circle {
-                    center: *pos,
-                    radius: r - 2.0,
-                    style: FillStrokeStyle::new().with_fill(theme::state::START_FILL),
-                    z_index: Z_SERIES,
-                });
+                elements.push(vir::circle_node(
+                    *pos,
+                    r - 2.0,
+                    vir::fs_fill(theme::state::START_FILL),
+                    Z_SERIES,
+                ));
             }
             StateNode::End => {
                 let r = 16.0;
                 // Outer circle
-                elements.push(VisualElement::Circle {
-                    center: *pos,
-                    radius: r + 3.0,
-                    style: FillStrokeStyle::new()
-                        .with_fill(Color::new(255, 255, 255))
-                        .with_stroke(theme::state::END_STROKE, 2.5),
-                    z_index: Z_SERIES,
-                });
+                elements.push(vir::circle_node(
+                    *pos,
+                    r + 3.0,
+                    vir::fs_both(Color::rgb(255, 255, 255), theme::state::END_STROKE, 2.5),
+                    Z_SERIES,
+                ));
                 // Inner ring
-                elements.push(VisualElement::Circle {
-                    center: *pos,
-                    radius: r - 4.0,
-                    style: FillStrokeStyle::new()
-                        .with_fill(Color::new(255, 255, 255))
-                        .with_stroke(theme::state::END_STROKE, 2.5),
-                    z_index: Z_SERIES,
-                });
+                elements.push(vir::circle_node(
+                    *pos,
+                    r - 4.0,
+                    vir::fs_both(Color::rgb(255, 255, 255), theme::state::END_STROKE, 2.5),
+                    Z_SERIES,
+                ));
             }
             StateNode::Normal { description, .. } => {
                 let w = nl.width / 2.0;
@@ -403,24 +397,23 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                 let r = h.min(16.0);
 
                 let rect = Rect::new(pos.x - w, pos.y - h, pos.x + w, pos.y + h);
-                elements.push(VisualElement::Rect {
+                elements.push(vir::rect_node(
                     rect,
-                    radius: Some(r),
-                    style: FillStrokeStyle::new()
-                        .with_fill(theme::state::FILL)
-                        .with_stroke(theme::state::STROKE, 2.0),
-                    z_index: Z_SERIES,
-                });
+                    Some(r),
+                    vir::fs_both(theme::state::FILL, theme::state::STROKE, 2.0),
+                    Z_SERIES,
+                ));
 
                 // State label
-                let ts = TextStyle {
-                    font_size: FONT_SIZE,
-                    font_family: theme::FONT_FAMILY.to_string(),
-                    align: TextAlign::Center,
-                    vertical_align: TextBaseline::Middle,
-                    color: theme::state::TEXT,
-                    ..Default::default()
-                };
+                let ts = vir::text_style(
+                    theme::state::TEXT,
+                    FONT_SIZE,
+                    theme::FONT_FAMILY.to_string(),
+                    FontWeight::Named(FontWeightNamed::Normal),
+                    FontStyle::Normal,
+                    TextAlign::Center,
+                    TextBaseline::Middle,
+                );
                 let layout = create_text_layout(&nl.label, &ts, Some(nl.width - 10.0));
                 let (x_off, y_off) = if description.is_some() {
                     // Shift up a bit if there's a description
@@ -428,46 +421,37 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                 } else {
                     compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle)
                 };
-                elements.push(VisualElement::TextRun {
-                    text: nl.label.clone(),
-                    position: Point::new(pos.x + x_off, pos.y + y_off),
-                    style: TextStyle {
-                        align: TextAlign::Left,
-                        vertical_align: TextBaseline::Top,
-                        ..ts
-                    },
-                    rotation: 0.0,
-                    max_width: Some(nl.width - 10.0),
-                    layout: Some(Box::new(layout)),
-                    z_index: Z_LABEL,
-                });
+                elements.push(vir::text_node(
+                    nl.label.clone(),
+                    Point::new(pos.x + x_off, pos.y + y_off),
+                    ts.clone().with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+                    0.0,
+                    Some(nl.width - 10.0),
+                    Z_LABEL,
+                ));
 
                 // Description text below label
                 if let Some(desc) = description {
-                    let dts = TextStyle {
-                        font_size: SMALL_FONT,
-                        font_family: theme::FONT_FAMILY.to_string(),
-                        align: TextAlign::Center,
-                        vertical_align: TextBaseline::Top,
-                        color: theme::state::TEXT,
-                        ..Default::default()
-                    };
+                    let dts = vir::text_style(
+                        theme::state::TEXT,
+                        SMALL_FONT,
+                        theme::FONT_FAMILY.to_string(),
+                        FontWeight::Named(FontWeightNamed::Normal),
+                        FontStyle::Normal,
+                        TextAlign::Center,
+                        TextBaseline::Top,
+                    );
                     let dl = create_text_layout(desc, &dts, Some(nl.width - 10.0));
                     let (dx_off, dy_off) =
                         compute_text_offset(&dl, TextAlign::Center, TextBaseline::Top);
-                    elements.push(VisualElement::TextRun {
-                        text: desc.clone(),
-                        position: Point::new(pos.x + dx_off, pos.y + 4.0 + dy_off),
-                        style: TextStyle {
-                            align: TextAlign::Left,
-                            vertical_align: TextBaseline::Top,
-                            ..dts
-                        },
-                        rotation: 0.0,
-                        max_width: Some(nl.width - 10.0),
-                        layout: Some(Box::new(dl)),
-                        z_index: Z_LABEL,
-                    });
+                    elements.push(vir::text_node(
+                        desc.clone(),
+                        Point::new(pos.x + dx_off, pos.y + 4.0 + dy_off),
+                        dts.clone().with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+                        0.0,
+                        Some(nl.width - 10.0),
+                        Z_LABEL,
+                    ));
                 }
             }
         }

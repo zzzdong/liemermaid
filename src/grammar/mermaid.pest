@@ -37,8 +37,9 @@ edge_arrow_labeled = { "-->|" ~ edge_label ~ "|" }
 edge_arrow = { edge_arrow_labeled | edge_arrow_thick | edge_arrow_dotted | edge_arrow_solid }
 edge = { identifier ~ edge_arrow ~ identifier }
 
-subgraph = { "subgraph" ~ subgraph_title? ~ NEWLINE+ ~ (flowchart_statement ~ (NEWLINE+ ~ flowchart_statement)*)? ~ "end" }
-flowchart_statement = _{ edge | node_decl | subgraph }
+subgraph = { "subgraph" ~ subgraph_title? ~ NEWLINE+ ~ (subgraph_stmt ~ (NEWLINE+ ~ subgraph_stmt)*)? ~ NEWLINE* ~ "end" }
+subgraph_stmt = _{ edge | subgraph | (!"end" ~ node_decl) }
+flowchart_statement = { edge | subgraph | node_decl }
 flowchart_diagram = { ("flowchart" | "graph") ~ direction? ~ NEWLINE+ ~ (flowchart_statement ~ (NEWLINE+ ~ flowchart_statement)*)? }
 
 participant = { "participant" ~ identifier ~ ("as" ~ identifier)? }

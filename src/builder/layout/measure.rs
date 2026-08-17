@@ -4,7 +4,8 @@ use crate::{
     ast::{Node, NodeShape},
     builder::types::OutputConfig,
     text::create_text_layout,
-    visual::{TextAlign, TextBaseline, TextStyle},
+    vir::{Color, TextAlign, TextBaseline, TextStyle,
+    },
 };
 
 use super::{
@@ -90,12 +91,9 @@ pub fn measure_nodes(nodes: &[Node], config: &OutputConfig) -> HashMap<NodeId, N
 fn measure_node(node: &Node, _config: &OutputConfig) -> NodeMetrics {
     let text = node.text.as_deref().unwrap_or(&node.id);
 
-    let text_style = TextStyle {
-        font_size: FONT_SIZE,
-        align: TextAlign::Center,
-        vertical_align: TextBaseline::Middle,
-        ..Default::default()
-    };
+    let text_style = TextStyle::new(Color::BLACK, FONT_SIZE, "sans-serif")
+        .with_align(TextAlign::Center)
+        .with_baseline(TextBaseline::Middle);
 
     let layout = create_text_layout(text, &text_style, None);
     let text_w = layout.width() as f64;

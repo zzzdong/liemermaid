@@ -10,11 +10,20 @@ use crate::{
     builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
     text::{compute_text_offset, create_text_layout},
-    visual::{
-        Color, FillStrokeStyle, StrokeStyle, TextAlign, TextBaseline, TextStyle, VisualElement,
-        Z_AXIS, Z_LABEL, Z_SERIES, theme,
+    vir::{self,
+        Color,
+        SceneNode,
+        TextAlign,
+        TextBaseline,
+        TextStyle,
+        Z_AXIS,
+        Z_LABEL,
+        Z_SERIES,
+        theme,
     },
 };
+use lievisual::text::FontStyle;
+
 
 const COMMIT_RADIUS: f64 = 8.0;
 const BRANCH_SPACING: f64 = 40.0;
@@ -35,7 +44,7 @@ impl<'a> GitGraphEngine<'a> {
 }
 
 impl<'a> LayoutEngine for GitGraphEngine<'a> {
-    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<VisualElement>> {
+    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<SceneNode>> {
         Ok(build_gitgraph_elements(self.diagram, config))
     }
 }
@@ -51,7 +60,7 @@ struct CommitData {
 pub fn build_gitgraph_elements(
     graph: &GitGraphDiagram,
     _config: &OutputConfig,
-) -> Vec<VisualElement> {
+) -> Vec<SceneNode> {
     let mut elements = Vec::new();
 
     if graph.statements.is_empty() {
@@ -178,12 +187,7 @@ pub fn build_gitgraph_elements(
 
         if branch_commits.len() >= 2 {
             for i in 0..branch_commits.len() - 1 {
-                elements.push(VisualElement::Line {
-                    start: branch_commits[i].position,
-                    end: branch_commits[i + 1].position,
-                    style: StrokeStyle { color, width: 2.5 },
-                    z_index: Z_AXIS,
-                });
+                elements.push(vir::line_node(branch_commits[i].position, branch_commits[i + 1].position, vir::stroke(color, 2.5), Z_AXIS));
             }
         }
 
@@ -201,12 +205,7 @@ pub fn build_gitgraph_elements(
                 })
         {
             let first = branch_commits[0].position;
-            elements.push(VisualElement::Line {
-                start: Point::new(first.x, parent_y),
-                end: first,
-                style: StrokeStyle { color, width: 2.5 },
-                z_index: Z_AXIS,
-            });
+            elements.push(vir::line_node(Point::new(first.x, parent_y), first, vir::stroke(color, 2.5), Z_AXIS));
         }
     }
 
@@ -228,16 +227,16 @@ pub fn build_gitgraph_elements(
                 && let Some(&parent_pos) = node_to_pos.get(&parent_idx)
             {
                 let mid_x = (pos.x + parent_pos.x) / 2.0;
-                elements.push(VisualElement::Polyline {
-                    points: vec![
+                elements.push(vir::polyline_node(
+                    vec![
                         parent_pos,
                         Point::new(mid_x, parent_pos.y),
                         Point::new(mid_x, pos.y),
                         pos,
                     ],
-                    style: StrokeStyle { color, width: 1.5 },
-                    z_index: Z_AXIS,
-                });
+                    vir::stroke(color, 1.5),
+                    Z_AXIS,
+                ));
             }
         }
     }
@@ -246,79 +245,63 @@ pub fn build_gitgraph_elements(
     for cp in &commit_positions {
         let color = branch_colors[cp.branch_name.as_str()];
 
-        elements.push(VisualElement::Circle {
-            center: cp.position,
-            radius: COMMIT_RADIUS,
-            style: FillStrokeStyle::new()
-                .with_fill(Color::new(255, 255, 255))
-                .with_stroke(color, 2.5),
-            z_index: Z_SERIES,
-        });
+        elements.push(vir::circle_node(cp.position, COMMIT_RADIUS, vir::fs_both(Color::rgb(255, 255, 255), color, 2.5), Z_SERIES));
 
-        elements.push(VisualElement::Circle {
-            center: cp.position,
-            radius: 3.0,
-            style: FillStrokeStyle::new().with_fill(color),
-            z_index: Z_SERIES,
-        });
+        elements.push(vir::circle_node(cp.position, 3.0, vir::fs_fill(color), Z_SERIES));
 
         if let Some(tag) = &cp.tag {
-            let ts = TextStyle {
-                font_size: FONT_SIZE,
-                font_family: theme::FONT_FAMILY.to_string(),
-                align: TextAlign::Left,
-                vertical_align: TextBaseline::Middle,
-                color,
-                ..Default::default()
-            };
+            let ts = TextStyle::new(color, FONT_SIZE, theme::FONT_FAMILY.to_string())
+                .with_align(TextAlign::Left)
+                .with_baseline(TextBaseline::Middle);
             let layout = create_text_layout(tag, &ts, Some(200.0));
             let (x_off, y_off) =
                 compute_text_offset(&layout, TextAlign::Left, TextBaseline::Middle);
-            elements.push(VisualElement::TextRun {
-                text: tag.clone(),
-                position: Point::new(cp.position.x + LABEL_OFFSET + x_off, cp.position.y + y_off),
-                style: TextStyle {
-                    align: TextAlign::Left,
-                    vertical_align: TextBaseline::Top,
-                    ..ts
-                },
-                rotation: 0.0,
-                max_width: Some(200.0),
-                layout: Some(Box::new(layout)),
-                z_index: Z_LABEL,
-            });
+            elements.push(vir::text_node(
+                tag.clone(),
+                Point::new(cp.position.x + LABEL_OFFSET + x_off, cp.position.y + y_off),
+                vir::text_style(
+                    color,
+                    FONT_SIZE,
+                    theme::FONT_FAMILY,
+                    crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal),
+                    FontStyle::Normal,
+                    TextAlign::Left,
+                    TextBaseline::Top,
+                ),
+                0.0,
+                Some(200.0),
+                Z_LABEL,
+            ));
         }
     }
 
     // ===== Phase 6: Branch labels at the top =====
     for (i, branch_name) in branch_order.iter().enumerate() {
         let color = branch_colors[branch_name.as_str()];
-        let ts = TextStyle {
-            font_size: FONT_SIZE,
-            font_family: theme::FONT_FAMILY.to_string(),
-            align: TextAlign::Right,
-            vertical_align: TextBaseline::Middle,
-            color,
-            ..Default::default()
-        };
+        let ts = TextStyle::new(color, FONT_SIZE, theme::FONT_FAMILY.to_string())
+            .with_align(TextAlign::Right)
+            .with_baseline(TextBaseline::Middle);
         let layout = create_text_layout(branch_name, &ts, Some(120.0));
         let x = base_x + i as f64 * BRANCH_SPACING;
         let y = TOP_MARGIN + 12.0;
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Right, TextBaseline::Middle);
 
-        elements.push(VisualElement::TextRun {
-            text: branch_name.clone(),
-            position: Point::new(x - LABEL_OFFSET + x_off, y + y_off),
-            style: TextStyle {
-                align: TextAlign::Left,
-                vertical_align: TextBaseline::Top,
-                ..ts
-            },
-            rotation: 0.0,
-            max_width: Some(120.0),
-            layout: Some(Box::new(layout)),
-            z_index: Z_LABEL,
-        });
+        elements.push(vir::text_node(
+            branch_name.clone(),
+            Point::new(x - LABEL_OFFSET + x_off, y + y_off),
+            vir::text_style(
+                color,
+                FONT_SIZE,
+                theme::FONT_FAMILY,
+                crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal),
+                FontStyle::Normal,
+                TextAlign::Left,
+                TextBaseline::Top,
+            ),
+            0.0,
+            Some(120.0),
+            Z_LABEL,
+        ));
     }
 
     elements

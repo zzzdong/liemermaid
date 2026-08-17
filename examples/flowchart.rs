@@ -175,4 +175,23 @@ fn main() {
     let svg = liemermaid::render(pie, 600, 450).expect("render pie");
     std::fs::write("pie_basic.svg", svg).expect("write svg file");
     println!("pie_basic.svg generated");
+
+    // 10. 子图 (subgraph)
+    let sub = r#"flowchart TD
+    A["Start"]
+    subgraph One
+        B["Process B"]
+        C{"Decision C"}
+    end
+    subgraph Two
+        D["Process D"]
+    end
+    A --> B
+    B --> C
+    C --> D
+    D --> A
+"#;
+    let svg = liemermaid::render(sub, 900, 700).expect("render subgraph");
+    std::fs::write("flow_subgraph.svg", svg).expect("write svg file");
+    println!("flow_subgraph.svg generated");
 }

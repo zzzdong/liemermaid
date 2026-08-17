@@ -8,11 +8,12 @@ use crate::{
     },
     error::{DiagramError, DiagramResult},
     text::create_text_layout,
-    visual::{
-        Color, FillStrokeStyle, TextAlign, TextBaseline, TextStyle, VisualElement, Z_LABEL,
-        Z_SERIES, Z_TITLE,
+    vir::{self,
+        Color, SceneNode, TextAlign, TextBaseline, Z_LABEL, Z_SERIES, Z_TITLE,
     },
+    option::{FontWeight, FontWeightNamed},
 };
+use lievisual::text::FontStyle;
 
 const PIE_MARGIN: f64 = 60.0;
 const PIE_TITLE_SIZE: f64 = 24.0;
@@ -30,7 +31,7 @@ impl<'a> PieEngine<'a> {
 }
 
 impl<'a> LayoutEngine for PieEngine<'a> {
-    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<VisualElement>> {
+    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<SceneNode>> {
         build_pie_elements(self.pie, config)
     }
 }
@@ -38,7 +39,7 @@ impl<'a> LayoutEngine for PieEngine<'a> {
 pub fn build_pie_elements(
     pie: &PieDiagram,
     config: &OutputConfig,
-) -> DiagramResult<Vec<VisualElement>> {
+) -> DiagramResult<Vec<SceneNode>> {
     let mut elements = Vec::new();
 
     // 解析数值
@@ -67,25 +68,27 @@ pub fn build_pie_elements(
 
     // 标题
     if let Some(title) = &pie.title {
-        let title_style = TextStyle {
-            font_size: PIE_TITLE_SIZE,
-            align: TextAlign::Center,
-            vertical_align: TextBaseline::Top,
-            ..Default::default()
-        };
-        let layout = create_text_layout(title, &title_style, Some(config.width - PIE_MARGIN));
+        let title_style = vir::text_style(
+            Color::BLACK,
+            PIE_TITLE_SIZE,
+            String::new(),
+            FontWeight::Named(FontWeightNamed::Normal),
+            FontStyle::Normal,
+            TextAlign::Center,
+            TextBaseline::Top,
+        );
+        let _layout = create_text_layout(title, &title_style, Some(config.width - PIE_MARGIN));
         let title_x = config.width / 2.0;
         let title_y = PIE_MARGIN / 2.0;
 
-        elements.push(VisualElement::TextRun {
-            text: title.clone(),
-            position: Point::new(title_x, title_y),
-            style: title_style,
-            rotation: 0.0,
-            max_width: Some(config.width - PIE_MARGIN),
-            layout: Some(Box::new(layout)),
-            z_index: Z_TITLE,
-        });
+        elements.push(vir::text_node(
+            title.clone(),
+            Point::new(title_x, title_y),
+            title_style,
+            0.0,
+            Some(config.width - PIE_MARGIN),
+            Z_TITLE,
+        ));
     }
 
     // 绘制各扇区
@@ -114,15 +117,9 @@ pub fn build_pie_elements(
         path.close_path();
 
         // 饼图扇区（带描边分割）
-        let style = FillStrokeStyle::new()
-            .with_fill(color)
-            .with_stroke(Color::new(255, 255, 255), 2.0);
+        let style = vir::fs_both(color, Color::rgb(255, 255, 255), 2.0);
 
-        elements.push(VisualElement::Path {
-            path,
-            style,
-            z_index: Z_SERIES,
-        });
+        elements.push(vir::path_node(path, style, Z_SERIES));
 
         // 标签：放在扇形外缘中间位置
         let mid_angle = start_angle + slice_angle / 2.0;
@@ -137,23 +134,25 @@ pub fn build_pie_elements(
             format!("{} ({})", label, pct)
         };
 
-        let label_style = TextStyle {
-            font_size: PIE_LABEL_SIZE,
-            align: TextAlign::Center,
-            vertical_align: TextBaseline::Middle,
-            ..Default::default()
-        };
-        let label_layout = create_text_layout(&display_text, &label_style, Some(200.0));
+        let label_style = vir::text_style(
+            Color::BLACK,
+            PIE_LABEL_SIZE,
+            String::new(),
+            FontWeight::Named(FontWeightNamed::Normal),
+            FontStyle::Normal,
+            TextAlign::Center,
+            TextBaseline::Middle,
+        );
+        let _label_layout = create_text_layout(&display_text, &label_style, Some(200.0));
 
-        elements.push(VisualElement::TextRun {
-            text: display_text,
-            position: Point::new(lx, ly),
-            style: label_style,
-            rotation: 0.0,
-            max_width: Some(200.0),
-            layout: Some(Box::new(label_layout)),
-            z_index: Z_LABEL,
-        });
+        elements.push(vir::text_node(
+            display_text,
+            Point::new(lx, ly),
+            label_style,
+            0.0,
+            Some(200.0),
+            Z_LABEL,
+        ));
 
         start_angle = end_angle;
     }

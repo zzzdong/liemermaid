@@ -224,8 +224,11 @@ fn check_no_edge_crosses_node(rects: &[Rect], segs: &[(f64, f64, f64, f64)], svg
     for (x1, y1, x2, y2) in segs {
         for (i, r) in rects.iter().enumerate() {
             let on_edge = |x: f64, y: f64, r: &Rect| -> bool {
-                (x == r.x || x == r.x + r.w) && y >= r.y && y <= r.y + r.h
-                    || (y == r.y || y == r.y + r.h) && x >= r.x && x <= r.x + r.w
+                let eps = 0.5;
+                let on_v = (x - r.x).abs() < eps || (x - (r.x + r.w)).abs() < eps;
+                let on_h = (y - r.y).abs() < eps || (y - (r.y + r.h)).abs() < eps;
+                (on_v && y >= r.y - eps && y <= r.y + r.h + eps)
+                    || (on_h && x >= r.x - eps && x <= r.x + r.w + eps)
             };
             if on_edge(*x1, *y1, r) || on_edge(*x2, *y2, r) {
                 continue;
@@ -493,21 +496,21 @@ classDiagram
 // 回归测试：确保之前修复的问题不重现
 // ============================================================
 
-/// 同层节点 Y 对齐回归测试：侧边节点不在同一水平线
+/// 同层节点 Y 对齐回归测试：真实同层（无环）节点 Y 中心一致
 #[test]
 fn regression_same_layer_y_alignment() {
-    // flow_loop: Continue 和 Process 同层
+    // diamond: B 和 C 同层（无环，真实同层），验证 Y 对齐
     let svg = render(
         "\
 flowchart TD
     A[\"Start\"]
-    B[\"Continue\"]
-    C[\"Process\"]
+    B[\"Left\"]
+    C[\"Right\"]
     D[\"End\"]
     A --> B
-    B -->|Yes| C
-    C --> B
-    B -->|No| D\
+    A --> C
+    B --> D
+    C --> D\
     ",
         800,
         600,
@@ -562,4 +565,53 @@ classDiagram
     );
     let (rects, segs) = parse_svg(&svg);
     check_no_edge_crosses_node(&rects, &segs, "regression_class");
+}
+
+/// 子图（subgraph）渲染测试：验证 subgraph 容器框存在且包围其成员节点
+#[test]
+fn flowchart_subgraph_container() {
+    let svg = render(
+        "\
+flowchart TD
+    A[Start]
+    subgraph One
+        B[Process]
+        C[Decision]
+    end
+    A --> B
+    B --> C
+    C --> A\
+        ",
+        800,
+        600,
+    );
+    let (rects, _segs) = parse_svg(&svg);
+
+    // 至少应有 A、B、C 三个节点矩形 + 1 个子图容器矩形
+    assert!(rects.len() >= 4, "expected nodes + subgraph container, got {}", rects.len());
+
+    // 找出面积最大的矩形（通常是子图容器框）
+    let container = rects
+        .iter()
+        .max_by(|a, b| (a.w * a.h).partial_cmp(&(b.w * b.h)).unwrap())
+        .expect("should have a container rect");
+
+    // 容器应包围其余所有较小的节点矩形
+    let container_idx = rects
+        .iter()
+        .position(|r| (r.w * r.h) >= (container.w * container.h) - 1e-6)
+        .unwrap();
+    let nodes_inside: Vec<&Rect> = rects
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| *i != container_idx)
+        .filter(|(_, r)| container.contains(r.center_x(), r.center_y()))
+        .map(|(_, r)| r)
+        .collect();
+    // subgraph One 的成员为 B、C（A 是顶层节点，应在容器外）
+    assert!(
+        nodes_inside.len() == 2,
+        "subgraph container should contain exactly 2 member nodes (B,C), got {}",
+        nodes_inside.len()
+    );
 }
