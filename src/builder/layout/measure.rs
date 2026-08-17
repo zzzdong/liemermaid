@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
+use lievisual::text::create_text_layout;
+
 use crate::{
     ast::{Node, NodeShape},
     builder::types::OutputConfig,
-    text::create_text_layout,
     vir::{Color, TextAlign, TextBaseline, TextStyle,
     },
 };

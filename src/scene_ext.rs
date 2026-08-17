@@ -11,7 +11,7 @@
 //! | 颜色 | `geometry::Color` (f64) |
 //! | 节点 | `scene::Element` / `SceneNode` |
 //! | `z` 层级 | `SceneNode.z_index` |
-//! | 文本样式 | `text::TextStyle` |
+//! | 文本样式 | `lievisual::text::TextStyle` |
 //!
 //! liemermaid 自身保留一套 `render` 后端作为默认实现；本模块是可选旁路。
 

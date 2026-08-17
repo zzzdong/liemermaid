@@ -8,14 +8,13 @@ use crate::{
     ast::{Cardinality, ErDiagram},
     builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
-    text::{compute_text_offset, create_text_layout},
     vir::{self,
         Color, SceneNode, Stroke, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES,
         theme,
     },
     option::{FontWeight, FontWeightNamed},
 };
-use lievisual::text::FontStyle;
+use lievisual::text::{compute_text_offset, create_text_layout, FontStyle};
 
 const FONT_SIZE: f64 = theme::FONT_SIZE;
 const SMALL_FONT: f64 = 11.0;

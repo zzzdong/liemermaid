@@ -7,13 +7,12 @@ use vello_cpu::kurbo::{BezPath, Point, Rect};
 use crate::{
     ast::{ClassDiagram, RelationKind, Visibility},
     builder::{layout::types::LayoutEngine, types::OutputConfig},
-    text::{compute_text_offset, create_text_layout},
     vir::{self, Element, SceneNode,
         Color, Stroke, TextAlign, TextBaseline, TextStyle, Z_AXIS, Z_LABEL, Z_SERIES,
         theme,
     },
 };
-use lievisual::text::FontStyle;
+use lievisual::text::{compute_text_offset, create_text_layout, FontStyle};
 
 use crate::error::DiagramResult;
 

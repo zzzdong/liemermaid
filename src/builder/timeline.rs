@@ -4,13 +4,12 @@ use crate::{
     ast::TimelineDiagram,
     builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
-    text::{compute_text_offset, create_text_layout},
     vir::{self, SceneNode, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, Z_TITLE,
         theme,
     },
     option::{FontWeight, FontWeightNamed},
 };
-use lievisual::text::FontStyle;
+use lievisual::text::{compute_text_offset, create_text_layout, FontStyle};
 
 const TITLE_SIZE: f64 = 22.0;
 const SECTION_SIZE: f64 = 14.0;

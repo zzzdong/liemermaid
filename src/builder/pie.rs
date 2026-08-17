@@ -1,5 +1,7 @@
 use vello_cpu::kurbo::Point;
 
+use lievisual::text::create_text_layout;
+
 use crate::{
     ast::PieDiagram,
     builder::{
@@ -7,7 +9,6 @@ use crate::{
         types::{OutputConfig, PALETTE},
     },
     error::{DiagramError, DiagramResult},
-    text::create_text_layout,
     vir::{self,
         Color, SceneNode, TextAlign, TextBaseline, Z_LABEL, Z_SERIES, Z_TITLE,
     },

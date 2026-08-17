@@ -9,7 +9,6 @@ use crate::{
     ast::{GitGraphDiagram, GitGraphStatement},
     builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
-    text::{compute_text_offset, create_text_layout},
     vir::{self,
         Color,
         SceneNode,
@@ -22,7 +21,7 @@ use crate::{
         theme,
     },
 };
-use lievisual::text::FontStyle;
+use lievisual::text::{compute_text_offset, create_text_layout, FontStyle};
 
 
 const COMMIT_RADIUS: f64 = 8.0;

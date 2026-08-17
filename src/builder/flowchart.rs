@@ -7,7 +7,6 @@ use crate::{
     ast::{Direction, Flowchart, NodeShape},
     builder::types::OutputConfig,
     error::DiagramResult,
-    text::{compute_text_offset, create_text_layout},
     vir::{self,
         draw_arrow_head, theme, Stroke, TextAlign, TextBaseline,
         Z_AXIS, Z_LABEL, Z_SERIES, Z_SUBGRAPH, Z_SUBGRAPH_LABEL,
@@ -15,7 +14,7 @@ use crate::{
     option::{FontWeight, FontWeightNamed},
 };
 use lievisual::scene::SceneNode;
-use lievisual::text::FontStyle;
+use lievisual::text::{compute_text_offset, create_text_layout, FontStyle};
 
 use super::layout::{
     edges::route_edges,

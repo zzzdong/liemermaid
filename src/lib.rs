@@ -4,7 +4,6 @@ pub mod error;
 pub mod option;
 pub mod parser;
 pub mod scene_ext;
-pub mod text;
 pub mod vir;
 pub use ast::Diagram;
 pub use parser::MermaidParser;

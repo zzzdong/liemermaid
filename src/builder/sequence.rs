@@ -4,7 +4,6 @@ use crate::{
     ast::{MessageArrow, NotePlacement, SequenceDiagram},
     builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
-    text::{compute_text_offset, create_text_layout},
     vir::{self,
         Element,
         SceneNode,
@@ -16,7 +15,7 @@ use crate::{
         theme,
     },
 };
-use lievisual::text::FontStyle;
+use lievisual::text::{compute_text_offset, create_text_layout, FontStyle};
 
 
 const BOX_HEIGHT: f64 = 40.0;

@@ -11,14 +11,13 @@ use crate::{
         types::OutputConfig,
     },
     error::DiagramResult,
-    text::{compute_text_offset, create_text_layout},
     vir::{self, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, theme,
     },
     option::{FontWeight, FontWeightNamed},
 };
 use lievisual::geometry::Color;
 use lievisual::scene::SceneNode;
-use lievisual::text::FontStyle;
+use lievisual::text::{compute_text_offset, create_text_layout, FontStyle};
 
 const STATE_PAD_X: f64 = 18.0;
 const STATE_PAD_Y: f64 = 10.0;
