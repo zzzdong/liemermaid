@@ -1,4 +1,4 @@
-use vello_cpu::kurbo::Point;
+use lievisual::geometry::Point;
 
 use crate::ast::Direction;
 

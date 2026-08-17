@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use vello_cpu::kurbo::Point;
+use lievisual::geometry::{Point};
 
 use crate::ast::{Direction, Edge};
 

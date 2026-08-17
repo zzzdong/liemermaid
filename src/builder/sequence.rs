@@ -1,5 +1,3 @@
-use vello_cpu::kurbo::Point;
-
 use crate::{
     ast::{MessageArrow, NotePlacement, SequenceDiagram},
     builder::{layout::types::LayoutEngine, types::OutputConfig},
@@ -15,7 +13,8 @@ use crate::{
         theme,
     },
 };
-use lievisual::text::{compute_text_offset, create_text_layout, FontStyle};
+use lievisual::geometry::Point;
+use lievisual::text::{compute_text_offset, layout_text, RichSpan};
 
 
 const BOX_HEIGHT: f64 = 40.0;
@@ -62,9 +61,9 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
     let mut col_widths: Vec<f64> = Vec::with_capacity(seq.participants.len());
     for p in &seq.participants {
         let display_name = p.alias.as_deref().unwrap_or(&p.name);
-        let text_style = vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal), FontStyle::Normal, TextAlign::Left, TextBaseline::Top);
-        let layout = create_text_layout(display_name, &text_style, None);
-        let text_w = layout.width() as f64;
+        let text_style = vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, TextAlign::Left, TextBaseline::Top);
+        let layout = layout_text(&[RichSpan::new(display_name.to_string(), text_style.clone())], None);
+        let text_w = layout.width;
         col_widths.push(BOX_MIN_WIDTH.max(text_w + PAD_X * 2.0));
     }
 
@@ -89,10 +88,10 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         let rect = lievisual::geometry::Rect::new(cx - bw / 2.0, box_top, bw, box_bottom - box_top);
         elements.push(SceneNode::from(Element::RoundedRect { rect, radius: theme::NODE_RADIUS, style: vir::fs_both(theme::sequence::ACTOR_FILL, theme::sequence::ACTOR_STROKE, 2.0) }).with_z(Z_SERIES));
 
-        let ts = vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal), FontStyle::Normal, TextAlign::Left, TextBaseline::Top);
-        let layout = create_text_layout(display_name, &ts, Some(bw - 8.0));
+        let ts = vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, TextAlign::Left, TextBaseline::Top);
+        let layout = layout_text(&[RichSpan::new(display_name.to_string(), ts)], Some(bw - 8.0));
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
-        elements.push(vir::text_node(display_name.to_string(), Point::new(cx + x_off, (box_top + box_bottom) / 2.0 + y_off), vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal), FontStyle::Normal, TextAlign::Center, TextBaseline::Middle), 0.0, Some(bw - 8.0), Z_LABEL));
+        elements.push(vir::text_node(display_name.to_string(), Point::new(cx + x_off, (box_top + box_bottom) / 2.0 + y_off), vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, TextAlign::Center, TextBaseline::Middle), 0.0, Some(bw - 8.0), Z_LABEL));
     }
 
     // ---- 计算消息/备注占用的垂直空间 ----
@@ -174,11 +173,11 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         // 消息文本
         if !text.is_empty() {
             let mid_x = (from_x + to_x) / 2.0;
-            let ts = vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal), FontStyle::Normal, TextAlign::Left, TextBaseline::Top);
-            let layout = create_text_layout(text, &ts, Some(200.0));
+            let ts = vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, TextAlign::Left, TextBaseline::Top);
+            let layout = layout_text(&[RichSpan::new(text.to_string(), ts.clone())], Some(200.0));
             let (x_off, y_off) =
                 compute_text_offset(&layout, TextAlign::Center, TextBaseline::Bottom);
-            elements.push(vir::text_node(text.clone(), Point::new(mid_x + x_off, arrow_y - 4.0 + y_off), vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal), FontStyle::Normal, TextAlign::Left, TextBaseline::Top), 0.0, Some(200.0), Z_LABEL));
+            elements.push(vir::text_node(text.clone(), Point::new(mid_x + x_off, arrow_y - 4.0 + y_off), vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, TextAlign::Left, TextBaseline::Top), 0.0, Some(200.0), Z_LABEL));
         }
     }
 
@@ -219,10 +218,10 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         let note_rect = lievisual::geometry::Rect::new(nx, note_y, nw, NOTE_HEIGHT);
         elements.push(SceneNode::from(Element::RoundedRect { rect: note_rect, radius: theme::NODE_RADIUS, style: vir::fs_both(theme::sequence::NOTE_FILL, theme::sequence::NOTE_STROKE, 1.5) }).with_z(Z_SERIES));
 
-        let ts = vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal), FontStyle::Normal, TextAlign::Left, TextBaseline::Top);
-        let layout = create_text_layout(text, &ts, Some(nw - 10.0));
+        let ts = vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, TextAlign::Left, TextBaseline::Top);
+        let layout = layout_text(&[RichSpan::new(text.to_string(), ts.clone())], Some(nw - 10.0));
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
-        elements.push(vir::text_node(text.clone(), Point::new(nx + nw / 2.0 + x_off, note_y + NOTE_HEIGHT / 2.0 + y_off), vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal), FontStyle::Normal, TextAlign::Left, TextBaseline::Top), 0.0, Some(nw - 10.0), Z_LABEL));
+        elements.push(vir::text_node(text.clone(), Point::new(nx + nw / 2.0 + x_off, note_y + NOTE_HEIGHT / 2.0 + y_off), vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, TextAlign::Left, TextBaseline::Top), 0.0, Some(nw - 10.0), Z_LABEL));
     }
 
     elements

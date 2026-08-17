@@ -24,6 +24,9 @@ pub enum DiagramError {
     #[error("unsupported diagram type: {0}")]
     UnsupportedType(String),
 
+    #[error("parse error: {0}")]
+    Parse(#[from] ParseError),
+
     #[error("layout error: {0}")]
     LayoutError(String),
 

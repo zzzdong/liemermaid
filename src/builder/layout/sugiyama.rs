@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
-use vello_cpu::kurbo::Point;
+use lievisual::geometry::{Point};
 
 /// Sugiyama 布局配置参数
 #[derive(Debug, Clone)]

@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use petgraph::graph::{DiGraph, NodeIndex};
-use vello_cpu::kurbo::{BezPath, Point, Rect};
+use lievisual::geometry::{Point, Rect};
+use vello_cpu::kurbo::BezPath;
 
 use crate::{
     ast::{Direction, Flowchart, NodeShape},
@@ -11,10 +12,9 @@ use crate::{
         draw_arrow_head, theme, Stroke, TextAlign, TextBaseline,
         Z_AXIS, Z_LABEL, Z_SERIES, Z_SUBGRAPH, Z_SUBGRAPH_LABEL,
     },
-    option::{FontWeight, FontWeightNamed},
 };
 use lievisual::scene::SceneNode;
-use lievisual::text::{compute_text_offset, create_text_layout, FontStyle};
+use lievisual::text::{compute_text_offset, layout_text, RichSpan};
 
 use super::layout::{
     edges::route_edges,
@@ -96,7 +96,7 @@ fn has_subgraphs(fc: &Flowchart) -> bool {
 /// 变换后整体平移使坐标非负（与 dagre 的 bounding box 一致）。
 /// LR/RL 同时互换节点矩形宽高，使旋转后矩形方向与坐标排列匹配。
 fn transform_sugiyama_direction(result: &mut SugiyamaResult, direction: Direction) {
-    use vello_cpu::kurbo::Point;
+    use lievisual::geometry::{Point};
 
     let map = |p: Point| -> Point {
         match direction {
@@ -380,8 +380,6 @@ fn render_layout(layout: &Layout) -> Vec<SceneNode> {
                 theme::flowchart::SUBGRAPH_TITLE,
                 NODE_FONT_SIZE,
                 theme::FONT_FAMILY,
-                FontWeight::Named(FontWeightNamed::Normal),
-                FontStyle::Normal,
                 TextAlign::Left,
                 TextBaseline::Top,
             );
@@ -755,8 +753,6 @@ fn draw_layout_node(
         theme::flowchart::TEXT,
         NODE_FONT_SIZE,
         theme::FONT_FAMILY,
-        FontWeight::Named(FontWeightNamed::Normal),
-        FontStyle::Normal,
         TextAlign::Center,
         TextBaseline::Middle,
     );
@@ -765,7 +761,7 @@ fn draw_layout_node(
     } else {
         None
     };
-    let layout = create_text_layout(text, &text_style, max_w);
+    let layout = layout_text(&[RichSpan::new(text.to_string(), text_style.clone())], max_w);
 
     let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
     let text_position = Point::new(center.x + x_off, center.y + y_off);
@@ -786,7 +782,7 @@ mod direction_transform_tests {
     use std::collections::{HashMap, HashSet};
 
     fn sample_result() -> SugiyamaResult {
-        use vello_cpu::kurbo::Point;
+        use lievisual::geometry::{Point};
         let a = NodeIndex::new(0);
         let b = NodeIndex::new(1);
         let c = NodeIndex::new(2);

@@ -1,8 +1,8 @@
 //! # liemermaid × lievisual 集成
 //!
-//! builder 已直接产出 [`lievisual::Scene`]（其节点即 lievisual 的 `SceneNode` /
-//! `Element`），本模块仅作为**渲染旁路**：当希望用 lievisual 的统一后端
-//! （SVG / vello_cpu PNG）输出时调用。
+//! builder 直接产出 [`lievisual::Scene`]（节点即 lievisual 的 `SceneNode` /
+//! `Element`），本模块是 **唯一的渲染路径**：委托 lievisual 的统一后端
+//! （SVG / vello_cpu PNG）输出。liemermaid 自身不维护任何渲染后端。
 //!
 //! 字段对齐说明（builder 侧已直接采用 lievisual IR）：
 //!
@@ -12,8 +12,6 @@
 //! | 节点 | `scene::Element` / `SceneNode` |
 //! | `z` 层级 | `SceneNode.z_index` |
 //! | 文本样式 | `lievisual::text::TextStyle` |
-//!
-//! liemermaid 自身保留一套 `render` 后端作为默认实现；本模块是可选旁路。
 
 use lievisual::render::{Renderer, SvgRenderer};
 
@@ -28,9 +26,12 @@ pub fn render_scene_svg(scene: &lievisual::Scene) -> String {
 /// 用 lievisual 的 vello_cpu 后端渲染场景为 PNG 字节。
 pub fn render_scene_png(scene: &lievisual::Scene) -> Vec<u8> {
     use lievisual::render::VelloPixmapRenderer;
-    VelloPixmapRenderer::new(scene.width as u32, scene.height as u32)
-        .with_background(scene.background)
-        .render_png(scene)
+    let w = (scene.width.round() as i64).max(1) as u32;
+    let h = (scene.height.round() as i64).max(1) as u32;
+    let mut renderer =
+        VelloPixmapRenderer::new(w, h)
+            .with_background(scene.background);
+    renderer.render_png(scene)
 }
 
 #[cfg(test)]

@@ -6,6 +6,7 @@ pub mod layout;
 pub mod pie;
 pub mod sequence;
 pub mod state;
+pub mod theme;
 pub mod timeline;
 pub mod types;
 
@@ -46,6 +47,7 @@ pub fn build_diagram_with_config(
     };
     let nodes = engine.layout(config)?;
     let mut scene = lievisual::Scene::new(config.width, config.height);
+    scene.background = config.background;
     scene.nodes.extend(fit_to_canvas(nodes, config));
     Ok(scene)
 }
@@ -79,8 +81,8 @@ fn compute_bbox(elements: &[SceneNode]) -> Option<(f64, f64, f64, f64)> {
 
         match &element.element {
             Element::Rect { rect, .. } | Element::RoundedRect { rect, .. } => {
-                expand!(rect.x, rect.y);
-                expand!(rect.x + rect.width, rect.y + rect.height);
+                expand!(rect.min_x(), rect.min_y());
+                expand!(rect.max_x(), rect.max_y());
             }
             Element::Circle { center, radius, .. } => {
                 expand!(center.x - radius, center.y - radius);
@@ -119,14 +121,14 @@ fn compute_bbox(elements: &[SceneNode]) -> Option<(f64, f64, f64, f64)> {
             Element::Text { position, layout, style, .. } => {
                 let tw = layout
                     .as_ref()
-                    .map(|l| l.width() as f64)
+                    .map(|l| l.width)
                     .unwrap_or(style.font_size * 4.0);
                 let th = layout
                     .as_ref()
-                    .map(|l| l.height() as f64)
+                    .map(|l| l.height)
                     .unwrap_or(style.font_size);
                 let (tx0, tx1) = match style.align {
-                    TextAlign::Left => (position.x, position.x + tw),
+                    TextAlign::Left | TextAlign::Justify => (position.x, position.x + tw),
                     TextAlign::Center => (position.x - tw / 2.0, position.x + tw / 2.0),
                     TextAlign::Right => (position.x - tw, position.x),
                 };

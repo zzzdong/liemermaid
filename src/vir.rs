@@ -3,16 +3,18 @@
 //! 本模块**不引入独立的 IR**：builder 直接使用 lievisual 的真实类型
 //! （[`Element`] / [`SceneNode`] / [`Color`] / [`TextStyle`] / [`Stroke`] / [`FillStrokeStyle`]），
 //! 这里只提供与历史 `VisualElement` 写法等价的构造器（把 `z_index` 提升到 [`SceneNode::z_index`]），
-//! 以及从 liemermaid 旧枚举（`FontWeight` / `FontStyle` / `TextAlign` / `TextBaseline`）到 lievisual
-//! 类型的转换，减少 builder 的样板代码。
+//! 减少 builder 的样板代码。
+//!
+//! 几何坐标统一使用 [`lievisual::geometry`]（即 kurbo 类型，由 lievisual 直接 re-export，
+//! 与 builder 布局算法零转换互通）；仅矢量路径 [`BezPath`] 保留 `vello_cpu::kurbo`。
 //!
 //! 历史 `src/visual.rs`（`VisualElement` 及其私有样式类型）已删除，统一改用 lievisual IR。
 
-use crate::option::{FontWeight, FontWeightNamed};
-use vello_cpu::kurbo::{BezPath, Point, Rect};
-use lievisual::text::{FontStyle as LieFontStyle, TextStyle as LieTextStyle};
+use vello_cpu::kurbo::BezPath;
+use lievisual::geometry::{Point, Rect};
+use lievisual::text::TextStyle as LieTextStyle;
 
-pub use lievisual::geometry::{Color, Transform};
+pub use lievisual::geometry::{Color, Point as GeoPoint, Rect as GeoRect, Transform};
 pub use lievisual::scene::{Element, Fill, FillStrokeStyle, GradientStop, LinearGradient, SceneNode, Stroke};
 pub use lievisual::text::{FontStyle, TextAlign, TextBaseline, TextStyle};
 
@@ -34,38 +36,19 @@ pub const Z_SUBGRAPH: i32 = 5;
 pub const Z_SUBGRAPH_LABEL: i32 = 6;
 
 // ---------------------------------------------------------------------------
-// 兼容构造器
+// 图元样式构造器
 // ---------------------------------------------------------------------------
 
-/// 从 liemermaid 旧 `FontWeight` 枚举转换到 lievisual 的字重（f32，100–900）。
-pub fn font_weight_to_f32(w: FontWeight) -> f32 {
-    match w {
-        FontWeight::Named(FontWeightNamed::Normal) => 400.0,
-        FontWeight::Named(FontWeightNamed::Bold) => 700.0,
-        FontWeight::Named(FontWeightNamed::Bolder) => 800.0,
-        FontWeight::Named(FontWeightNamed::Lighter) => 300.0,
-        FontWeight::Numeric(n) => n as f32,
-    }
-}
-
-/// 兼容历史 `TextStyle { color, font_size, font_family, font_weight, font_style, align, vertical_align }`。
+/// 构造 [`TextStyle`]。字重固定常规（400）、样式固定正体，
+/// 与 lievisual 迁移后的 builder 实际用法一致（不再经过旧 `FontWeight` 枚举）。
 pub fn text_style(
     color: Color,
     font_size: f64,
     font_family: impl Into<String>,
-    weight: FontWeight,
-    font_style: FontStyle,
     align: TextAlign,
     baseline: TextBaseline,
 ) -> TextStyle {
-    let fs = match font_style {
-        FontStyle::Normal => LieFontStyle::Normal,
-        FontStyle::Italic => LieFontStyle::Italic,
-        FontStyle::Oblique => LieFontStyle::Oblique,
-    };
     LieTextStyle::new(color, font_size, font_family)
-        .with_weight(font_weight_to_f32(weight))
-        .with_style(fs)
         .with_align(align)
         .with_baseline(baseline)
 }
@@ -97,33 +80,27 @@ pub fn fs_both(fill: Color, stroke: Color, width: f64) -> FillStrokeStyle {
 // 图元构造（z 提升到 SceneNode.z_index）
 // ---------------------------------------------------------------------------
 
-fn to_lie_point(p: Point) -> lievisual::geometry::Point {
-    lievisual::geometry::Point::new(p.x, p.y)
-}
-
-fn to_lie_rect(r: Rect) -> lievisual::geometry::Rect {
-    lievisual::geometry::Rect::new(r.x0, r.y0, r.width(), r.height())
-}
+/// 坐标统一使用 lievisual `Point` / `Rect`（不再经 kurbo → lievisual 转换）。
+/// 仅矢量路径（[`BezPath`]）保留 kurbo（lievisual 的 `Element::Path` 原生使用它）。
 
 pub fn rect_node(rect: Rect, radius: Option<f64>, style: FillStrokeStyle, z: i32) -> SceneNode {
-    let lr = to_lie_rect(rect);
     let el = match radius {
-        Some(r) => Element::rounded_rect(lr, r, style),
-        None => Element::rect(lr, style),
+        Some(r) => Element::rounded_rect(rect, r, style),
+        None => Element::rect(rect, style),
     };
     SceneNode::from(el).with_z(z)
 }
 
 pub fn circle_node(center: Point, radius: f64, style: FillStrokeStyle, z: i32) -> SceneNode {
-    SceneNode::from(Element::circle(to_lie_point(center), radius, style)).with_z(z)
+    SceneNode::from(Element::circle(center, radius, style)).with_z(z)
 }
 
 pub fn line_node(start: Point, end: Point, style: Stroke, z: i32) -> SceneNode {
-    SceneNode::from(Element::line(to_lie_point(start), to_lie_point(end), style)).with_z(z)
+    SceneNode::from(Element::line(start, end, style)).with_z(z)
 }
 
 pub fn polyline_node(points: Vec<Point>, style: Stroke, z: i32) -> SceneNode {
-    SceneNode::from(Element::poly(points.into_iter().map(to_lie_point).collect(), style)).with_z(z)
+    SceneNode::from(Element::poly(points, style)).with_z(z)
 }
 
 pub fn path_node(path: BezPath, style: FillStrokeStyle, z: i32) -> SceneNode {
@@ -149,7 +126,7 @@ pub fn text_node(
     if max_width.is_some() {
         s.max_width = max_width;
     }
-    SceneNode::from(Element::text(content, to_lie_point(position), s)).with_z(z)
+    SceneNode::from(Element::text(content, position, s)).with_z(z)
 }
 
 pub fn group_node(children: Vec<SceneNode>, transform: Option<Transform>, z: i32) -> SceneNode {
@@ -161,6 +138,8 @@ pub fn group_node(children: Vec<SceneNode>, transform: Option<Transform>, z: i32
 }
 
 /// 边终点箭头（填充三角形），与历史 `visual::draw_arrow_head` 等价。
+///
+/// `tip` / `dir` 为 lievisual 坐标（即 kurbo 类型）；内部构造 kurbo [`BezPath`] 供 `Element::Path` 使用。
 pub fn draw_arrow_head(elements: &mut Vec<SceneNode>, tip: &Point, dir: &Point, style: &Stroke) {
     let sz = 10.0;
     let perp_x = -dir.y;
@@ -169,9 +148,9 @@ pub fn draw_arrow_head(elements: &mut Vec<SceneNode>, tip: &Point, dir: &Point, 
     let p1 = Point::new(base.x + perp_x * sz * 0.5, base.y + perp_y * sz * 0.5);
     let p2 = Point::new(base.x - perp_x * sz * 0.5, base.y - perp_y * sz * 0.5);
     let mut path = BezPath::new();
-    path.move_to(*tip);
-    path.line_to(p1);
-    path.line_to(p2);
+    path.move_to(Point::new(tip.x, tip.y));
+    path.line_to(Point::new(p1.x, p1.y));
+    path.line_to(Point::new(p2.x, p2.y));
     path.close_path();
     elements.push(path_node(path, fs_both(style.color, style.color, style.width), Z_AXIS));
 }
@@ -195,119 +174,6 @@ pub fn gradient_def(angle_deg: f64, stops: Vec<(f64, Color)>) -> LinearGradient 
 }
 
 // ---------------------------------------------------------------------------
-// 主题色（原 visual::theme）
-// ---------------------------------------------------------------------------
-pub mod theme {
-    use super::Color;
-
-    // ---- 基础 ----
-    pub const BACKGROUND: Color = Color::new(255 as f64 / 255.0, 255 as f64 / 255.0, 255 as f64 / 255.0, 1.0);
-    pub const FONT_FAMILY: &str = "Segoe UI, system-ui, -apple-system, sans-serif";
-    pub const FONT_SIZE: f64 = 13.0;
-    pub const NODE_RADIUS: f64 = 6.0;
-
-    // ---- 连线通用 ----
-    pub const EDGE_COLOR: Color = Color::new(148 as f64 / 255.0, 163 as f64 / 255.0, 184 as f64 / 255.0, 1.0); // slate-400
-    pub const EDGE_WIDTH: f64 = 2.0;
-    pub const TEXT_COLOR: Color = Color::new(30 as f64 / 255.0, 41 as f64 / 255.0, 59 as f64 / 255.0, 1.0); // slate-800
-
-    // ==================== Flowchart (蓝) ====================
-    pub mod flowchart {
-        use super::super::Color;
-        pub const FILL: Color = Color::new(238 as f64 / 255.0, 242 as f64 / 255.0, 255 as f64 / 255.0, 1.0); // indigo-50
-        pub const STROKE: Color = Color::new(99 as f64 / 255.0, 102 as f64 / 255.0, 241 as f64 / 255.0, 1.0); // indigo-500
-        pub const TEXT: Color = super::TEXT_COLOR;
-        pub const EDGE: Color = super::EDGE_COLOR;
-        pub const SUBGRAPH_STROKE: Color = Color::new(148 as f64 / 255.0, 163 as f64 / 255.0, 184 as f64 / 255.0, 1.0); // slate-400
-        pub const SUBGRAPH_TITLE: Color = Color::new(71 as f64 / 255.0, 85 as f64 / 255.0, 105 as f64 / 255.0, 1.0); // slate-600
-    }
-
-    // ==================== State (绿) ====================
-    pub mod state {
-        use super::super::Color;
-        pub const FILL: Color = Color::new(240 as f64 / 255.0, 253 as f64 / 255.0, 244 as f64 / 255.0, 1.0); // green-50
-        pub const STROKE: Color = Color::new(34 as f64 / 255.0, 197 as f64 / 255.0, 94 as f64 / 255.0, 1.0); // green-500
-        pub const TEXT: Color = Color::new(22 as f64 / 255.0, 101 as f64 / 255.0, 52 as f64 / 255.0, 1.0); // green-800
-        pub const EDGE: Color = super::EDGE_COLOR;
-        pub const START_FILL: Color = Color::new(22 as f64 / 255.0, 101 as f64 / 255.0, 52 as f64 / 255.0, 1.0); // green-800
-        pub const END_STROKE: Color = Color::new(34 as f64 / 255.0, 197 as f64 / 255.0, 94 as f64 / 255.0, 1.0); // green-500
-    }
-
-    // ==================== Class (紫) ====================
-    pub mod class {
-        use super::super::Color;
-        pub const FILL: Color = Color::new(255 as f64 / 255.0, 255 as f64 / 255.0, 255 as f64 / 255.0, 1.0); // white
-        pub const HEADER_FILL: Color = Color::new(250 as f64 / 255.0, 245 as f64 / 255.0, 255 as f64 / 255.0, 1.0); // purple-50
-        pub const STROKE: Color = Color::new(168 as f64 / 255.0, 85 as f64 / 255.0, 247 as f64 / 255.0, 1.0); // purple-500
-        pub const TEXT: Color = super::TEXT_COLOR;
-        pub const EDGE: Color = super::EDGE_COLOR;
-        pub const SEPARATOR: Color = Color::new(214 as f64 / 255.0, 188 as f64 / 255.0, 250 as f64 / 255.0, 1.0); // purple-200
-        pub const DIAMOND_FILL: Color = Color::new(168 as f64 / 255.0, 85 as f64 / 255.0, 247 as f64 / 255.0, 1.0); // purple-500
-    }
-
-    // ==================== Sequence (天蓝) ====================
-    pub mod sequence {
-        use super::super::Color;
-        pub const ACTOR_FILL: Color = Color::new(240 as f64 / 255.0, 249 as f64 / 255.0, 255 as f64 / 255.0, 1.0); // sky-50
-        pub const ACTOR_STROKE: Color = Color::new(14 as f64 / 255.0, 165 as f64 / 255.0, 233 as f64 / 255.0, 1.0); // sky-500
-        pub const FILL: Color = Color::new(240 as f64 / 255.0, 249 as f64 / 255.0, 255 as f64 / 255.0, 1.0); // sky-50
-        pub const STROKE: Color = Color::new(14 as f64 / 255.0, 165 as f64 / 255.0, 233 as f64 / 255.0, 1.0); // sky-500
-        pub const TEXT: Color = super::TEXT_COLOR;
-        pub const EDGE: Color = super::EDGE_COLOR;
-        pub const LIFELINE: Color = Color::new(203 as f64 / 255.0, 213 as f64 / 255.0, 225 as f64 / 255.0, 1.0); // slate-300
-        pub const NOTE_FILL: Color = Color::new(254 as f64 / 255.0, 252 as f64 / 255.0, 232 as f64 / 255.0, 1.0); // yellow-50
-        pub const NOTE_STROKE: Color = Color::new(234 as f64 / 255.0, 179 as f64 / 255.0, 8 as f64 / 255.0, 1.0); // yellow-500
-    }
-
-    // ==================== ER (琥珀) ====================
-    pub mod er {
-        use super::super::Color;
-        pub const FILL: Color = Color::new(255 as f64 / 255.0, 251 as f64 / 255.0, 235 as f64 / 255.0, 1.0); // amber-50
-        pub const HEADER_FILL: Color = Color::new(254 as f64 / 255.0, 243 as f64 / 255.0, 199 as f64 / 255.0, 1.0); // amber-100
-        pub const STROKE: Color = Color::new(245 as f64 / 255.0, 158 as f64 / 255.0, 11 as f64 / 255.0, 1.0); // amber-500
-        pub const TEXT: Color = super::TEXT_COLOR;
-        pub const EDGE: Color = super::EDGE_COLOR;
-    }
-
-    // ==================== Timeline (粉) ====================
-    pub mod timeline {
-        use super::super::Color;
-        pub const LINE: Color = Color::new(236 as f64 / 255.0, 72 as f64 / 255.0, 153 as f64 / 255.0, 1.0); // pink-500
-        pub const TEXT: Color = super::TEXT_COLOR;
-        pub const TITLE: Color = Color::new(30 as f64 / 255.0, 41 as f64 / 255.0, 59 as f64 / 255.0, 1.0); // slate-800
-    }
-
-    // ==================== Git Graph (多分支) ====================
-    pub mod gitgraph {
-        use super::super::Color;
-        pub const BRANCH_COLORS: [Color; 8] = [
-            Color::new(99 as f64 / 255.0, 102 as f64 / 255.0, 241 as f64 / 255.0, 1.0),  // indigo-500
-            Color::new(249 as f64 / 255.0, 115 as f64 / 255.0, 22 as f64 / 255.0, 1.0),  // orange-500
-            Color::new(34 as f64 / 255.0, 197 as f64 / 255.0, 94 as f64 / 255.0, 1.0),   // green-500
-            Color::new(234 as f64 / 255.0, 179 as f64 / 255.0, 8 as f64 / 255.0, 1.0),   // yellow-500
-            Color::new(168 as f64 / 255.0, 85 as f64 / 255.0, 247 as f64 / 255.0, 1.0),  // purple-500
-            Color::new(6 as f64 / 255.0, 182 as f64 / 255.0, 212 as f64 / 255.0, 1.0),   // cyan-500
-            Color::new(148 as f64 / 255.0, 163 as f64 / 255.0, 184 as f64 / 255.0, 1.0), // slate-400
-            Color::new(236 as f64 / 255.0, 72 as f64 / 255.0, 153 as f64 / 255.0, 1.0),  // pink-500
-        ];
-        pub const TEXT: Color = super::TEXT_COLOR;
-        pub const COMMIT_STROKE: Color = Color::new(255 as f64 / 255.0, 255 as f64 / 255.0, 255 as f64 / 255.0, 1.0);
-    }
-
-    // ==================== Pie (多色轮盘) ====================
-    pub mod pie {
-        use super::super::Color;
-        pub const COLORS: [Color; 10] = [
-            Color::new(99 as f64 / 255.0, 102 as f64 / 255.0, 241 as f64 / 255.0, 1.0), // indigo-500
-            Color::new(14 as f64 / 255.0, 165 as f64 / 255.0, 233 as f64 / 255.0, 1.0), // sky-500
-            Color::new(249 as f64 / 255.0, 115 as f64 / 255.0, 22 as f64 / 255.0, 1.0), // orange-500
-            Color::new(34 as f64 / 255.0, 197 as f64 / 255.0, 94 as f64 / 255.0, 1.0),  // green-500
-            Color::new(168 as f64 / 255.0, 85 as f64 / 255.0, 247 as f64 / 255.0, 1.0), // purple-500
-            Color::new(234 as f64 / 255.0, 179 as f64 / 255.0, 8 as f64 / 255.0, 1.0),  // yellow-500
-            Color::new(236 as f64 / 255.0, 72 as f64 / 255.0, 153 as f64 / 255.0, 1.0), // pink-500
-            Color::new(6 as f64 / 255.0, 182 as f64 / 255.0, 212 as f64 / 255.0, 1.0),  // cyan-500
-            Color::new(239 as f64 / 255.0, 68 as f64 / 255.0, 68 as f64 / 255.0, 1.0),  // red-500
-            Color::new(20 as f64 / 255.0, 184 as f64 / 255.0, 166 as f64 / 255.0, 1.0), // teal-500
-        ];
-    }
-}
+// 主题色（原 visual::theme）已下沉为 `builder::theme`，此处重导出以保持
+// 各图表 builder 的 `use crate::vir::theme` 引用不变。
+pub use crate::builder::theme;

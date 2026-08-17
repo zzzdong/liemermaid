@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use lievisual::text::create_text_layout;
+use lievisual::text::{layout_text, RichSpan};
 
 use crate::{
     ast::{Node, NodeShape},
@@ -96,9 +96,9 @@ fn measure_node(node: &Node, _config: &OutputConfig) -> NodeMetrics {
         .with_align(TextAlign::Center)
         .with_baseline(TextBaseline::Middle);
 
-    let layout = create_text_layout(text, &text_style, None);
-    let text_w = layout.width() as f64;
-    let text_h = layout.height() as f64;
+    let layout = layout_text(&[RichSpan::new(text.to_string(), text_style.clone())], None);
+    let text_w = layout.width;
+    let text_h = layout.height;
 
     let (min_w, min_h, pad_x, pad_y) = shape_multiplier(&node.shape);
 

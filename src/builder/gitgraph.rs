@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use petgraph::Direction;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
-use vello_cpu::kurbo::Point;
+use lievisual::geometry::{Point};
 
 use crate::{
     ast::{GitGraphDiagram, GitGraphStatement},
@@ -21,7 +21,7 @@ use crate::{
         theme,
     },
 };
-use lievisual::text::{compute_text_offset, create_text_layout, FontStyle};
+use lievisual::text::{compute_text_offset, layout_text, RichSpan};
 
 
 const COMMIT_RADIUS: f64 = 8.0;
@@ -252,7 +252,7 @@ pub fn build_gitgraph_elements(
             let ts = TextStyle::new(color, FONT_SIZE, theme::FONT_FAMILY.to_string())
                 .with_align(TextAlign::Left)
                 .with_baseline(TextBaseline::Middle);
-            let layout = create_text_layout(tag, &ts, Some(200.0));
+            let layout = layout_text(&[RichSpan::new(tag.to_string(), ts.clone())], Some(200.0));
             let (x_off, y_off) =
                 compute_text_offset(&layout, TextAlign::Left, TextBaseline::Middle);
             elements.push(vir::text_node(
@@ -262,8 +262,6 @@ pub fn build_gitgraph_elements(
                     color,
                     FONT_SIZE,
                     theme::FONT_FAMILY,
-                    crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal),
-                    FontStyle::Normal,
                     TextAlign::Left,
                     TextBaseline::Top,
                 ),
@@ -280,7 +278,7 @@ pub fn build_gitgraph_elements(
         let ts = TextStyle::new(color, FONT_SIZE, theme::FONT_FAMILY.to_string())
             .with_align(TextAlign::Right)
             .with_baseline(TextBaseline::Middle);
-        let layout = create_text_layout(branch_name, &ts, Some(120.0));
+        let layout = layout_text(&[RichSpan::new(branch_name.to_string(), ts.clone())], Some(120.0));
         let x = base_x + i as f64 * BRANCH_SPACING;
         let y = TOP_MARGIN + 12.0;
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Right, TextBaseline::Middle);
@@ -292,8 +290,6 @@ pub fn build_gitgraph_elements(
                 color,
                 FONT_SIZE,
                 theme::FONT_FAMILY,
-                crate::option::FontWeight::Named(crate::option::FontWeightNamed::Normal),
-                FontStyle::Normal,
                 TextAlign::Left,
                 TextBaseline::Top,
             ),

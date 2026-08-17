@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use vello_cpu::kurbo::Point;
+use lievisual::geometry::{Point};
 
 use crate::{ast::Direction, builder::types::OutputConfig};
 

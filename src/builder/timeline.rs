@@ -1,4 +1,4 @@
-use vello_cpu::kurbo::Point;
+use lievisual::geometry::{Point};
 
 use crate::{
     ast::TimelineDiagram,
@@ -7,9 +7,8 @@ use crate::{
     vir::{self, SceneNode, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, Z_TITLE,
         theme,
     },
-    option::{FontWeight, FontWeightNamed},
 };
-use lievisual::text::{compute_text_offset, create_text_layout, FontStyle};
+use lievisual::text::{compute_text_offset, layout_text, RichSpan};
 
 const TITLE_SIZE: f64 = 22.0;
 const SECTION_SIZE: f64 = 14.0;
@@ -48,12 +47,10 @@ pub fn build_timeline_elements(
             theme::timeline::TITLE,
             TITLE_SIZE,
             theme::FONT_FAMILY.to_string(),
-            FontWeight::Named(FontWeightNamed::Normal),
-            FontStyle::Normal,
             TextAlign::Center,
             TextBaseline::Top,
         );
-        let layout = create_text_layout(title, &ts, Some(config.width - 80.0));
+        let layout = layout_text(&[RichSpan::new(title.to_string(), ts.clone())], Some(config.width - 80.0));
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Top);
         elements.push(vir::text_node(
             title.clone(),
@@ -97,13 +94,11 @@ pub fn build_timeline_elements(
             theme::timeline::TEXT,
             SECTION_SIZE,
             theme::FONT_FAMILY.to_string(),
-            FontWeight::Named(FontWeightNamed::Normal),
-            FontStyle::Normal,
             TextAlign::Center,
             TextBaseline::Top,
         );
-        let layout = create_text_layout(&section.name, &ts, Some(section_spacing - 10.0));
-        let line_count = layout.lines().count().max(1);
+        let layout = layout_text(&[RichSpan::new(section.name.to_string(), ts.clone())], Some(section_spacing - 10.0));
+        let line_count = layout.lines.len().max(1);
         let estimated_h = line_count as f64 * 20.0;
 
         elements.push(vir::text_node(
@@ -139,12 +134,10 @@ pub fn build_timeline_elements(
                 theme::timeline::TEXT,
                 EVENT_SIZE,
                 theme::FONT_FAMILY.to_string(),
-                FontWeight::Named(FontWeightNamed::Normal),
-                FontStyle::Normal,
                 TextAlign::Left,
                 TextBaseline::Top,
             );
-            let _el = create_text_layout(event, &ets, Some(section_spacing - 25.0));
+            let _el = layout_text(&[RichSpan::new(event.to_string(), ets.clone())], Some(section_spacing - 25.0));
             elements.push(vir::text_node(
                 event.clone(),
                 Point::new(cx + 10.0, event_y),

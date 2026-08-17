@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use petgraph::graph::UnGraph;
 use petgraph::visit::EdgeRef;
-use vello_cpu::kurbo::{Point, Rect};
+use lievisual::geometry::{Point, Rect};
 
 use crate::{
     ast::{Cardinality, ErDiagram},
@@ -12,9 +12,8 @@ use crate::{
         Color, SceneNode, Stroke, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES,
         theme,
     },
-    option::{FontWeight, FontWeightNamed},
 };
-use lievisual::text::{compute_text_offset, create_text_layout, FontStyle};
+use lievisual::text::{compute_text_offset, layout_text, RichSpan};
 
 const FONT_SIZE: f64 = theme::FONT_SIZE;
 const SMALL_FONT: f64 = 11.0;
@@ -59,13 +58,11 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
             theme::er::TEXT,
             FONT_SIZE,
             theme::FONT_FAMILY.to_string(),
-            FontWeight::Named(FontWeightNamed::Normal),
-            FontStyle::Normal,
             TextAlign::Center,
             TextBaseline::Middle,
         );
-        let name_layout = create_text_layout(&ent.name, &ts, None);
-        let name_w = name_layout.width() as f64 + ENTITY_PAD * 2.0;
+        let name_layout = layout_text(&[RichSpan::new(ent.name.to_string(), ts.clone())], None);
+        let name_w = name_layout.width + ENTITY_PAD * 2.0;
 
         let mut attr_lines = Vec::new();
         for attr in &ent.attributes {
@@ -79,16 +76,14 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
                 Color::BLACK,
                 SMALL_FONT,
                 String::new(),
-                FontWeight::Named(FontWeightNamed::Normal),
-                FontStyle::Normal,
                 TextAlign::Left,
                 TextBaseline::Top,
             );
-            let l = create_text_layout(line, &small_ts, None);
-            max_w = max_w.max(l.width() as f64 + ENTITY_PAD * 2.0);
+            let l = layout_text(&[RichSpan::new(line.to_string(), small_ts.clone())], None);
+            max_w = max_w.max(l.width + ENTITY_PAD * 2.0);
         }
 
-        let header_h = name_layout.height() as f64 + 12.0;
+        let header_h = name_layout.height + 12.0;
         let attr_h = if attr_lines.is_empty() {
             0.0
         } else {
@@ -124,20 +119,18 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
         Color::BLACK,
         FONT_SIZE,
         theme::FONT_FAMILY.to_string(),
-        FontWeight::Named(FontWeightNamed::Normal),
-        FontStyle::Normal,
         TextAlign::Center,
         TextBaseline::Middle,
     );
     for name in &all_entity_names {
         if !entity_layouts.contains_key(name) {
-            let name_layout = create_text_layout(name, &ts, None);
-            let h = name_layout.height() as f64 + 12.0;
+            let name_layout = layout_text(&[RichSpan::new(name.to_string(), ts.clone())], None);
+            let h = name_layout.height + 12.0;
             entity_layouts.insert(
                 name.clone(),
                 EntityLayout {
                     name: name.clone(),
-                    width: name_layout.width() as f64 + ENTITY_PAD * 2.0 + ENTITY_MIN_W,
+                    width: name_layout.width + ENTITY_PAD * 2.0 + ENTITY_MIN_W,
                     height: h,
                     attr_lines: vec![],
                 },
@@ -243,7 +236,12 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
             entity_centers.insert(name.clone(), Point::new(cx, cy));
             entity_rects.insert(
                 name.clone(),
-                Rect::new(cur_x, cur_y, cur_x + layout.width, cur_y + layout.height),
+                Rect::new(
+                    cur_x,
+                    cur_y,
+                    cur_x + layout.width,
+                    cur_y + layout.height,
+                ),
             );
             cur_x += layout.width + ENTITY_GAP_X;
         }
@@ -265,8 +263,8 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
             let tr = entity_rects[&rel.second_entity];
 
             let is_left = fc.x < tc.x;
-            let start = Point::new(if is_left { fr.x1 } else { fr.x0 }, fc.y);
-            let end = Point::new(if is_left { tr.x0 } else { tr.x1 }, tc.y);
+            let start = Point::new(if is_left { fr.max_x() } else { fr.min_x() }, fc.y);
+            let end = Point::new(if is_left { tr.min_x() } else { tr.max_x() }, tc.y);
 
             let stroke = vir::stroke(theme::er::EDGE, 1.5);
 
@@ -299,12 +297,10 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
                     theme::er::TEXT,
                     SMALL_FONT,
                     String::new(),
-                    FontWeight::Named(FontWeightNamed::Normal),
-                    FontStyle::Normal,
                     TextAlign::Center,
                     TextBaseline::Bottom,
                 );
-                let l = create_text_layout(label, &ts, Some(200.0));
+                let l = layout_text(&[RichSpan::new(label.to_string(), ts.clone())], Some(200.0));
                 let (x_off, y_off) =
                     compute_text_offset(&l, TextAlign::Center, TextBaseline::Bottom);
                 elements.push(vir::text_node(
@@ -314,8 +310,6 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
                         Color::BLACK,
                         SMALL_FONT,
                         String::new(),
-                        FontWeight::Named(FontWeightNamed::Normal),
-                        FontStyle::Normal,
                         TextAlign::Left,
                         TextBaseline::Top,
                     ),
@@ -347,7 +341,12 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
             } else {
                 layout.attr_lines.len() as f64 * 18.0 + 8.0
             };
-        let header_rect = Rect::new(rect.x0, rect.y0, rect.x1, rect.y0 + header_h);
+        let header_rect = Rect::new(
+            rect.min_x(),
+            rect.min_y(),
+            rect.max_x(),
+            rect.min_y() + header_h,
+        );
         elements.push(vir::rect_node(
             header_rect,
             Some(theme::NODE_RADIUS),
@@ -360,26 +359,22 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
             theme::er::TEXT,
             FONT_SIZE,
             theme::FONT_FAMILY.to_string(),
-            FontWeight::Named(FontWeightNamed::Normal),
-            FontStyle::Normal,
             TextAlign::Center,
             TextBaseline::Middle,
         );
-        let name_layout = create_text_layout(&layout.name, &ts, Some(layout.width - 8.0));
+        let name_layout = layout_text(&[RichSpan::new(layout.name.to_string(), ts.clone())], Some(layout.width - 8.0));
         let (x_off, y_off) =
             compute_text_offset(&name_layout, TextAlign::Center, TextBaseline::Middle);
         elements.push(vir::text_node(
             layout.name.clone(),
             Point::new(
-                rect.x0 + layout.width / 2.0 + x_off,
-                rect.y0 + header_h / 2.0 + y_off,
+                rect.min_x() + layout.width / 2.0 + x_off,
+                rect.min_y() + header_h / 2.0 + y_off,
             ),
             vir::text_style(
                 Color::BLACK,
                 FONT_SIZE,
                 theme::FONT_FAMILY.to_string(),
-                FontWeight::Named(FontWeightNamed::Normal),
-                FontStyle::Normal,
                 TextAlign::Left,
                 TextBaseline::Top,
             ),
@@ -389,31 +384,27 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
         ));
 
         // Separator
-        elements.push(vir::line_node(Point::new(rect.x0, rect.y0 + header_h), Point::new(rect.x1, rect.y0 + header_h), vir::stroke(theme::er::STROKE, 1.5), Z_AXIS));
+        elements.push(vir::line_node(Point::new(rect.min_x(), rect.min_y() + header_h), Point::new(rect.max_x(), rect.min_y() + header_h), vir::stroke(theme::er::STROKE, 1.5), Z_AXIS));
 
         // Attributes
-        let mut line_y = rect.y0 + header_h + 4.0;
+        let mut line_y = rect.min_y() + header_h + 4.0;
         for attr_line in &layout.attr_lines {
             let ts = vir::text_style(
                 theme::er::TEXT,
                 SMALL_FONT,
                 theme::FONT_FAMILY.to_string(),
-                FontWeight::Named(FontWeightNamed::Normal),
-                FontStyle::Normal,
                 TextAlign::Left,
                 TextBaseline::Top,
             );
-            let l = create_text_layout(attr_line, &ts, Some(layout.width - ENTITY_PAD));
+            let l = layout_text(&[RichSpan::new(attr_line.to_string(), ts.clone())], Some(layout.width - ENTITY_PAD));
             let (x_off, y_off) = compute_text_offset(&l, TextAlign::Left, TextBaseline::Top);
             elements.push(vir::text_node(
                 attr_line.clone(),
-                Point::new(rect.x0 + ENTITY_PAD + x_off, line_y + y_off),
+                Point::new(rect.min_x() + ENTITY_PAD + x_off, line_y + y_off),
                 vir::text_style(
                     theme::er::TEXT,
                     SMALL_FONT,
                     theme::FONT_FAMILY.to_string(),
-                    FontWeight::Named(FontWeightNamed::Normal),
-                    FontStyle::Normal,
                     TextAlign::Left,
                     TextBaseline::Top,
                 ),

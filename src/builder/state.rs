@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use petgraph::graph::{DiGraph, NodeIndex};
-use vello_cpu::kurbo::{Point, Rect};
+use lievisual::geometry::{Point, Rect};
 
 use crate::{
     ast::StateDiagram,
@@ -13,11 +13,10 @@ use crate::{
     error::DiagramResult,
     vir::{self, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, theme,
     },
-    option::{FontWeight, FontWeightNamed},
 };
 use lievisual::geometry::Color;
 use lievisual::scene::SceneNode;
-use lievisual::text::{compute_text_offset, create_text_layout, FontStyle};
+use lievisual::text::{compute_text_offset, layout_text, RichSpan};
 
 const STATE_PAD_X: f64 = 18.0;
 const STATE_PAD_Y: f64 = 10.0;
@@ -146,30 +145,28 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
             Color::BLACK,
             FONT_SIZE,
             String::new(),
-            FontWeight::Named(FontWeightNamed::Normal),
-            FontStyle::Normal,
             TextAlign::Center,
             TextBaseline::Middle,
         );
-        let layout = create_text_layout(&label, &ts, None);
-        let text_w = layout.width() as f64;
-        let text_h = layout.height() as f64;
+        let layout = layout_text(&[RichSpan::new(label.to_string(), ts.clone())], None);
+        let text_w = layout.width;
+        let text_h = layout.height;
 
         let desc_text_h = if let Some(d) = &desc {
-            let dl = create_text_layout(
-                d,
-                &vir::text_style(
-                    Color::BLACK,
-                    SMALL_FONT,
-                    String::new(),
-                    FontWeight::Named(FontWeightNamed::Normal),
-                    FontStyle::Normal,
-                    TextAlign::Center,
-                    TextBaseline::Middle,
-                ),
+            let dl = layout_text(
+                &[RichSpan::new(
+                    d.to_string(),
+                    vir::text_style(
+                        Color::BLACK,
+                        SMALL_FONT,
+                        String::new(),
+                        TextAlign::Center,
+                        TextBaseline::Middle,
+                    ),
+                )],
                 None,
             );
-            dl.height() as f64 + 4.0
+            dl.height + 4.0
         } else {
             0.0
         };
@@ -328,12 +325,10 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                     theme::state::TEXT,
                     12.0,
                     String::new(),
-                    FontWeight::Named(FontWeightNamed::Normal),
-                    FontStyle::Normal,
                     TextAlign::Center,
                     TextBaseline::Bottom,
                 );
-                let layout = create_text_layout(label, &ts, Some(200.0));
+                let layout = layout_text(&[RichSpan::new(label.to_string(), ts.clone())], Some(200.0));
                 let (x_off, y_off) =
                     compute_text_offset(&layout, TextAlign::Center, TextBaseline::Bottom);
                 let label_cx = (fp.x + tp.x) / 2.0;
@@ -408,12 +403,10 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                     theme::state::TEXT,
                     FONT_SIZE,
                     theme::FONT_FAMILY.to_string(),
-                    FontWeight::Named(FontWeightNamed::Normal),
-                    FontStyle::Normal,
                     TextAlign::Center,
                     TextBaseline::Middle,
                 );
-                let layout = create_text_layout(&nl.label, &ts, Some(nl.width - 10.0));
+                let layout = layout_text(&[RichSpan::new(nl.label.to_string(), ts.clone())], Some(nl.width - 10.0));
                 let (x_off, y_off) = if description.is_some() {
                     // Shift up a bit if there's a description
                     (0.0, -8.0)
@@ -435,12 +428,10 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                         theme::state::TEXT,
                         SMALL_FONT,
                         theme::FONT_FAMILY.to_string(),
-                        FontWeight::Named(FontWeightNamed::Normal),
-                        FontStyle::Normal,
                         TextAlign::Center,
                         TextBaseline::Top,
                     );
-                    let dl = create_text_layout(desc, &dts, Some(nl.width - 10.0));
+                    let dl = layout_text(&[RichSpan::new(desc.to_string(), dts.clone())], Some(nl.width - 10.0));
                     let (dx_off, dy_off) =
                         compute_text_offset(&dl, TextAlign::Center, TextBaseline::Top);
                     elements.push(vir::text_node(

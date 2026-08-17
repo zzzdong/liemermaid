@@ -1,12 +1,8 @@
-use vello_cpu::kurbo::Point;
-
-use lievisual::geometry::Color;
+use lievisual::geometry::{Color, Point};
 
 /// 风格的默认配置
 pub const DEFAULT_WIDTH: f64 = 800.0;
 pub const DEFAULT_HEIGHT: f64 = 600.0;
-pub const DEFAULT_FONT_SIZE: f64 = 14.0;
-pub const DEFAULT_FONT_FAMILY: &str = "sans-serif";
 
 /// 调色板（用于多种图表的系列色）
 pub const PALETTE: &[Color] = &[
@@ -29,12 +25,8 @@ pub struct OutputConfig {
     pub width: f64,
     /// 画布高度（pt）
     pub height: f64,
-    /// 背景色
+    /// 背景色，写入生成的 [`lievisual::Scene`]（`scene.background`），由渲染后端绘制
     pub background: Color,
-    /// 默认字体
-    pub font_family: String,
-    /// 默认字号
-    pub font_size: f64,
 }
 
 impl Default for OutputConfig {
@@ -43,8 +35,6 @@ impl Default for OutputConfig {
             width: DEFAULT_WIDTH,
             height: DEFAULT_HEIGHT,
             background: Color::new(255 as f64 / 255.0, 255 as f64 / 255.0, 255 as f64 / 255.0, 1.0),
-            font_family: DEFAULT_FONT_FAMILY.to_string(),
-            font_size: DEFAULT_FONT_SIZE,
         }
     }
 }

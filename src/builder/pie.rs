@@ -1,6 +1,6 @@
-use vello_cpu::kurbo::Point;
+use lievisual::geometry::{Point};
 
-use lievisual::text::create_text_layout;
+use lievisual::text::{layout_text, RichSpan};
 
 use crate::{
     ast::PieDiagram,
@@ -12,9 +12,8 @@ use crate::{
     vir::{self,
         Color, SceneNode, TextAlign, TextBaseline, Z_LABEL, Z_SERIES, Z_TITLE,
     },
-    option::{FontWeight, FontWeightNamed},
 };
-use lievisual::text::FontStyle;
+
 
 const PIE_MARGIN: f64 = 60.0;
 const PIE_TITLE_SIZE: f64 = 24.0;
@@ -73,12 +72,10 @@ pub fn build_pie_elements(
             Color::BLACK,
             PIE_TITLE_SIZE,
             String::new(),
-            FontWeight::Named(FontWeightNamed::Normal),
-            FontStyle::Normal,
             TextAlign::Center,
             TextBaseline::Top,
         );
-        let _layout = create_text_layout(title, &title_style, Some(config.width - PIE_MARGIN));
+        let _layout = layout_text(&[RichSpan::new(title.to_string(), title_style.clone())], Some(config.width - PIE_MARGIN));
         let title_x = config.width / 2.0;
         let title_y = PIE_MARGIN / 2.0;
 
@@ -139,12 +136,10 @@ pub fn build_pie_elements(
             Color::BLACK,
             PIE_LABEL_SIZE,
             String::new(),
-            FontWeight::Named(FontWeightNamed::Normal),
-            FontStyle::Normal,
             TextAlign::Center,
             TextBaseline::Middle,
         );
-        let _label_layout = create_text_layout(&display_text, &label_style, Some(200.0));
+        let _label_layout = layout_text(&[RichSpan::new(display_text.to_string(), label_style.clone())], Some(200.0));
 
         elements.push(vir::text_node(
             display_text,
