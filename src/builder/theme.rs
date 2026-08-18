@@ -62,6 +62,9 @@ pub mod sequence {
     pub const LIFELINE: Color = Color::new(203.0 / 255.0, 213.0 / 255.0, 225.0 / 255.0, 1.0); // slate-300
     pub const NOTE_FILL: Color = Color::new(254.0 / 255.0, 252.0 / 255.0, 232.0 / 255.0, 1.0); // yellow-50
     pub const NOTE_STROKE: Color = Color::new(234.0 / 255.0, 179.0 / 255.0, 8.0 / 255.0, 1.0); // yellow-500
+    pub const BLOCK_FILL: Color = Color::new(241.0 / 255.0, 245.0 / 255.0, 249.0 / 255.0, 1.0); // slate-50
+    pub const BLOCK_STROKE: Color = Color::new(148.0 / 255.0, 163.0 / 255.0, 184.0 / 255.0, 1.0); // slate-400
+    pub const BLOCK_TEXT: Color = Color::new(71.0 / 255.0, 85.0 / 255.0, 105.0 / 255.0, 1.0); // slate-600
 }
 
 // ==================== ER (琥珀) ====================

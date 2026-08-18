@@ -8,7 +8,7 @@ identifier = { quoted_id | simple_id }
 
 free_text = { (!NEWLINE ~ ANY)* }
 edge_label = { (!"|" ~ ANY)* }
-subgraph_title = { (!(NEWLINE | "end") ~ ANY)* }
+subgraph_title = { (!NEWLINE ~ ANY)* }
 text = { identifier | quoted_id }
 
 direction = { "TB" | "TD" | "BT" | "RL" | "LR" }
@@ -35,7 +35,7 @@ edge_arrow_dotted = { "-.->" }
 edge_arrow_thick = { "==>" }
 edge_arrow_labeled = { "-->|" ~ edge_label ~ "|" }
 edge_arrow = { edge_arrow_labeled | edge_arrow_thick | edge_arrow_dotted | edge_arrow_solid }
-edge = { identifier ~ edge_arrow ~ identifier }
+edge = { identifier ~ (edge_arrow ~ identifier)+ }
 
 subgraph = { "subgraph" ~ subgraph_title? ~ NEWLINE+ ~ (subgraph_stmt ~ (NEWLINE+ ~ subgraph_stmt)*)? ~ NEWLINE* ~ "end" }
 subgraph_stmt = _{ edge | subgraph | (!"end" ~ node_decl) }
@@ -52,12 +52,20 @@ message_arrow_cross = { "-x" }
 message_arrow_open = { "-)" }
 message_arrow = { message_arrow_open | message_arrow_cross | message_arrow_dashed_tip | message_arrow_dashed | message_arrow_solid_tip | message_arrow_solid }
 message = { identifier ~ message_arrow ~ identifier ~ (":" ~ free_text)? }
-note_placement = { "left" | "right" | "over" }
+note_placement = { ("left" | "right") ~ "of" | "over" }
 note_target = { identifier ~ ("," ~ identifier)? }
-note = { "note" ~ note_placement ~ ("of")? ~ note_target ~ ":" ~ free_text }
+note = { "note" ~ note_placement ~ note_target ~ ":" ~ free_text }
 activation = { ("+" | "-") ~ identifier }
-sequence_statement = { participant | actor | message | note | activation }
-sequence_diagram = { "sequenceDiagram" ~ NEWLINE+ ~ (sequence_statement ~ NEWLINE*)* }
+seq_block_label = { (!NEWLINE ~ ANY)* }
+seq_block_stmt = _{ sequence_statement | seq_block }
+seq_alt_branch = { seq_block_label? ~ NEWLINE+ ~ (seq_block_stmt ~ (NEWLINE+ ~ seq_block_stmt)*)? }
+loop_block = { "loop" ~ seq_block_label? ~ NEWLINE+ ~ (seq_block_stmt ~ (NEWLINE+ ~ seq_block_stmt)*)? ~ NEWLINE* ~ "end" }
+alt_block = { "alt" ~ seq_alt_branch ~ (NEWLINE* ~ "else" ~ seq_alt_branch)* ~ NEWLINE* ~ "end" }
+opt_block = { "opt" ~ seq_block_label? ~ NEWLINE+ ~ (seq_block_stmt ~ (NEWLINE+ ~ seq_block_stmt)*)? ~ NEWLINE* ~ "end" }
+par_block = { "par" ~ seq_alt_branch ~ (NEWLINE* ~ "and" ~ seq_alt_branch)* ~ NEWLINE* ~ "end" }
+seq_block = { loop_block | alt_block | opt_block | par_block }
+sequence_statement = { participant | actor | message | note | activation | seq_block }
+sequence_diagram = { "sequenceDiagram" ~ NEWLINE+ ~ (sequence_statement ~ (NEWLINE+ ~ sequence_statement)*)? ~ NEWLINE* }
 
 visibility = { "+" | "-" | "#" | "~" }
 class_member = { visibility? ~ identifier ~ (":" ~ identifier)? ~ ("(" ~ ")")? }
@@ -94,7 +102,7 @@ pie_data_entry = ${ (!(":" | NEWLINE) ~ ANY)+ ~ ":" ~ (!NEWLINE ~ ANY)* }
 
 timeline_diagram = { "timeline" ~ NEWLINE+ ~ (timeline_entry ~ (NEWLINE+ ~ timeline_entry)*)* ~ NEWLINE* }
 timeline_entry = _{ tl_title | tl_section | tl_event_line }
-tl_title = { "title" ~ free_text }
+tl_title = { ^"title" ~ free_text }
 tl_section = { "section" ~ free_text }
 tl_event_line = ${ (!(":" | NEWLINE) ~ ANY)+ ~ ":" ~ (!NEWLINE ~ ANY)* }
 

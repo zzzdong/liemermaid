@@ -80,8 +80,38 @@ pub struct Subgraph {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SequenceDiagram {
     pub participants: Vec<Participant>,
-    pub messages: Vec<Message>,
-    pub notes: Vec<Note>,
+    /// 顶层语句（消息、备注、分组块）按输入顺序排列
+    pub statements: Vec<SequenceStatement>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SequenceStatement {
+    Message(Message),
+    Note(Note),
+    Block(SequenceBlock),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SequenceBlockKind {
+    Loop,
+    Alt,
+    Opt,
+    Par,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SequenceBlock {
+    pub kind: SequenceBlockKind,
+    pub label: Option<String>,
+    /// 块内的语句（消息、备注、嵌套块）
+    pub items: Vec<SequenceItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SequenceItem {
+    Message(Message),
+    Note(Note),
+    Block(SequenceBlock),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
