@@ -1,0 +1,7 @@
+classDiagram
+    class Animal~T~<<Interface>>{
+        +String name
+        +eat()
+    }
+    class Dog
+    Animal "1" <|-- "*" Dog : parent

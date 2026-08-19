@@ -1,30 +1,29 @@
-fn main() {
-    // 1. 基础时间线
-    let basic = r#"timeline
-    title History of Social Media
-    2002 : LinkedIn
-    2004 : Facebook
-    2005 : Youtube
-    2006 : Twitter
-"#;
-    let svg = liemermaid::render(basic, 800, 300).expect("render timeline basic");
-    std::fs::write("timeline_basic.svg", svg).expect("write svg");
-    println!("timeline_basic.svg generated");
+// Timeline 渲染示例
+//
+// 运行：cargo run --example timeline
+// 产物：examples/out/timeline.svg
 
-    // 2. 带分段的时间线
-    let sections = r#"timeline
-    title Project Timeline
-    section Phase 1
-        Requirement analysis : 2 weeks
-        Design : 3 weeks
-    section Phase 2
-        Development : 8 weeks
-        Testing : 4 weeks
-    section Phase 3
-        Deployment : 1 week
-        Maintenance : ongoing
+use liemermaid::{render, MermaidParser};
+use std::fs;
+
+fn main() {
+    // 本次新增语法：
+    //   timeline LR           方向 (TD / LR)
+    //   1950 : A : B          同一时间点包含多个事件（冒号分隔）
+    let input = r#"timeline LR
+    title 项目里程碑
+    section 启动
+        2020 : 立项 : 团队组建
+    section 开发
+        2021 : 内核完成
+        2022 : 发布 v1.0 : 用户破万
 "#;
-    let svg = liemermaid::render(sections, 900, 400).expect("render timeline sections");
-    std::fs::write("timeline_sections.svg", svg).expect("write svg");
-    println!("timeline_sections.svg generated");
+
+    let _diagram = MermaidParser::parse_mermaid(input).expect("parse failed");
+    println!("解析成功");
+
+    let svg = render(input, 900, 400).expect("render failed");
+    fs::create_dir_all("examples/out").unwrap();
+    fs::write("examples/out/timeline.svg", &svg).unwrap();
+    println!("已写入 examples/out/timeline.svg ({} 字节)", svg.len());
 }

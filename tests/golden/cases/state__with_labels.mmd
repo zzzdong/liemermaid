@@ -1,0 +1,7 @@
+stateDiagram-v2
+    state "流量处理" as s1
+    s2 : 等待输入
+    s3
+    s1 --> s2
+    s2 --> s3 : done
+    s3 --> s1 : retry

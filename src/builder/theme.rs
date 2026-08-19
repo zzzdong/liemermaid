@@ -60,6 +60,7 @@ pub mod sequence {
     pub const TEXT: Color = super::TEXT_COLOR;
     pub const EDGE: Color = super::EDGE_COLOR;
     pub const LIFELINE: Color = Color::new(203.0 / 255.0, 213.0 / 255.0, 225.0 / 255.0, 1.0); // slate-300
+    pub const ACTIVATION: Color = Color::new(14.0 / 255.0, 165.0 / 255.0, 233.0 / 255.0, 1.0); // sky-500
     pub const NOTE_FILL: Color = Color::new(254.0 / 255.0, 252.0 / 255.0, 232.0 / 255.0, 1.0); // yellow-50
     pub const NOTE_STROKE: Color = Color::new(234.0 / 255.0, 179.0 / 255.0, 8.0 / 255.0, 1.0); // yellow-500
     pub const BLOCK_FILL: Color = Color::new(241.0 / 255.0, 245.0 / 255.0, 249.0 / 255.0, 1.0); // slate-50

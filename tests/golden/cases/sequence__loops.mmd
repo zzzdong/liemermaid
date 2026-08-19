@@ -1,0 +1,8 @@
+sequenceDiagram
+    participant Client
+    participant Service
+    loop Each item
+        Client->>Service: process(item)
+        Service-->>Client: done
+    end
+    Client->>Service: finalize

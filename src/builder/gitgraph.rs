@@ -81,7 +81,7 @@ pub fn build_gitgraph_elements(graph: &GitGraphDiagram, _config: &OutputConfig) 
                     branch_order.push(branch.clone());
                 }
             }
-            GitGraphStatement::Commit { tag } => {
+            GitGraphStatement::Commit { tag, .. } => {
                 let parent = branch_heads.get(&current_branch).copied();
                 let idx = dag.add_node(CommitData {
                     branch_name: current_branch.clone(),
@@ -94,12 +94,14 @@ pub fn build_gitgraph_elements(graph: &GitGraphDiagram, _config: &OutputConfig) 
                 branch_heads.insert(current_branch.clone(), idx);
                 commit_list.push(idx);
             }
-            GitGraphStatement::Merge { branch } => {
+            GitGraphStatement::Merge { branch, tag, .. } => {
                 let parent1 = branch_heads.get(&current_branch).copied();
                 let parent2 = branch_heads.get(branch).copied();
                 let idx = dag.add_node(CommitData {
                     branch_name: current_branch.clone(),
-                    tag: Some(format!("merge {}", branch)),
+                    tag: tag
+                        .clone()
+                        .or_else(|| Some(format!("merge {}", branch))),
                     is_merge: true,
                 });
                 if let Some(p1) = parent1 {
@@ -107,6 +109,20 @@ pub fn build_gitgraph_elements(graph: &GitGraphDiagram, _config: &OutputConfig) 
                 }
                 if let Some(p2) = parent2 {
                     dag.add_edge(p2, idx, ());
+                }
+                branch_heads.insert(current_branch.clone(), idx);
+                commit_list.push(idx);
+            }
+            // cherry-pick 在 dag 上追加一个提交到当前分支头部
+            GitGraphStatement::CherryPick { .. } => {
+                let parent = branch_heads.get(&current_branch).copied();
+                let idx = dag.add_node(CommitData {
+                    branch_name: current_branch.clone(),
+                    tag: None,
+                    is_merge: false,
+                });
+                if let Some(p) = parent {
+                    dag.add_edge(p, idx, ());
                 }
                 branch_heads.insert(current_branch.clone(), idx);
                 commit_list.push(idx);

@@ -1,7 +1,7 @@
 use crate::{
     ast::{
-        MessageArrow, NotePlacement, SequenceBlock, SequenceBlockKind, SequenceDiagram,
-        SequenceItem, SequenceStatement,
+        MessageActivation, MessageArrow, NotePlacement, SequenceBlock, SequenceBlockKind,
+        SequenceDiagram, SequenceItem, SequenceStatement,
     },
     builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
@@ -142,6 +142,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         y: f64,
         text: String,
         arrow: MessageArrow,
+        activation: Option<MessageActivation>,
         placement: NotePlacement,
         targets: Vec<usize>,
         depth: usize,
@@ -182,6 +183,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                         y: *cur_y,
                         text: msg.text.clone().unwrap_or_default(),
                         arrow: msg.arrow,
+                        activation: msg.activation,
                         placement: NotePlacement::Over,
                         targets: Vec::new(),
                         depth,
@@ -201,6 +203,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                         y: *cur_y,
                         text: note.text.clone(),
                         arrow: MessageArrow::Solid,
+                        activation: None,
                         placement: note.placement,
                         targets: indices,
                         depth,
@@ -261,6 +264,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                     y: cur_y,
                     text: msg.text.clone().unwrap_or_default(),
                     arrow: msg.arrow,
+                    activation: msg.activation,
                     placement: NotePlacement::Over,
                     targets: Vec::new(),
                     depth: 0,
@@ -280,6 +284,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                     y: cur_y,
                     text: note.text.clone(),
                     arrow: MessageArrow::Solid,
+                    activation: None,
                     placement: note.placement,
                     targets: indices,
                     depth: 0,
@@ -323,10 +328,76 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             elements.push(vir::line_node(
                 Point::new(*cx, y),
                 Point::new(*cx, end),
-                vir::stroke(theme::sequence::LIFELINE, 0.0),
+                vir::stroke(theme::sequence::LIFELINE, 1.0),
                 Z_AXIS,
             ));
             y += LIFELINE_DASH;
+        }
+    }
+
+    // ---- 激活条（activation bars） ----
+    // 按消息顺序维护每个参与者的激活栈：
+    //   Activate   在目标生命线上开启一条激活条
+    //   Deactivate 结束该参与者最上层的激活条
+    const ACTIVATION_W: f64 = 8.0;
+    let mut act_stack: std::collections::HashMap<usize, Vec<f64>> = std::collections::HashMap::new();
+    for r in &rows {
+        if r.kind != 0 {
+            continue;
+        }
+        let y = r.y + MESSAGE_SPACING * 0.3;
+        match r.activation {
+            Some(MessageActivation::Activate) => {
+                act_stack.entry(r.ti).or_default().push(y);
+            }
+            Some(MessageActivation::Deactivate) => {
+                if let Some(stack) = act_stack.get_mut(&r.ti) {
+                    if let Some(start) = stack.pop() {
+                        let h = y - start;
+                        if h > 0.0 {
+                            let cx = col_centers[r.ti] + r.depth as f64 * BLOCK_INDENT;
+                            let rect = lievisual::geometry::Rect::new(
+                                cx - ACTIVATION_W / 2.0,
+                                start,
+                                ACTIVATION_W,
+                                h,
+                            );
+                            elements.push(
+                                SceneNode::from(Element::RoundedRect {
+                                    rect,
+                                    radius: 2.0,
+                                    style: vir::fs_both(theme::sequence::ACTIVATION, theme::sequence::ACTIVATION, 1.0),
+                                })
+                                .with_z(Z_AXIS + 1),
+                            );
+                        }
+                    }
+                }
+            }
+            None => {}
+        }
+    }
+    // 收尾：未关闭的激活条延伸至生命线底部
+    for (pi, stack) in &act_stack {
+        for start in stack {
+            let h = lifeline_bottom - start;
+            if h > 0.0 {
+                let cx = col_centers[*pi];
+                let rect = lievisual::geometry::Rect::new(
+                    cx - ACTIVATION_W / 2.0,
+                    *start,
+                    ACTIVATION_W,
+                    h,
+                );
+                elements.push(
+                    SceneNode::from(Element::RoundedRect {
+                        rect,
+                        radius: 2.0,
+                        style: vir::fs_both(theme::sequence::ACTIVATION, theme::sequence::ACTIVATION, 1.0),
+                    })
+                    .with_z(Z_AXIS + 1),
+                );
+            }
         }
     }
 

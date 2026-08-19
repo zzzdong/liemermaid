@@ -1,0 +1,12 @@
+{
+  "name": "liemermaid-golden",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Generate official mermaid-cli golden SVG samples for liemermaid visual snapshot tests",
+  "scripts": {
+    "generate": "node generate_golden.js"
+  },
+  "dependencies": {
+    "@mermaid-js/mermaid-cli": "^11.0.0"
+  }
+}

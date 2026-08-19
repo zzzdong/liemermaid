@@ -1,0 +1,10 @@
+sequenceDiagram
+    participant A
+    participant B
+    participant C
+    participant D
+    A->>B: message 1
+    B->>C: message 2
+    C->>D: message 3
+    D-->>A: ack
+    A->>C: direct

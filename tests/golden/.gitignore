@@ -1,0 +1,17 @@
+# 忽略依赖与临时产物
+node_modules/
+package-lock.json
+.idea/
+
+# 临时渲染产物（mermaid-cli 会生成同名 .png）
+*.png
+.tmp_*
+
+# 我们自己的渲染输出（Rust 测试产物，可随时重生成）
+ours/
+
+# 保留黄金样本 SVG —— 它们是"标准答案"，必须提交。
+# 根 .gitignore 忽略了 *.svg，这里用否定重新包含。
+!golden/
+!golden/**/*.svg
+!golden/**/

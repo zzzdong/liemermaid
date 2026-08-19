@@ -1,49 +1,30 @@
+// State 渲染示例
+//
+// 运行：cargo run --example state
+// 产物：examples/out/state.svg
+
+use liemermaid::{render, MermaidParser};
+use std::fs;
+
 fn main() {
-    // 1. 基础状态图
-    let basic = r#"stateDiagram-v2
-    [*] --> Idle
-    Idle --> Processing
-    Processing --> Done
-    Done --> [*]
+    // 本次新增的三种声明形式：
+    //   state "描述" as s1       带描述的别名状态
+    //   s2 : 一段描述            裸状态 + 描述
+    //   s3                      裸状态
+    let input = r#"stateDiagram-v2
+    state "流量处理" as s1
+    s2 : 等待输入
+    s3
+    s1 --> s2
+    s2 --> s3 : done
+    s3 --> s1 : retry
 "#;
-    let svg = liemermaid::render(basic, 600, 400).expect("render basic state");
-    std::fs::write("state_basic.svg", svg).expect("write svg");
-    println!("state_basic.svg generated");
 
-    // 2. 带标签的状态图
-    let labeled = r#"stateDiagram-v2
-    [*] --> Idle
-    Idle --> Processing: start
-    Processing --> Done: complete
-    Done --> [*]: finished
-"#;
-    let svg = liemermaid::render(labeled, 600, 450).expect("render labeled state");
-    std::fs::write("state_labeled.svg", svg).expect("write svg");
-    println!("state_labeled.svg generated");
+    let _diagram = MermaidParser::parse_mermaid(input).expect("parse failed");
+    println!("解析成功");
 
-    // 3. 带描述的状态
-    let desc = r#"stateDiagram-v2
-    state Idle: System is idle
-    state Processing: Working on task
-    state Done: Task completed
-    [*] --> Idle
-    Idle --> Processing
-    Processing --> Done
-    Done --> [*]
-"#;
-    let svg = liemermaid::render(desc, 700, 500).expect("render state with descriptions");
-    std::fs::write("state_desc.svg", svg).expect("write svg");
-    println!("state_desc.svg generated");
-
-    // 4. 分支状态
-    let branch = r#"stateDiagram-v2
-    [*] --> Pending
-    Pending --> Approved
-    Pending --> Rejected
-    Approved --> [*]
-    Rejected --> [*]
-"#;
-    let svg = liemermaid::render(branch, 700, 450).expect("render branch state");
-    std::fs::write("state_branch.svg", svg).expect("write svg");
-    println!("state_branch.svg generated");
+    let svg = render(input, 700, 500).expect("render failed");
+    fs::create_dir_all("examples/out").unwrap();
+    fs::write("examples/out/state.svg", &svg).unwrap();
+    println!("已写入 examples/out/state.svg ({} 字节)", svg.len());
 }

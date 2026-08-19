@@ -188,11 +188,11 @@ fn render_sugiyama_flowchart(
             // 终点标记（NoArrow 不画）
             let arrow = &edge.arrow_type;
             match arrow {
-                ArrowType::NoArrow => {}
-                ArrowType::Circle => {
+                ArrowType::NoArrow | ArrowType::Invisible => {}
+                ArrowType::Circle | ArrowType::MultiCircle => {
                     draw_arrow_circle(&mut elements, last, &edge_stroke());
                 }
-                ArrowType::Cross => {
+                ArrowType::Cross | ArrowType::MultiCross => {
                     draw_arrow_cross(&mut elements, last, &edge_stroke());
                 }
                 _ => {
@@ -206,15 +206,28 @@ fn render_sugiyama_flowchart(
                     }
                 }
             }
-            // 双向箭头：起点也画一个反向箭头
-            if arrow == &ArrowType::Both {
+            // 双向箭头：起点也画一个反向标记
+            if arrow == &ArrowType::Both
+                || arrow == &ArrowType::MultiCircle
+                || arrow == &ArrowType::MultiCross
+            {
                 let next = route[1];
                 let dx = first.x - next.x;
                 let dy = first.y - next.y;
                 let len = (dx * dx + dy * dy).sqrt();
                 if len > 0.0 {
                     let ud = Point::new(dx / len, dy / len);
-                    draw_arrow_head(&mut elements, first, &ud, &edge_stroke());
+                    match arrow {
+                        ArrowType::MultiCircle => {
+                            draw_arrow_circle(&mut elements, first, &edge_stroke());
+                        }
+                        ArrowType::MultiCross => {
+                            draw_arrow_cross(&mut elements, first, &edge_stroke());
+                        }
+                        _ => {
+                            draw_arrow_head(&mut elements, first, &ud, &edge_stroke());
+                        }
+                    }
                 }
             }
         }

@@ -313,6 +313,9 @@ impl MermaidParser {
             "--o" => Ok(ArrowType::Circle),
             "--x" => Ok(ArrowType::Cross),
             "<-->" => Ok(ArrowType::Both),
+            "~~~" => Ok(ArrowType::Invisible),
+            "o--o" => Ok(ArrowType::MultiCircle),
+            "x--x" => Ok(ArrowType::MultiCross),
             _ => Ok(ArrowType::Solid), // 带标签的箭头也会匹配到这里，但标签由 edge_label 处理
         }
     }
@@ -645,11 +648,19 @@ impl MermaidParser {
         let to = ids[1].clone();
 
         let mut arrow = MessageArrow::Solid;
+        let mut activation = None;
         let mut text = None;
 
         for inner in pair.into_inner() {
             match inner.as_rule() {
                 Rule::message_arrow => arrow = Self::parse_message_arrow(inner)?,
+                Rule::message_activation => {
+                    activation = match inner.as_str() {
+                        "+" => Some(MessageActivation::Activate),
+                        "-" => Some(MessageActivation::Deactivate),
+                        _ => None,
+                    };
+                }
                 Rule::free_text => text = Some(inner.as_str().to_string()),
                 _ => {}
             }
@@ -659,6 +670,7 @@ impl MermaidParser {
             from,
             to,
             arrow,
+            activation,
             text,
         })
     }
@@ -733,6 +745,7 @@ impl MermaidParser {
                         } else {
                             classes.push(Class {
                                 name: class_name,
+                                annotation: None,
                                 members: vec![ClassMember {
                                     visibility: None,
                                     name: member_type,
@@ -752,10 +765,27 @@ impl MermaidParser {
     }
 
     fn parse_class_decl(pair: pest::iterators::Pair<Rule>) -> Result<Class> {
-        let name = Self::extract_optional_string(pair.clone(), Rule::identifier)
+        let mut name = Self::extract_optional_string(pair.clone(), Rule::identifier)
             .ok_or_else(|| Self::invalid_syntax(&pair, "Class missing name"))?;
+        // 泛型 `~T~` 附加到类名用于展示
+        if let Some(g) = Self::extract_optional_string(pair.clone(), Rule::class_generic) {
+            name.push_str(&g);
+        }
+        let annotation = Self::extract_optional_string(pair.clone(), Rule::class_annotation)
+            .map(|a| {
+                let a = a.trim();
+                a.strip_prefix("<<")
+                    .and_then(|a| a.strip_suffix(">>"))
+                    .unwrap_or(a)
+                    .trim()
+                    .to_string()
+            });
         let members = Self::collect_class_members(pair);
-        Ok(Class { name, members })
+        Ok(Class {
+            name,
+            annotation,
+            members,
+        })
     }
 
     fn collect_class_members(pair: pest::iterators::Pair<Rule>) -> Vec<ClassMember> {
@@ -792,11 +822,43 @@ impl MermaidParser {
                         _ => Visibility::Public,
                     });
                 }
-                Rule::identifier => {
-                    if name.is_none() {
-                        name = Some(Self::extract_string(inner));
+                // `name : type` 冒号形式
+                Rule::class_member_colon => {
+                    if let Some(n) =
+                        Self::extract_optional_string(inner.clone(), Rule::identifier)
+                    {
+                        name = Some(n);
+                    }
+                    if let Some(t) = Self::extract_optional_string(inner, Rule::class_type) {
+                        type_ = Some(t);
+                    }
+                }
+                // `[type] name(...) [ret]` 普通形式
+                Rule::class_member_plain => {
+                    let plain_str = inner.as_str();
+                    let is_method = plain_str.contains('(');
+                    let ids = Self::collect_strings(inner.clone(), Rule::identifier);
+                    // 末尾 class_type（仅方法返回类型可能出现）
+                    let ret_type =
+                        Self::extract_optional_string(inner.clone(), Rule::class_type);
+                    if is_method {
+                        // 方法名是括号前的最后一个 identifier
+                        if let Some(n) = ids.last() {
+                            name = Some(n.clone());
+                        }
+                        // 前导类型（如有）或返回类型作为 type_
+                        if let Some(t) = ret_type {
+                            type_ = Some(t);
+                        } else if ids.len() >= 2 {
+                            type_ = Some(ids[0].clone());
+                        }
+                    } else if ids.len() >= 2 {
+                        // 字段：`type name`
+                        name = Some(ids[1].clone());
+                        type_ = Some(ids[0].clone());
                     } else {
-                        type_ = Some(Self::extract_string(inner));
+                        // 字段：仅 `name`
+                        name = Some(ids[0].clone());
                     }
                 }
                 _ => {}
@@ -827,6 +889,8 @@ impl MermaidParser {
         let target = ids[1].clone();
 
         let mut kind = RelationKind::Association;
+        let mut cardinality_first = None;
+        let mut cardinality_second = None;
         let mut label = None;
 
         for inner in pair.into_inner() {
@@ -841,7 +905,21 @@ impl MermaidParser {
                         _ => RelationKind::Association,
                     };
                 }
-                Rule::free_text => label = Some(inner.as_str().to_string()),
+                Rule::relation_cardinality => {
+                    // 语法顺序：`source "卡1" type "卡2" target`
+                    let c = Self::extract_string(inner);
+                    if cardinality_first.is_none() {
+                        cardinality_first = Some(c);
+                    } else {
+                        cardinality_second = Some(c);
+                    }
+                }
+                Rule::relation_label => {
+                    label = inner
+                        .into_inner()
+                        .find(|p| p.as_rule() == Rule::free_text)
+                        .map(|p| p.as_str().trim().to_string());
+                }
                 _ => {}
             }
         }
@@ -850,6 +928,8 @@ impl MermaidParser {
             source,
             target,
             kind,
+            cardinality_first,
+            cardinality_second,
             label,
         })
     }
@@ -871,6 +951,7 @@ impl MermaidParser {
             };
             match actual_pair.as_rule() {
                 Rule::state_simple => states.push(Self::parse_state_simple(actual_pair)?),
+                Rule::state_bare => states.push(Self::parse_state_simple(actual_pair)?),
                 Rule::state_composite => states.push(Self::parse_state_composite(actual_pair)?),
                 Rule::transition => transitions.push(Self::parse_transition(actual_pair)?),
                 _ => {}
@@ -884,10 +965,25 @@ impl MermaidParser {
     }
 
     fn parse_state_simple(pair: pest::iterators::Pair<Rule>) -> Result<State> {
+        // `state "描述" as id` 形式：描述是引号串，id 是 as 后面的标识符
+        if pair
+            .clone()
+            .into_inner()
+            .any(|p| p.as_rule() == Rule::quoted_id)
+        {
+            let id = Self::extract_optional_string(pair.clone(), Rule::state_id)
+                .or_else(|| Self::extract_optional_string(pair.clone(), Rule::identifier))
+                .ok_or_else(|| Self::invalid_syntax(&pair, "State missing id"))?;
+            let description = Self::extract_optional_string(pair, Rule::quoted_id);
+            return Ok(State::Simple { id, description });
+        }
+
         let id = Self::extract_optional_string(pair.clone(), Rule::identifier)
             .or_else(|| Self::extract_optional_string(pair.clone(), Rule::state_id))
             .ok_or_else(|| Self::invalid_syntax(&pair, "State missing id"))?;
-        let description = Self::extract_optional_string(pair, Rule::free_text);
+        let description = Self::extract_optional_string(pair, Rule::free_text)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
         Ok(State::Simple { id, description })
     }
 
@@ -1055,6 +1151,7 @@ impl MermaidParser {
 
         for inner in pair.into_inner() {
             match inner.as_rule() {
+                Rule::pie_showdata => show_data = true,
                 Rule::pie_modifier => {
                     let s = inner.as_str();
                     if let Some(stripped) = s.strip_prefix("title ") {
@@ -1086,11 +1183,19 @@ impl MermaidParser {
     // ========== 时间线解析 ==========
     fn parse_timeline(pair: pest::iterators::Pair<Rule>) -> Result<TimelineDiagram> {
         let mut title = None;
+        let mut direction = None;
         let mut sections = Vec::new();
         let mut current_section: Option<String> = None;
 
         for inner in pair.into_inner() {
             match inner.as_rule() {
+                Rule::timeline_direction => {
+                    direction = match inner.as_str() {
+                        "TD" => Some(TimelineDirection::TD),
+                        "LR" => Some(TimelineDirection::LR),
+                        _ => None,
+                    };
+                }
                 Rule::tl_title => {
                     let s = inner.as_str();
                     // 关键字可能是 Title/title（grammar 已大小写不敏感），去掉前缀取标签文本
@@ -1116,17 +1221,24 @@ impl MermaidParser {
                     let parts: Vec<&str> = s.splitn(2, ':').collect();
                     if parts.len() == 2 {
                         let section_name = current_section.clone().unwrap_or_default();
-                        let event = parts[1].trim().to_string();
-                        if let Some(section) = sections
-                            .iter_mut()
-                            .find(|sec: &&mut TimelineSection| sec.name == section_name)
-                        {
-                            section.events.push(event);
-                        } else {
-                            sections.push(TimelineSection {
-                                name: section_name,
-                                events: vec![event],
-                            });
+                        // 同一行可含多个事件：`1950 : B : C`
+                        let events: Vec<String> = parts[1]
+                            .split(':')
+                            .map(|e| e.trim().to_string())
+                            .filter(|e| !e.is_empty())
+                            .collect();
+                        for event in events {
+                            if let Some(section) = sections
+                                .iter_mut()
+                                .find(|sec: &&mut TimelineSection| sec.name == section_name)
+                            {
+                                section.events.push(event);
+                            } else {
+                                sections.push(TimelineSection {
+                                    name: section_name.clone(),
+                                    events: vec![event],
+                                });
+                            }
                         }
                     }
                 }
@@ -1134,7 +1246,11 @@ impl MermaidParser {
             }
         }
 
-        Ok(TimelineDiagram { title, sections })
+        Ok(TimelineDiagram {
+            title,
+            direction,
+            sections,
+        })
     }
 
     // ========== Git 分支图解析 ==========
@@ -1144,20 +1260,14 @@ impl MermaidParser {
         for inner in pair.into_inner() {
             if inner.as_rule() == Rule::gg_statement {
                 for stmt in inner.into_inner() {
+                    let attrs = Self::collect_gg_attrs(stmt.clone());
                     match stmt.as_rule() {
                         Rule::gg_commit => {
-                            let tag =
-                                stmt.into_inner()
-                                    .find(|p| p.as_rule() == Rule::gg_tag)
-                                    .map(|p| {
-                                        let s = p.as_str();
-                                        if let Some(stripped) = s.strip_prefix("tag:") {
-                                            stripped.trim().to_string()
-                                        } else {
-                                            s.to_string()
-                                        }
-                                    });
-                            statements.push(GitGraphStatement::Commit { tag });
+                            statements.push(GitGraphStatement::Commit {
+                                id: attrs.get("id").cloned(),
+                                commit_type: attrs.get("type").cloned(),
+                                tag: attrs.get("tag").cloned(),
+                            });
                         }
                         Rule::gg_branch => {
                             let name = Self::extract_optional_string(stmt, Rule::identifier)
@@ -1172,7 +1282,18 @@ impl MermaidParser {
                         Rule::gg_merge => {
                             let branch = Self::extract_optional_string(stmt, Rule::identifier)
                                 .unwrap_or_default();
-                            statements.push(GitGraphStatement::Merge { branch });
+                            statements.push(GitGraphStatement::Merge {
+                                branch,
+                                id: attrs.get("id").cloned(),
+                                tag: attrs.get("tag").cloned(),
+                                commit_type: attrs.get("type").cloned(),
+                            });
+                        }
+                        Rule::gg_cherry_pick => {
+                            statements.push(GitGraphStatement::CherryPick {
+                                id: attrs.get("id").cloned(),
+                                parent: attrs.get("parent").cloned(),
+                            });
                         }
                         _ => {}
                     }
@@ -1181,6 +1302,20 @@ impl MermaidParser {
         }
 
         Ok(GitGraphDiagram { statements })
+    }
+
+    /// 收集 gitgraph 语句的属性（`id:`/`type:`/`tag:`/`parent:`），返回 `键 -> 值` 映射。
+    fn collect_gg_attrs(stmt: pest::iterators::Pair<Rule>) -> std::collections::HashMap<String, String> {
+        let mut attrs = std::collections::HashMap::new();
+        for inner in stmt.into_inner() {
+            if inner.as_rule() == Rule::gg_attr {
+                let s = inner.as_str();
+                if let Some((key, value)) = s.split_once(':') {
+                    attrs.insert(key.trim().to_string(), value.trim().to_string());
+                }
+            }
+        }
+        attrs
     }
 }
 
@@ -1411,6 +1546,21 @@ mod tests {
     }
 
     #[test]
+    fn parses_flowchart_invisible_and_multi_direction_edges() {
+        // 不可见边 ~~~；多方向箭头 o--o / x--x
+        let input = "flowchart LR\nA ~~~ B\nC o--o D\nE x--x F";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Flowchart(fc) => {
+                assert_eq!(fc.edges.len(), 3);
+                assert_eq!(fc.edges[0].arrow_type, ArrowType::Invisible);
+                assert_eq!(fc.edges[1].arrow_type, ArrowType::MultiCircle);
+                assert_eq!(fc.edges[2].arrow_type, ArrowType::MultiCross);
+            }
+            _ => panic!("expected Flowchart"),
+        }
+    }
+
+    #[test]
     fn parses_flowchart_node_shapes() {
         let input = "flowchart TD\nA[Start]\nA --> B\nB{Decision}\nB --> C\nC[End]";
         match MermaidParser::parse_mermaid(input).unwrap() {
@@ -1525,6 +1675,32 @@ mod tests {
                 }
                 match &seq.statements[1] {
                     SequenceStatement::Message(m) => assert_eq!(m.arrow, MessageArrow::Open),
+                    _ => panic!("expected Message"),
+                }
+            }
+            _ => panic!("expected Sequence"),
+        }
+    }
+
+    #[test]
+    fn parses_sequence_activation_shortcuts() {
+        // 文档：`A->>+B` 激活 B；`B-->>-A` 取消激活 A
+        let input = "sequenceDiagram\nA->>+B: hi\nB-->>-A: reply";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Sequence(seq) => {
+                assert_eq!(seq.statements.len(), 2);
+                match &seq.statements[0] {
+                    SequenceStatement::Message(m) => {
+                        assert_eq!(m.activation, Some(MessageActivation::Activate));
+                        assert_eq!(m.to, "B");
+                    }
+                    _ => panic!("expected Message"),
+                }
+                match &seq.statements[1] {
+                    SequenceStatement::Message(m) => {
+                        assert_eq!(m.activation, Some(MessageActivation::Deactivate));
+                        assert_eq!(m.to, "A");
+                    }
                     _ => panic!("expected Message"),
                 }
             }
@@ -1674,6 +1850,63 @@ mod tests {
     }
 
     #[test]
+    fn parses_class_diagram_member_types_and_methods() {
+        // 文档：`+int age`（类型+字段）、`+int getAge() int`（返回类型方法）、`+swim()`
+        let input = "classDiagram\nclass Animal {\n+int age\n+String name\n+int getAge() int\n+swim()\n}";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Class(class_diag) => {
+                let members = &class_diag.classes[0].members;
+                assert_eq!(members.len(), 4);
+                // +int age → name=age, type=int
+                assert_eq!(members[0].name, "age");
+                assert_eq!(members[0].type_.as_deref(), Some("int"));
+                assert!(!members[0].is_method);
+                // +int getAge() int → name=getAge, method
+                assert_eq!(members[2].name, "getAge");
+                assert!(members[2].is_method);
+                // +swim() → name=swim, method
+                assert_eq!(members[3].name, "swim");
+                assert!(members[3].is_method);
+            }
+            _ => panic!("expected Class"),
+        }
+    }
+
+    #[test]
+    fn parses_class_diagram_generics_and_annotation() {
+        // 文档：`class List~T~` 泛型类名；`class Animal <<Interface>>` 注解
+        let input = "classDiagram\nclass List~T~\nclass Animal <<Interface>>";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Class(class_diag) => {
+                assert_eq!(class_diag.classes.len(), 2);
+                assert_eq!(class_diag.classes[0].name, "List~T~");
+                assert_eq!(class_diag.classes[1].name, "Animal");
+                assert_eq!(class_diag.classes[1].annotation.as_deref(), Some("Interface"));
+            }
+            _ => panic!("expected Class"),
+        }
+    }
+
+    #[test]
+    fn parses_class_diagram_cardinality() {
+        // 文档：`[类A] "基数1" [箭头] "基数2" [类B]:标签`
+        let input = "classDiagram\nAnimal \"1\" *-- \"many\" Dog : has";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Class(class_diag) => {
+                assert_eq!(class_diag.relations.len(), 1);
+                let rel = &class_diag.relations[0];
+                assert_eq!(rel.source, "Animal");
+                assert_eq!(rel.target, "Dog");
+                assert_eq!(rel.kind, RelationKind::Composition);
+                assert_eq!(rel.cardinality_first.as_deref(), Some("1"));
+                assert_eq!(rel.cardinality_second.as_deref(), Some("many"));
+                assert_eq!(rel.label.as_deref(), Some("has"));
+            }
+            _ => panic!("expected Class"),
+        }
+    }
+
+    #[test]
     fn parses_simple_state_diagram() {
         let input = "stateDiagram\n[*] --> Idle\nIdle --> [*]";
         match MermaidParser::parse_mermaid(input).unwrap() {
@@ -1693,6 +1926,52 @@ mod tests {
                 assert_eq!(state_diag.transitions.len(), 3);
                 assert_eq!(state_diag.transitions[1].label.as_deref(), Some("start"));
                 assert_eq!(state_diag.transitions[2].label.as_deref(), Some("done"));
+            }
+            _ => panic!("expected State"),
+        }
+    }
+
+    #[test]
+    fn parses_state_with_quoted_desc_as_id() {
+        // 文档方式二：`state "描述" as id`
+        let input = "stateDiagram-v2\nstate \"desc text\" as s1\ns1 --> [*]";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::State(sd) => {
+                assert_eq!(sd.states.len(), 1);
+                match &sd.states[0] {
+                    State::Simple { id, description } => {
+                        assert_eq!(id, "s1");
+                        assert_eq!(description.as_deref(), Some("desc text"));
+                    }
+                    _ => panic!("expected Simple state"),
+                }
+            }
+            _ => panic!("expected State"),
+        }
+    }
+
+    #[test]
+    fn parses_state_colon_description_and_bare() {
+        // 文档方式三：`id : 描述`；方式一：`id`
+        let input = "stateDiagram-v2\ns1 : a description\ns2\ns1 --> s2";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::State(sd) => {
+                assert_eq!(sd.states.len(), 2);
+                assert_eq!(sd.transitions.len(), 1);
+                match &sd.states[0] {
+                    State::Simple { id, description } => {
+                        assert_eq!(id, "s1");
+                        assert_eq!(description.as_deref(), Some("a description"));
+                    }
+                    _ => panic!("expected Simple state"),
+                }
+                match &sd.states[1] {
+                    State::Simple { id, description } => {
+                        assert_eq!(id, "s2");
+                        assert_eq!(description, &None);
+                    }
+                    _ => panic!("expected Simple state"),
+                }
             }
             _ => panic!("expected State"),
         }
@@ -1884,6 +2163,20 @@ mod tests {
     }
 
     #[test]
+    fn parses_pie_showdata_same_line() {
+        // 文档：`pie [showData]`，showData 可紧跟 pie 同行
+        let input = "pie showData\ntitle T\n\"A\" : 30\n\"B\" : 70";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Pie(pie) => {
+                assert!(pie.show_data);
+                assert_eq!(pie.title.as_deref(), Some("T"));
+                assert_eq!(pie.data.len(), 2);
+            }
+            _ => panic!("expected Pie"),
+        }
+    }
+
+    #[test]
     fn parses_simple_timeline() {
         let input = "timeline\ntitle History\nsection Age\nEvent 1 : 1900";
         match MermaidParser::parse_mermaid(input).unwrap() {
@@ -1924,12 +2217,44 @@ mod tests {
     }
 
     #[test]
+    fn parses_timeline_direction() {
+        let input = "timeline TD\ntitle T\n1940 : A";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Timeline(tl) => {
+                assert_eq!(tl.direction, Some(TimelineDirection::TD));
+                assert_eq!(tl.title.as_deref(), Some("T"));
+            }
+            _ => panic!("expected Timeline"),
+        }
+    }
+
+    #[test]
+    fn parses_timeline_multiple_events_same_line() {
+        // 文档：`1950 : 事件B : 事件C` 同一行多个事件
+        let input = "timeline\nsection Era\n1950 : B : C\n1960 : D";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Timeline(tl) => {
+                assert_eq!(tl.sections.len(), 1);
+                assert_eq!(tl.sections[0].events, vec!["B", "C", "D"]);
+            }
+            _ => panic!("expected Timeline"),
+        }
+    }
+
+    #[test]
     fn parses_simple_gitgraph() {
         let input = "gitGraph\ncommit\nbranch feature\ncheckout feature\ncommit\ncheckout main\nmerge feature";
         match MermaidParser::parse_mermaid(input).unwrap() {
             Diagram::GitGraph(gg) => {
                 assert_eq!(gg.statements.len(), 6);
-                assert_eq!(gg.statements[0], GitGraphStatement::Commit { tag: None });
+                assert_eq!(
+                    gg.statements[0],
+                    GitGraphStatement::Commit {
+                        id: None,
+                        commit_type: None,
+                        tag: None
+                    }
+                );
                 assert_eq!(
                     gg.statements[1],
                     GitGraphStatement::Branch {
@@ -1942,7 +2267,14 @@ mod tests {
                         branch: "feature".to_string()
                     }
                 );
-                assert_eq!(gg.statements[3], GitGraphStatement::Commit { tag: None });
+                assert_eq!(
+                    gg.statements[3],
+                    GitGraphStatement::Commit {
+                        id: None,
+                        commit_type: None,
+                        tag: None
+                    }
+                );
                 assert_eq!(
                     gg.statements[4],
                     GitGraphStatement::Checkout {
@@ -1952,7 +2284,10 @@ mod tests {
                 assert_eq!(
                     gg.statements[5],
                     GitGraphStatement::Merge {
-                        branch: "feature".to_string()
+                        branch: "feature".to_string(),
+                        id: None,
+                        tag: None,
+                        commit_type: None
                     }
                 );
             }
@@ -1969,10 +2304,45 @@ mod tests {
                 assert_eq!(
                     gg.statements[0],
                     GitGraphStatement::Commit {
+                        id: None,
+                        commit_type: None,
                         tag: Some("\"v1.0\"".to_string())
                     }
                 );
-                assert_eq!(gg.statements[1], GitGraphStatement::Commit { tag: None });
+                assert_eq!(
+                    gg.statements[1],
+                    GitGraphStatement::Commit {
+                        id: None,
+                        commit_type: None,
+                        tag: None
+                    }
+                );
+            }
+            _ => panic!("expected GitGraph"),
+        }
+    }
+
+    #[test]
+    fn parses_gitgraph_direction_attrs_cherrypick() {
+        let input = "gitGraph LR:\ncommit id: \"c1\" type: HIGHLIGHT tag: \"v1.0\"\nbranch dev\ncheckout dev\ncommit\ncheckout main\nmerge dev id: \"m1\" tag: \"m-tag\"\ncherry-pick id: \"c1\"";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::GitGraph(gg) => {
+                assert_eq!(gg.statements.len(), 7);
+                assert_eq!(
+                    gg.statements[0],
+                    GitGraphStatement::Commit {
+                        id: Some("\"c1\"".to_string()),
+                        commit_type: Some("HIGHLIGHT".to_string()),
+                        tag: Some("\"v1.0\"".to_string())
+                    }
+                );
+                assert_eq!(
+                    gg.statements[6],
+                    GitGraphStatement::CherryPick {
+                        id: Some("\"c1\"".to_string()),
+                        parent: None
+                    }
+                );
             }
             _ => panic!("expected GitGraph"),
         }
@@ -2028,5 +2398,86 @@ mod tests {
         assert!(
             MermaidParser::parse_mermaid("sequenceDiagram\nparticipant A\nparticipant B").is_ok()
         );
+    }
+
+    // ---------------------------------------------------------------------
+    // 渲染测试：覆盖本次新增语法的渲染管线，确保能产出非空 SVG
+    // ---------------------------------------------------------------------
+
+    /// 渲染给定 DSL，断言返回非空且包含 SVG 根节点。
+    fn assert_renders(input: &str) -> String {
+        let svg = crate::render(input, 800, 600)
+            .unwrap_or_else(|e| panic!("render failed for:\n{}\nerror: {}", input, e));
+        assert!(!svg.is_empty(), "empty svg for:\n{}", input);
+        assert!(svg.contains("<svg"), "no <svg> in output for:\n{}", input);
+        svg
+    }
+
+    #[test]
+    fn renders_flowchart_new_arrows() {
+        // 新增：不可见连线 ~~~、双向圆头 o--o、双向叉头 x--x
+        let input = "flowchart LR\nA ~~~ B\nC o--o D\nE x--x F\nG --> H";
+        let svg = assert_renders(input);
+        // 普通箭头应绘制标签/路径，至少包含节点文本
+        assert!(svg.contains("A"));
+        assert!(svg.contains("H"));
+    }
+
+    #[test]
+    fn renders_gitgraph_full_features() {
+        // 新增：方向、commit 属性、switch、merge 属性、cherry-pick
+        let input = "gitGraph LR:\ncommit id: \"c1\" type: HIGHLIGHT tag: \"v1.0\"\nbranch dev\ncheckout dev\ncommit\ncheckout main\nswitch dev\nmerge dev id: \"m1\" tag: \"m-tag\"\ncherry-pick id: \"c1\"";
+        let svg = assert_renders(input);
+        assert!(svg.contains("<svg"));
+    }
+
+    #[test]
+    fn renders_pie_showdata() {
+        // 新增：showData 与同行写法
+        for input in [
+            "pie showData\ntitle T\n\"A\" : 30\n\"B\" : 70",
+            "pie\nshowData\n\"A\" : 30\n\"B\" : 70",
+        ] {
+            let svg = assert_renders(input);
+            assert!(svg.contains("A"));
+        }
+    }
+
+    #[test]
+    fn renders_timeline_direction_and_multi_events() {
+        // 新增：方向 TD/LR、同行多个事件
+        let input = "timeline LR\ntitle History\nsection Age\n1950 : Event B : Event C\n1960 : Event D";
+        let svg = assert_renders(input);
+        assert!(svg.contains("History"));
+        assert!(svg.contains("Event B"));
+    }
+
+    #[test]
+    fn renders_state_new_declarations() {
+        // 新增：state "desc" as id、id : 描述、裸状态
+        let input = "stateDiagram-v2\nstate \"desc text\" as s1\ns2 : a description\ns3\ns1 --> s2\ns2 --> s3";
+        let svg = assert_renders(input);
+        assert!(svg.contains("s1"));
+        assert!(svg.contains("s2"));
+    }
+
+    #[test]
+    fn renders_sequence_activation() {
+        // 新增：消息激活 + / -
+        let input = "sequenceDiagram\nAlice ->>+ Bob: Hello\nBob -->>- Alice: World";
+        let svg = assert_renders(input);
+        assert!(svg.contains("Alice"));
+        assert!(svg.contains("Bob"));
+    }
+
+    #[test]
+    fn renders_class_members_and_annotations() {
+        // 新增：成员类型/方法、泛型、注解、关系基数
+        let input = "classDiagram\nclass Animal~T~<<Interface>>{\n+String name\n+int age\n+eat()\n+get() T\n}\nclass Dog\nAnimal <|-- Dog\nAnimal \"1\" <|-- \"*\" Dog : parent";
+        let svg = assert_renders(input);
+        assert!(svg.contains("Animal"));
+        assert!(svg.contains("Dog"));
+        assert!(svg.contains("name"));
+        assert!(svg.contains("eat"));
     }
 }

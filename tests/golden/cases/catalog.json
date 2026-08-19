@@ -1,0 +1,60 @@
+{
+  "description": "黄金样本测试用例目录。每个用例用官方 mermaid-cli 生成 golden SVG，并与 liemermaid 的结构化布局数据做对拍。文件命名规则：cases/{type}__{name}.mmd 保存 Mermaid 源码，golden/{type}__{name}.svg 为官方输出。",
+  "cases": [
+    { "type": "flowchart", "name": "chain", "rankdir": "TB", "width": 800, "height": 600, "source": "flowchart__chain.mmd" },
+    { "type": "flowchart", "name": "diamond", "rankdir": "TB", "width": 800, "height": 600, "source": "flowchart__diamond.mmd" },
+    { "type": "flowchart", "name": "cycle", "rankdir": "TB", "width": 800, "height": 600, "source": "flowchart__cycle.mmd" },
+    { "type": "flowchart", "name": "split", "rankdir": "TB", "width": 800, "height": 600, "source": "flowchart__split.mmd" },
+    { "type": "flowchart", "name": "cross", "rankdir": "TB", "width": 900, "height": 700, "source": "flowchart__cross.mmd" },
+    { "type": "flowchart", "name": "diamond_lr", "rankdir": "LR", "width": 900, "height": 600, "source": "flowchart__diamond_lr.mmd" },
+    { "type": "flowchart", "name": "diamond_bt", "rankdir": "BT", "width": 800, "height": 700, "source": "flowchart__diamond_bt.mmd" },
+    { "type": "flowchart", "name": "diamond_rl", "rankdir": "RL", "width": 900, "height": 600, "source": "flowchart__diamond_rl.mmd" },
+    { "type": "flowchart", "name": "binary_tree", "rankdir": "TB", "width": 900, "height": 700, "source": "flowchart__binary_tree.mmd" },
+    { "type": "flowchart", "name": "fan_in", "rankdir": "TB", "width": 900, "height": 600, "source": "flowchart__fan_in.mmd" },
+    { "type": "flowchart", "name": "fan_out", "rankdir": "TB", "width": 900, "height": 600, "source": "flowchart__fan_out.mmd" },
+    { "type": "flowchart", "name": "diamond_nested", "rankdir": "TB", "width": 900, "height": 700, "source": "flowchart__diamond_nested.mmd" },
+    { "type": "flowchart", "name": "long_chain", "rankdir": "TB", "width": 700, "height": 900, "source": "flowchart__long_chain.mmd" },
+    { "type": "flowchart", "name": "two_diamonds", "rankdir": "TB", "width": 900, "height": 800, "source": "flowchart__two_diamonds.mmd" },
+    { "type": "flowchart", "name": "grid2x2", "rankdir": "TB", "width": 800, "height": 600, "source": "flowchart__grid2x2.mmd" },
+    { "type": "flowchart", "name": "disconnected", "rankdir": "TB", "width": 900, "height": 600, "source": "flowchart__disconnected.mmd" },
+    { "type": "flowchart", "name": "edge_types", "rankdir": "TB", "width": 800, "height": 700, "source": "flowchart__edge_types.mmd" },
+    { "type": "flowchart", "name": "edge_labels", "rankdir": "LR", "width": 900, "height": 600, "source": "flowchart__edge_labels.mmd" },
+    { "type": "flowchart", "name": "self_loop", "rankdir": "TB", "width": 700, "height": 600, "source": "flowchart__self_loop.mmd" },
+    { "type": "flowchart", "name": "diamond_3way", "rankdir": "TB", "width": 900, "height": 700, "source": "flowchart__diamond_3way.mmd" },
+    { "type": "flowchart", "name": "long_edge", "rankdir": "TB", "width": 800, "height": 600, "source": "flowchart__long_edge.mmd", "liemermaid": false },
+    { "type": "flowchart", "name": "dense", "rankdir": "TB", "width": 900, "height": 800, "source": "flowchart__dense.mmd", "liemermaid": false },
+    { "type": "flowchart", "name": "cycle2", "rankdir": "TB", "width": 800, "height": 600, "source": "flowchart__cycle2.mmd", "liemermaid": false },
+    { "type": "flowchart", "name": "subgraph", "rankdir": "TB", "width": 900, "height": 700, "source": "flowchart__subgraph.mmd", "compare": false },
+    { "type": "flowchart", "name": "shapes", "rankdir": "TD", "width": 900, "height": 800, "source": "flowchart__shapes.mmd", "compare": false },
+
+    { "type": "sequence", "name": "basic", "width": 700, "height": 500, "source": "sequence__basic.mmd" },
+    { "type": "sequence", "name": "activation", "width": 700, "height": 500, "source": "sequence__activation.mmd" },
+    { "type": "sequence", "name": "three_party", "width": 800, "height": 500, "source": "sequence__three_party.mmd" },
+    { "type": "sequence", "name": "notes", "width": 700, "height": 500, "source": "sequence__notes.mmd", "liemermaid": false },
+    { "type": "sequence", "name": "loops", "width": 700, "height": 500, "source": "sequence__loops.mmd" },
+
+    { "type": "class", "name": "basic", "width": 800, "height": 500, "source": "class__basic.mmd" },
+    { "type": "class", "name": "fields_methods", "width": 800, "height": 500, "source": "class__fields_methods.mmd" },
+    { "type": "class", "name": "relations", "width": 900, "height": 500, "source": "class__relations.mmd" },
+    { "type": "class", "name": "cardinality", "width": 800, "height": 500, "source": "class__cardinality.mmd" },
+
+    { "type": "state", "name": "basic", "width": 700, "height": 500, "source": "state__basic.mmd" },
+    { "type": "state", "name": "with_labels", "width": 700, "height": 500, "source": "state__with_labels.mmd" },
+    { "type": "state", "name": "composite", "width": 700, "height": 500, "source": "state__composite.mmd", "liemermaid": false },
+    { "type": "state", "name": "fork_join", "width": 700, "height": 500, "source": "state__fork_join.mmd", "liemermaid": false },
+
+    { "type": "er", "name": "basic", "width": 900, "height": 400, "source": "er__basic.mmd" },
+    { "type": "er", "name": "cardinality", "width": 1000, "height": 500, "source": "er__cardinality.mmd" },
+    { "type": "er", "name": "attributes", "width": 900, "height": 400, "source": "er__attributes.mmd", "liemermaid": false },
+
+    { "type": "pie", "name": "basic", "width": 600, "height": 500, "source": "pie__basic.mmd" },
+    { "type": "pie", "name": "showdata", "width": 600, "height": 500, "source": "pie__showdata.mmd" },
+    { "type": "pie", "name": "small", "width": 500, "height": 400, "source": "pie__small.mmd" },
+
+    { "type": "timeline", "name": "basic", "width": 900, "height": 400, "source": "timeline__basic.mmd" },
+    { "type": "timeline", "name": "multi_event", "width": 900, "height": 400, "source": "timeline__multi_event.mmd" },
+
+    { "type": "gitgraph", "name": "basic", "width": 900, "height": 500, "source": "gitgraph__basic.mmd", "liemermaid": false },
+    { "type": "gitgraph", "name": "attributes", "width": 900, "height": 500, "source": "gitgraph__attributes.mmd", "liemermaid": false }
+  ]
+}

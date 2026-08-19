@@ -1,47 +1,35 @@
+// Class 渲染示例
+//
+// 运行：cargo run --example class
+// 产物：examples/out/class.svg
+
+use liemermaid::{render, MermaidParser};
+use std::fs;
+
 fn main() {
-    // 1. 基础类图（继承关系：Animal 在上，Dog/Cat 在下）
-    let basic = r#"classDiagram
-    class Animal
+    // 本次新增语法：
+    //   class Animal~T~<<Interface>>{ ... }   泛型 ~T~ + 注解 <<Interface>>
+    //   +String name                          字段（带类型）
+    //   +eat()                                方法（无返回类型）
+    //   +get() T                              方法（带返回类型）
+    //   Animal "1" <|-- "*" Dog : parent      关系基数（"1" / "*"）
+    let input = r#"classDiagram
+    class Animal~T~<<Interface>>{
+        +String name
+        +int age
+        +eat()
+        +get() T
+    }
     class Dog
-    class Cat
     Animal <|-- Dog
-    Animal <|-- Cat
+    Animal "1" <|-- "*" Dog : parent
 "#;
-    let svg = liemermaid::render(basic, 700, 400).expect("render basic class");
-    std::fs::write("class_basic.svg", svg).expect("write svg");
-    println!("class_basic.svg generated");
 
-    // 2. 带成员的类图
-    let members = r#"classDiagram
-    class Animal {
-        +name : String
-        +age : int
-        +makeSound()
-    }
-    class Dog {
-        -breed : String
-        +bark()
-    }
-    Animal <|-- Dog
-"#;
-    let svg = liemermaid::render(members, 700, 400).expect("render class with members");
-    std::fs::write("class_members.svg", svg).expect("write svg");
-    println!("class_members.svg generated");
+    let _diagram = MermaidParser::parse_mermaid(input).expect("parse failed");
+    println!("解析成功");
 
-    // 3. 全关系类型
-    let relations = r#"classDiagram
-    class A
-    class B
-    class C
-    class D
-    class E
-    A <|-- B : Inheritance
-    A *-- C : Composition
-    A o-- D : Aggregation
-    A --> E : Association
-    A ..> B : Dependency
-"#;
-    let svg = liemermaid::render(relations, 900, 400).expect("render class relations");
-    std::fs::write("class_relations.svg", svg).expect("write svg");
-    println!("class_relations.svg generated");
+    let svg = render(input, 800, 500).expect("render failed");
+    fs::create_dir_all("examples/out").unwrap();
+    fs::write("examples/out/class.svg", &svg).unwrap();
+    println!("已写入 examples/out/class.svg ({} 字节)", svg.len());
 }

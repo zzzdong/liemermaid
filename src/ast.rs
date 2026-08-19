@@ -75,6 +75,12 @@ pub enum ArrowType {
     Circle,
     /// 终点叉号（`--x`）
     Cross,
+    /// 不可见边（`~~~`）
+    Invisible,
+    /// 双向圆点箭头（`o--o`）
+    MultiCircle,
+    /// 双向叉号箭头（`x--x`）
+    MultiCross,
     Labeled(String),
 }
 
@@ -141,11 +147,19 @@ pub enum ParticipantKind {
     Queue,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MessageActivation {
+    Activate,
+    Deactivate,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
     pub from: String,
     pub to: String,
     pub arrow: MessageArrow,
+    /// 箭头后的激活/取消激活快捷符号（`->>+B` 激活，`-->>-A` 取消）
+    pub activation: Option<MessageActivation>,
     pub text: Option<String>,
 }
 
@@ -184,6 +198,8 @@ pub struct ClassDiagram {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Class {
     pub name: String,
+    /// 注解/构造型，如 `<<Interface>>`
+    pub annotation: Option<String>,
     pub members: Vec<ClassMember>,
 }
 
@@ -208,6 +224,10 @@ pub struct Relation {
     pub source: String,
     pub target: String,
     pub kind: RelationKind,
+    /// 源端基数（`"1"`），可选
+    pub cardinality_first: Option<String>,
+    /// 目标端基数（`"many"`），可选
+    pub cardinality_second: Option<String>,
     pub label: Option<String>,
 }
 
@@ -298,7 +318,15 @@ pub struct PieData {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimelineDiagram {
     pub title: Option<String>,
+    /// 方向：`LR`（默认）或 `TD`
+    pub direction: Option<TimelineDirection>,
     pub sections: Vec<TimelineSection>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TimelineDirection {
+    LR,
+    TD,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -314,8 +342,25 @@ pub struct GitGraphDiagram {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GitGraphStatement {
-    Commit { tag: Option<String> },
-    Branch { name: String },
-    Checkout { branch: String },
-    Merge { branch: String },
+    Commit {
+        id: Option<String>,
+        commit_type: Option<String>,
+        tag: Option<String>,
+    },
+    Branch {
+        name: String,
+    },
+    Checkout {
+        branch: String,
+    },
+    Merge {
+        branch: String,
+        id: Option<String>,
+        tag: Option<String>,
+        commit_type: Option<String>,
+    },
+    CherryPick {
+        id: Option<String>,
+        parent: Option<String>,
+    },
 }

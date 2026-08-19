@@ -1,0 +1,8 @@
+sequenceDiagram
+    participant Client
+    participant Server
+    participant DB
+    Client->>+Server: Request
+    Server->>+DB: Query
+    DB-->>-Server: Result
+    Server-->>-Client: Response
