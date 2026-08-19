@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use petgraph::graph::{DiGraph, NodeIndex};
 use lievisual::geometry::{Point, Rect};
+use petgraph::graph::{DiGraph, NodeIndex};
 
 use crate::{
     ast::StateDiagram,
@@ -11,12 +11,11 @@ use crate::{
         types::OutputConfig,
     },
     error::DiagramResult,
-    vir::{self, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, theme,
-    },
+    vir::{self, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, theme},
 };
 use lievisual::geometry::Color;
 use lievisual::scene::SceneNode;
-use lievisual::text::{compute_text_offset, layout_text, RichSpan};
+use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
 const STATE_PAD_X: f64 = 18.0;
 const STATE_PAD_Y: f64 = 10.0;
@@ -328,14 +327,17 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                     TextAlign::Center,
                     TextBaseline::Bottom,
                 );
-                let layout = layout_text(&[RichSpan::new(label.to_string(), ts.clone())], Some(200.0));
+                let layout =
+                    layout_text(&[RichSpan::new(label.to_string(), ts.clone())], Some(200.0));
                 let (x_off, y_off) =
                     compute_text_offset(&layout, TextAlign::Center, TextBaseline::Bottom);
                 let label_cx = (fp.x + tp.x) / 2.0;
                 elements.push(vir::text_node(
                     label.clone(),
                     Point::new(label_cx + x_off, mid_y - 4.0 + y_off),
-                    ts.clone().with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+                    ts.clone()
+                        .with_align(TextAlign::Left)
+                        .with_baseline(TextBaseline::Top),
                     0.0,
                     Some(200.0),
                     Z_LABEL,
@@ -406,7 +408,10 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                     TextAlign::Center,
                     TextBaseline::Middle,
                 );
-                let layout = layout_text(&[RichSpan::new(nl.label.to_string(), ts.clone())], Some(nl.width - 10.0));
+                let layout = layout_text(
+                    &[RichSpan::new(nl.label.to_string(), ts.clone())],
+                    Some(nl.width - 10.0),
+                );
                 let (x_off, y_off) = if description.is_some() {
                     // Shift up a bit if there's a description
                     (0.0, -8.0)
@@ -416,7 +421,9 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                 elements.push(vir::text_node(
                     nl.label.clone(),
                     Point::new(pos.x + x_off, pos.y + y_off),
-                    ts.clone().with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+                    ts.clone()
+                        .with_align(TextAlign::Left)
+                        .with_baseline(TextBaseline::Top),
                     0.0,
                     Some(nl.width - 10.0),
                     Z_LABEL,
@@ -431,13 +438,18 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                         TextAlign::Center,
                         TextBaseline::Top,
                     );
-                    let dl = layout_text(&[RichSpan::new(desc.to_string(), dts.clone())], Some(nl.width - 10.0));
+                    let dl = layout_text(
+                        &[RichSpan::new(desc.to_string(), dts.clone())],
+                        Some(nl.width - 10.0),
+                    );
                     let (dx_off, dy_off) =
                         compute_text_offset(&dl, TextAlign::Center, TextBaseline::Top);
                     elements.push(vir::text_node(
                         desc.clone(),
                         Point::new(pos.x + dx_off, pos.y + 4.0 + dy_off),
-                        dts.clone().with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+                        dts.clone()
+                            .with_align(TextAlign::Left)
+                            .with_baseline(TextBaseline::Top),
                         0.0,
                         Some(nl.width - 10.0),
                         Z_LABEL,

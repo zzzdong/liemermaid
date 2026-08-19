@@ -118,15 +118,17 @@ fn compute_bbox(elements: &[SceneNode]) -> Option<(f64, f64, f64, f64)> {
                     }
                 }
             }
-            Element::Text { position, layout, style, .. } => {
+            Element::Text {
+                position,
+                layout,
+                style,
+                ..
+            } => {
                 let tw = layout
                     .as_ref()
                     .map(|l| l.width)
                     .unwrap_or(style.font_size * 4.0);
-                let th = layout
-                    .as_ref()
-                    .map(|l| l.height)
-                    .unwrap_or(style.font_size);
+                let th = layout.as_ref().map(|l| l.height).unwrap_or(style.font_size);
                 let (tx0, tx1) = match style.align {
                     TextAlign::Left | TextAlign::Justify => (position.x, position.x + tw),
                     TextAlign::Center => (position.x - tw / 2.0, position.x + tw / 2.0),
@@ -188,7 +190,9 @@ fn fit_to_canvas(elements: Vec<SceneNode>, config: &OutputConfig) -> Vec<SceneNo
 
     let transform = Transform::translate(offset_x, offset_y).then(&Transform::scale(scale));
 
-    vec![SceneNode::new(Element::Group { children: elements })
-        .with_z(0)
-        .with_transform(transform)]
+    vec![
+        SceneNode::new(Element::Group { children: elements })
+            .with_z(0)
+            .with_transform(transform),
+    ]
 }

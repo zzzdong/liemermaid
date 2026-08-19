@@ -54,7 +54,8 @@ struct DagreFixture {
 
 fn load_fixture() -> DagreFixture {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/dagre_ref/layouts.json");
-    let text = std::fs::read_to_string(path).expect("layouts.json missing; run `node tests/dagre_ref/run.js`");
+    let text = std::fs::read_to_string(path)
+        .expect("layouts.json missing; run `node tests/dagre_ref/run.js`");
     serde_json::from_str(&text).expect("invalid layouts.json")
 }
 
@@ -189,7 +190,10 @@ fn official_layout_topology_and_coords_match() {
                 yalign_ok = false;
                 eprintln!(
                     "[{}] rank {} y misalign: {:?} (span {})",
-                    case.name, r, ys, mx - mn
+                    case.name,
+                    r,
+                    ys,
+                    mx - mn
                 );
             }
         }
@@ -202,10 +206,8 @@ fn official_layout_topology_and_coords_match() {
         let ours_by_rank = group_by_rank(&ours_rank);
         for (dr, dnodes) in dagre_by_rank.iter() {
             // 在 ours 中找集合相同的 rank
-            let matched = ours_by_rank
-                .iter()
-                .find(|(_, on)| same_set(on, dnodes));
-            let onodes = match matched {
+            let matched = ours_by_rank.iter().find(|(_, on)| same_set(on, dnodes));
+            let _onodes = match matched {
                 Some((_, on)) => on,
                 None => {
                     coord_ok = false;
@@ -279,10 +281,10 @@ fn dagre_ranks_and_norm(case: &DagreCase) -> (HashMap<String, usize>, HashMap<St
     let mut cur = 0usize;
     for id in ids {
         let p = primary(case.nodes.get(id).unwrap());
-        if let Some(pv) = prev {
-            if p - pv > 1.0 {
-                cur += 1;
-            }
+        if let Some(pv) = prev
+            && p - pv > 1.0
+        {
+            cur += 1;
         }
         // 第一层（prev=None）cur 保持 0
         prev = Some(p);

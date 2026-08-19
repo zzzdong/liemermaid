@@ -18,10 +18,14 @@ fn probe_parse() {
     match MermaidParser::parse_mermaid(input) {
         Ok(liemermaid::Diagram::Flowchart(fc)) => {
             println!("NODES:");
-            for n in &fc.nodes { println!("  top: id={} shape={:?} text={:?}", n.id, n.shape, n.text); }
+            for n in &fc.nodes {
+                println!("  top: id={} shape={:?} text={:?}", n.id, n.shape, n.text);
+            }
             for sg in &fc.subgraphs {
                 println!("  subgraph title={:?}", sg.title);
-                for n in &sg.nodes { println!("    id={} shape={:?} text={:?}", n.id, n.shape, n.text); }
+                for n in &sg.nodes {
+                    println!("    id={} shape={:?} text={:?}", n.id, n.shape, n.text);
+                }
             }
         }
         Ok(_) => println!("not flowchart"),

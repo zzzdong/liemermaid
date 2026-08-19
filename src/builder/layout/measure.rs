@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 
-use lievisual::text::{layout_text, RichSpan};
+use lievisual::text::{RichSpan, layout_text};
 
 use crate::{
     ast::{Node, NodeShape},
     builder::types::OutputConfig,
-    vir::{Color, TextAlign, TextBaseline, TextStyle,
-    },
+    vir::{Color, TextAlign, TextBaseline, TextStyle},
 };
 
 use super::{

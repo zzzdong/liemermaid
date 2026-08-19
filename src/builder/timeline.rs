@@ -1,14 +1,12 @@
-use lievisual::geometry::{Point};
+use lievisual::geometry::Point;
 
 use crate::{
     ast::TimelineDiagram,
     builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
-    vir::{self, SceneNode, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, Z_TITLE,
-        theme,
-    },
+    vir::{self, SceneNode, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, Z_TITLE, theme},
 };
-use lievisual::text::{compute_text_offset, layout_text, RichSpan};
+use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
 const TITLE_SIZE: f64 = 22.0;
 const SECTION_SIZE: f64 = 14.0;
@@ -50,12 +48,17 @@ pub fn build_timeline_elements(
             TextAlign::Center,
             TextBaseline::Top,
         );
-        let layout = layout_text(&[RichSpan::new(title.to_string(), ts.clone())], Some(config.width - 80.0));
+        let layout = layout_text(
+            &[RichSpan::new(title.to_string(), ts.clone())],
+            Some(config.width - 80.0),
+        );
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Top);
         elements.push(vir::text_node(
             title.clone(),
             Point::new(config.width / 2.0 + x_off, cur_y + y_off),
-            ts.clone().with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+            ts.clone()
+                .with_align(TextAlign::Left)
+                .with_baseline(TextBaseline::Top),
             0.0,
             Some(config.width - 80.0),
             Z_TITLE,
@@ -97,14 +100,19 @@ pub fn build_timeline_elements(
             TextAlign::Center,
             TextBaseline::Top,
         );
-        let layout = layout_text(&[RichSpan::new(section.name.to_string(), ts.clone())], Some(section_spacing - 10.0));
+        let layout = layout_text(
+            &[RichSpan::new(section.name.to_string(), ts.clone())],
+            Some(section_spacing - 10.0),
+        );
         let line_count = layout.lines.len().max(1);
         let estimated_h = line_count as f64 * 20.0;
 
         elements.push(vir::text_node(
             section.name.clone(),
             Point::new(cx - (section_spacing - 10.0) / 2.0, cur_y),
-            ts.clone().with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+            ts.clone()
+                .with_align(TextAlign::Left)
+                .with_baseline(TextBaseline::Top),
             0.0,
             Some(section_spacing - 10.0),
             Z_LABEL,
@@ -137,11 +145,16 @@ pub fn build_timeline_elements(
                 TextAlign::Left,
                 TextBaseline::Top,
             );
-            let _el = layout_text(&[RichSpan::new(event.to_string(), ets.clone())], Some(section_spacing - 25.0));
+            let _el = layout_text(
+                &[RichSpan::new(event.to_string(), ets.clone())],
+                Some(section_spacing - 25.0),
+            );
             elements.push(vir::text_node(
                 event.clone(),
                 Point::new(cx + 10.0, event_y),
-                ets.clone().with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+                ets.clone()
+                    .with_align(TextAlign::Left)
+                    .with_baseline(TextBaseline::Top),
                 0.0,
                 Some(section_spacing - 25.0),
                 Z_LABEL,

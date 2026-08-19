@@ -1,28 +1,20 @@
 use std::collections::HashMap;
 
+use lievisual::geometry::Point;
 use petgraph::Direction;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
-use lievisual::geometry::{Point};
 
 use crate::{
     ast::{GitGraphDiagram, GitGraphStatement},
     builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
-    vir::{self,
-        Color,
-        SceneNode,
-        TextAlign,
-        TextBaseline,
-        TextStyle,
-        Z_AXIS,
-        Z_LABEL,
-        Z_SERIES,
+    vir::{
+        self, Color, SceneNode, TextAlign, TextBaseline, TextStyle, Z_AXIS, Z_LABEL, Z_SERIES,
         theme,
     },
 };
-use lievisual::text::{compute_text_offset, layout_text, RichSpan};
-
+use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
 const COMMIT_RADIUS: f64 = 8.0;
 const BRANCH_SPACING: f64 = 40.0;
@@ -56,10 +48,7 @@ struct CommitData {
     is_merge: bool,
 }
 
-pub fn build_gitgraph_elements(
-    graph: &GitGraphDiagram,
-    _config: &OutputConfig,
-) -> Vec<SceneNode> {
+pub fn build_gitgraph_elements(graph: &GitGraphDiagram, _config: &OutputConfig) -> Vec<SceneNode> {
     let mut elements = Vec::new();
 
     if graph.statements.is_empty() {
@@ -186,7 +175,12 @@ pub fn build_gitgraph_elements(
 
         if branch_commits.len() >= 2 {
             for i in 0..branch_commits.len() - 1 {
-                elements.push(vir::line_node(branch_commits[i].position, branch_commits[i + 1].position, vir::stroke(color, 2.5), Z_AXIS));
+                elements.push(vir::line_node(
+                    branch_commits[i].position,
+                    branch_commits[i + 1].position,
+                    vir::stroke(color, 2.5),
+                    Z_AXIS,
+                ));
             }
         }
 
@@ -204,7 +198,12 @@ pub fn build_gitgraph_elements(
                 })
         {
             let first = branch_commits[0].position;
-            elements.push(vir::line_node(Point::new(first.x, parent_y), first, vir::stroke(color, 2.5), Z_AXIS));
+            elements.push(vir::line_node(
+                Point::new(first.x, parent_y),
+                first,
+                vir::stroke(color, 2.5),
+                Z_AXIS,
+            ));
         }
     }
 
@@ -244,9 +243,19 @@ pub fn build_gitgraph_elements(
     for cp in &commit_positions {
         let color = branch_colors[cp.branch_name.as_str()];
 
-        elements.push(vir::circle_node(cp.position, COMMIT_RADIUS, vir::fs_both(Color::rgb(255, 255, 255), color, 2.5), Z_SERIES));
+        elements.push(vir::circle_node(
+            cp.position,
+            COMMIT_RADIUS,
+            vir::fs_both(Color::rgb(255, 255, 255), color, 2.5),
+            Z_SERIES,
+        ));
 
-        elements.push(vir::circle_node(cp.position, 3.0, vir::fs_fill(color), Z_SERIES));
+        elements.push(vir::circle_node(
+            cp.position,
+            3.0,
+            vir::fs_fill(color),
+            Z_SERIES,
+        ));
 
         if let Some(tag) = &cp.tag {
             let ts = TextStyle::new(color, FONT_SIZE, theme::FONT_FAMILY.to_string())
@@ -278,7 +287,10 @@ pub fn build_gitgraph_elements(
         let ts = TextStyle::new(color, FONT_SIZE, theme::FONT_FAMILY.to_string())
             .with_align(TextAlign::Right)
             .with_baseline(TextBaseline::Middle);
-        let layout = layout_text(&[RichSpan::new(branch_name.to_string(), ts.clone())], Some(120.0));
+        let layout = layout_text(
+            &[RichSpan::new(branch_name.to_string(), ts.clone())],
+            Some(120.0),
+        );
         let x = base_x + i as f64 * BRANCH_SPACING;
         let y = TOP_MARGIN + 12.0;
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Right, TextBaseline::Middle);

@@ -248,15 +248,14 @@ impl MermaidParser {
                 let mut arrow_type = Self::parse_edge_arrow(inner.clone())?;
                 let mut label = None;
                 for arrow_inner in inner.into_inner() {
-                    if arrow_inner.as_rule() == Rule::edge_arrow_labeled {
-                        if let Some(label_pair) = arrow_inner
+                    if arrow_inner.as_rule() == Rule::edge_arrow_labeled
+                        && let Some(label_pair) = arrow_inner
                             .into_inner()
                             .find(|p| p.as_rule() == Rule::edge_label)
-                        {
-                            let label_text = label_pair.as_str().to_string();
-                            label = Some(label_text.clone());
-                            arrow_type = ArrowType::Labeled(label_text);
-                        }
+                    {
+                        let label_text = label_pair.as_str().to_string();
+                        label = Some(label_text.clone());
+                        arrow_type = ArrowType::Labeled(label_text);
                     }
                 }
                 arrows.push((arrow_type, label));
@@ -341,15 +340,22 @@ impl MermaidParser {
                 }
                 Rule::message => {
                     let msg = Self::parse_message(actual_pair)?;
-                    Self::register_message_participants(&msg, &mut participant_names, &mut participants);
+                    Self::register_message_participants(
+                        &msg,
+                        &mut participant_names,
+                        &mut participants,
+                    );
                     statements.push(SequenceStatement::Message(msg));
                 }
-                Rule::note => statements.push(SequenceStatement::Note(Self::parse_note(actual_pair)?)),
+                Rule::note => {
+                    statements.push(SequenceStatement::Note(Self::parse_note(actual_pair)?))
+                }
                 Rule::seq_block => {
                     let ap_clone = actual_pair.clone();
-                    let inner = actual_pair.into_inner().next().ok_or_else(|| {
-                        Self::invalid_syntax(&ap_clone, "空的分组块")
-                    })?;
+                    let inner = actual_pair
+                        .into_inner()
+                        .next()
+                        .ok_or_else(|| Self::invalid_syntax(&ap_clone, "空的分组块"))?;
                     let block = Self::parse_sequence_block(
                         inner,
                         &mut participant_names,
@@ -405,15 +411,25 @@ impl MermaidParser {
                 let label = Self::extract_optional_string(pair.clone(), Rule::seq_block_label)
                     .filter(|s| !s.trim().is_empty())
                     .map(|s| s.trim().to_string());
-                let items = Self::parse_block_items(pair.into_inner(), participant_names, participants)?;
-                Ok(SequenceBlock { kind: SequenceBlockKind::Loop, label, items })
+                let items =
+                    Self::parse_block_items(pair.into_inner(), participant_names, participants)?;
+                Ok(SequenceBlock {
+                    kind: SequenceBlockKind::Loop,
+                    label,
+                    items,
+                })
             }
             Rule::opt_block => {
                 let label = Self::extract_optional_string(pair.clone(), Rule::seq_block_label)
                     .filter(|s| !s.trim().is_empty())
                     .map(|s| s.trim().to_string());
-                let items = Self::parse_block_items(pair.into_inner(), participant_names, participants)?;
-                Ok(SequenceBlock { kind: SequenceBlockKind::Opt, label, items })
+                let items =
+                    Self::parse_block_items(pair.into_inner(), participant_names, participants)?;
+                Ok(SequenceBlock {
+                    kind: SequenceBlockKind::Opt,
+                    label,
+                    items,
+                })
             }
             Rule::alt_block => Self::parse_alt_block(pair, participant_names, participants),
             Rule::par_block => Self::parse_par_block(pair, participant_names, participants),
@@ -433,18 +449,24 @@ impl MermaidParser {
             match inner.as_rule() {
                 Rule::sequence_statement => {
                     let inner_clone = inner.clone();
-                    let stmt = inner.into_inner().next().ok_or_else(|| {
-                        Self::invalid_syntax(&inner_clone, "空的分组语句")
-                    })?;
+                    let stmt = inner
+                        .into_inner()
+                        .next()
+                        .ok_or_else(|| Self::invalid_syntax(&inner_clone, "空的分组语句"))?;
                     match stmt.as_rule() {
                         Rule::message => {
                             let msg = Self::parse_message(stmt)?;
-                            Self::register_message_participants(&msg, participant_names, participants);
+                            Self::register_message_participants(
+                                &msg,
+                                participant_names,
+                                participants,
+                            );
                             items.push(SequenceItem::Message(msg));
                         }
                         Rule::note => items.push(SequenceItem::Note(Self::parse_note(stmt)?)),
                         Rule::loop_block | Rule::opt_block | Rule::par_block | Rule::alt_block => {
-                            let b = Self::parse_sequence_block(stmt, participant_names, participants)?;
+                            let b =
+                                Self::parse_sequence_block(stmt, participant_names, participants)?;
                             items.push(SequenceItem::Block(b));
                         }
                         _ => {}
@@ -485,7 +507,8 @@ impl MermaidParser {
                 current_label = Self::extract_optional_string(inner.clone(), Rule::seq_block_label)
                     .filter(|s| !s.trim().is_empty())
                     .map(|s| s.trim().to_string());
-                current_items = Self::parse_block_items(inner.into_inner(), participant_names, participants)?;
+                current_items =
+                    Self::parse_block_items(inner.into_inner(), participant_names, participants)?;
                 in_branch = true;
             }
         }
@@ -497,9 +520,11 @@ impl MermaidParser {
             });
         }
 
-        let mut result = branches.clone().into_iter().next().ok_or_else(|| {
-            Self::invalid_syntax(&pair_clone, "alt 块缺少分支")
-        })?;
+        let mut result = branches
+            .clone()
+            .into_iter()
+            .next()
+            .ok_or_else(|| Self::invalid_syntax(&pair_clone, "alt 块缺少分支"))?;
         // 把其余 else 分支作为末尾嵌套块，保证都能渲染
         for extra in branches.into_iter().skip(1) {
             result.items.push(SequenceItem::Block(extra));
@@ -531,7 +556,8 @@ impl MermaidParser {
                 current_label = Self::extract_optional_string(inner.clone(), Rule::seq_block_label)
                     .filter(|s| !s.trim().is_empty())
                     .map(|s| s.trim().to_string());
-                current_items = Self::parse_block_items(inner.into_inner(), participant_names, participants)?;
+                current_items =
+                    Self::parse_block_items(inner.into_inner(), participant_names, participants)?;
                 in_branch = true;
             }
         }
@@ -543,9 +569,11 @@ impl MermaidParser {
             });
         }
 
-        let mut result = branches.clone().into_iter().next().ok_or_else(|| {
-            Self::invalid_syntax(&pair_clone, "par 块缺少分支")
-        })?;
+        let mut result = branches
+            .clone()
+            .into_iter()
+            .next()
+            .ok_or_else(|| Self::invalid_syntax(&pair_clone, "par 块缺少分支"))?;
         for extra in branches.into_iter().skip(1) {
             result.items.push(SequenceItem::Block(extra));
         }
@@ -1326,7 +1354,8 @@ mod tests {
 
     #[test]
     fn parses_sequence_alt_block_with_else() {
-        let input = "sequenceDiagram\nA->>B: hi\nalt is ok\nB->>C: go\nelse is bad\nB->>D: stop\nend";
+        let input =
+            "sequenceDiagram\nA->>B: hi\nalt is ok\nB->>C: go\nelse is bad\nB->>D: stop\nend";
         match MermaidParser::parse_mermaid(input).unwrap() {
             Diagram::Sequence(seq) => {
                 assert_eq!(seq.statements.len(), 2);
@@ -1336,10 +1365,7 @@ mod tests {
                         assert_eq!(b.label.as_deref(), Some("is ok"));
                         // 首个分支的消息 + 末尾追加的 else 嵌套块
                         assert!(b.items.len() >= 2);
-                        assert!(matches!(
-                            &b.items[0],
-                            SequenceItem::Message(_)
-                        ));
+                        assert!(matches!(&b.items[0], SequenceItem::Message(_)));
                         // 检查是否存在嵌套的 else 分支块
                         let has_else = b
                             .items
@@ -1535,16 +1561,12 @@ mod tests {
             let input = format!("sequenceDiagram\nA{}B", arrow);
             let diagram = MermaidParser::parse_mermaid(&input).unwrap();
             match diagram {
-                Diagram::Sequence(seq) => {
-                    match &seq.statements[0] {
-                        SequenceStatement::Message(m) => assert_eq!(
-                            m.arrow, *expected,
-                            "failed for arrow {}",
-                            arrow
-                        ),
-                        _ => panic!("expected Message"),
+                Diagram::Sequence(seq) => match &seq.statements[0] {
+                    SequenceStatement::Message(m) => {
+                        assert_eq!(m.arrow, *expected, "failed for arrow {}", arrow)
                     }
-                }
+                    _ => panic!("expected Message"),
+                },
                 _ => panic!("expected Sequence"),
             }
         }
@@ -1779,7 +1801,11 @@ mod tests {
     #[test]
     fn sequence_statements_require_newline() {
         // 同行两个语句应被拒绝（语句间必须换行）
-        assert!(MermaidParser::parse_mermaid("sequenceDiagram\nparticipant A participant B").is_err());
-        assert!(MermaidParser::parse_mermaid("sequenceDiagram\nparticipant A\nparticipant B").is_ok());
+        assert!(
+            MermaidParser::parse_mermaid("sequenceDiagram\nparticipant A participant B").is_err()
+        );
+        assert!(
+            MermaidParser::parse_mermaid("sequenceDiagram\nparticipant A\nparticipant B").is_ok()
+        );
     }
 }

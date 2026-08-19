@@ -588,7 +588,11 @@ flowchart TD
     let (rects, _segs) = parse_svg(&svg);
 
     // 至少应有 A、B、C 三个节点矩形 + 1 个子图容器矩形
-    assert!(rects.len() >= 4, "expected nodes + subgraph container, got {}", rects.len());
+    assert!(
+        rects.len() >= 4,
+        "expected nodes + subgraph container, got {}",
+        rects.len()
+    );
 
     // 找出面积最大的矩形（通常是子图容器框）
     let container = rects

@@ -83,7 +83,10 @@ fn feedback_edge_cycle_layering_matches_dagre() {
     assert_eq!(res.layers[&a], 0);
     assert_eq!(res.layers[&b], 1);
     // C 在 B 之后一层（反馈弧 C->B 被反转，环不再强制同层）
-    assert!(res.layers[&c] > res.layers[&b], "C should be after B (feedback arc reversed)");
+    assert!(
+        res.layers[&c] > res.layers[&b],
+        "C should be after B (feedback arc reversed)"
+    );
     assert!(res.layers[&d] > res.layers[&c], "D must be after C");
     // 紧凑上界：D 不超过 rank 3
     assert!(res.layers[&d] <= 3, "D should be compact (<=3)");

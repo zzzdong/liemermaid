@@ -1,6 +1,6 @@
-use lievisual::geometry::{Point};
+use lievisual::geometry::Point;
 
-use lievisual::text::{layout_text, RichSpan};
+use lievisual::text::{RichSpan, layout_text};
 
 use crate::{
     ast::PieDiagram,
@@ -9,11 +9,8 @@ use crate::{
         types::{OutputConfig, PALETTE},
     },
     error::{DiagramError, DiagramResult},
-    vir::{self,
-        Color, SceneNode, TextAlign, TextBaseline, Z_LABEL, Z_SERIES, Z_TITLE,
-    },
+    vir::{self, Color, SceneNode, TextAlign, TextBaseline, Z_LABEL, Z_SERIES, Z_TITLE},
 };
-
 
 const PIE_MARGIN: f64 = 60.0;
 const PIE_TITLE_SIZE: f64 = 24.0;
@@ -75,7 +72,10 @@ pub fn build_pie_elements(
             TextAlign::Center,
             TextBaseline::Top,
         );
-        let _layout = layout_text(&[RichSpan::new(title.to_string(), title_style.clone())], Some(config.width - PIE_MARGIN));
+        let _layout = layout_text(
+            &[RichSpan::new(title.to_string(), title_style.clone())],
+            Some(config.width - PIE_MARGIN),
+        );
         let title_x = config.width / 2.0;
         let title_y = PIE_MARGIN / 2.0;
 
@@ -139,7 +139,10 @@ pub fn build_pie_elements(
             TextAlign::Center,
             TextBaseline::Middle,
         );
-        let _label_layout = layout_text(&[RichSpan::new(display_text.to_string(), label_style.clone())], Some(200.0));
+        let _label_layout = layout_text(
+            &[RichSpan::new(display_text.to_string(), label_style.clone())],
+            Some(200.0),
+        );
 
         elements.push(vir::text_node(
             display_text,

@@ -18,7 +18,10 @@ fn probe_subgraph_parse_and_render() {
     let svg = render(input, 800, 600).expect("render");
     for line in svg.lines() {
         let t = line.trim();
-        if t.contains("<text") || t.contains("<path d=\"M104") || (t.starts_with("<rect") && t.contains("rx=")) {
+        if t.contains("<text")
+            || t.contains("<path d=\"M104")
+            || (t.starts_with("<rect") && t.contains("rx="))
+        {
             println!("LINE: {}", t);
         }
     }

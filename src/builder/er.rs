@@ -1,19 +1,18 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use lievisual::geometry::{Point, Rect};
 use petgraph::graph::UnGraph;
 use petgraph::visit::EdgeRef;
-use lievisual::geometry::{Point, Rect};
 
 use crate::{
     ast::{Cardinality, ErDiagram},
     builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
-    vir::{self,
-        Color, SceneNode, Stroke, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES,
-        theme,
+    vir::{
+        self, Color, SceneNode, Stroke, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, theme,
     },
 };
-use lievisual::text::{compute_text_offset, layout_text, RichSpan};
+use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
 const FONT_SIZE: f64 = theme::FONT_SIZE;
 const SMALL_FONT: f64 = 11.0;
@@ -236,12 +235,7 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
             entity_centers.insert(name.clone(), Point::new(cx, cy));
             entity_rects.insert(
                 name.clone(),
-                Rect::new(
-                    cur_x,
-                    cur_y,
-                    cur_x + layout.width,
-                    cur_y + layout.height,
-                ),
+                Rect::new(cur_x, cur_y, cur_x + layout.width, cur_y + layout.height),
             );
             cur_x += layout.width + ENTITY_GAP_X;
         }
@@ -362,7 +356,10 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
             TextAlign::Center,
             TextBaseline::Middle,
         );
-        let name_layout = layout_text(&[RichSpan::new(layout.name.to_string(), ts.clone())], Some(layout.width - 8.0));
+        let name_layout = layout_text(
+            &[RichSpan::new(layout.name.to_string(), ts.clone())],
+            Some(layout.width - 8.0),
+        );
         let (x_off, y_off) =
             compute_text_offset(&name_layout, TextAlign::Center, TextBaseline::Middle);
         elements.push(vir::text_node(
@@ -384,7 +381,12 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
         ));
 
         // Separator
-        elements.push(vir::line_node(Point::new(rect.min_x(), rect.min_y() + header_h), Point::new(rect.max_x(), rect.min_y() + header_h), vir::stroke(theme::er::STROKE, 1.5), Z_AXIS));
+        elements.push(vir::line_node(
+            Point::new(rect.min_x(), rect.min_y() + header_h),
+            Point::new(rect.max_x(), rect.min_y() + header_h),
+            vir::stroke(theme::er::STROKE, 1.5),
+            Z_AXIS,
+        ));
 
         // Attributes
         let mut line_y = rect.min_y() + header_h + 4.0;
@@ -396,7 +398,10 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
                 TextAlign::Left,
                 TextBaseline::Top,
             );
-            let l = layout_text(&[RichSpan::new(attr_line.to_string(), ts.clone())], Some(layout.width - ENTITY_PAD));
+            let l = layout_text(
+                &[RichSpan::new(attr_line.to_string(), ts.clone())],
+                Some(layout.width - ENTITY_PAD),
+            );
             let (x_off, y_off) = compute_text_offset(&l, TextAlign::Left, TextBaseline::Top);
             elements.push(vir::text_node(
                 attr_line.clone(),
@@ -435,32 +440,87 @@ fn draw_cardinality(
             let line_end = Point::new(pos.x + dir * sz * 0.3, pos.y);
             elements.push(vir::line_node(*pos, line_end, stroke, Z_AXIS));
             let circle_cx = pos.x + dir * sz * 0.8;
-            elements.push(vir::circle_node(Point::new(circle_cx, pos.y), sz * 0.35, vir::fs_both(Color::rgb(255, 255, 255), theme::er::EDGE, 1.5), Z_AXIS));
+            elements.push(vir::circle_node(
+                Point::new(circle_cx, pos.y),
+                sz * 0.35,
+                vir::fs_both(Color::rgb(255, 255, 255), theme::er::EDGE, 1.5),
+                Z_AXIS,
+            ));
         }
         Cardinality::ExactlyOne => {
-            elements.push(vir::line_node(*pos, Point::new(pos.x + dir * sz * 0.3, pos.y), stroke, Z_AXIS));
-            elements.push(vir::line_node(Point::new(pos.x + dir * sz * 0.3, pos.y - sz * 0.4), Point::new(pos.x + dir * sz * 0.3, pos.y + sz * 0.4), vir::stroke(theme::er::EDGE, 2.0), Z_AXIS));
-            elements.push(vir::line_node(Point::new(pos.x + dir * sz * 0.6, pos.y - sz * 0.4), Point::new(pos.x + dir * sz * 0.6, pos.y + sz * 0.4), vir::stroke(theme::er::EDGE, 2.0), Z_AXIS));
+            elements.push(vir::line_node(
+                *pos,
+                Point::new(pos.x + dir * sz * 0.3, pos.y),
+                stroke,
+                Z_AXIS,
+            ));
+            elements.push(vir::line_node(
+                Point::new(pos.x + dir * sz * 0.3, pos.y - sz * 0.4),
+                Point::new(pos.x + dir * sz * 0.3, pos.y + sz * 0.4),
+                vir::stroke(theme::er::EDGE, 2.0),
+                Z_AXIS,
+            ));
+            elements.push(vir::line_node(
+                Point::new(pos.x + dir * sz * 0.6, pos.y - sz * 0.4),
+                Point::new(pos.x + dir * sz * 0.6, pos.y + sz * 0.4),
+                vir::stroke(theme::er::EDGE, 2.0),
+                Z_AXIS,
+            ));
         }
         Cardinality::ZeroOrMany => {
             let circle_cx = pos.x + dir * sz * 0.35;
-            elements.push(vir::circle_node(Point::new(circle_cx, pos.y), sz * 0.35, vir::fs_both(Color::rgb(255, 255, 255), theme::er::EDGE, 1.5), Z_AXIS));
+            elements.push(vir::circle_node(
+                Point::new(circle_cx, pos.y),
+                sz * 0.35,
+                vir::fs_both(Color::rgb(255, 255, 255), theme::er::EDGE, 1.5),
+                Z_AXIS,
+            ));
             let fork_x = pos.x + dir * sz;
-            elements.push(vir::line_node(Point::new(circle_cx + dir * sz * 0.35, pos.y), Point::new(fork_x, pos.y), stroke, Z_AXIS));
+            elements.push(vir::line_node(
+                Point::new(circle_cx + dir * sz * 0.35, pos.y),
+                Point::new(fork_x, pos.y),
+                stroke,
+                Z_AXIS,
+            ));
             for i in -1..=1 {
-                elements.push(vir::line_node(Point::new(fork_x, pos.y), Point::new(fork_x + dir * sz * 0.2, pos.y + i as f64 * sz * 0.4), vir::stroke(theme::er::EDGE, 1.5), Z_AXIS));
+                elements.push(vir::line_node(
+                    Point::new(fork_x, pos.y),
+                    Point::new(fork_x + dir * sz * 0.2, pos.y + i as f64 * sz * 0.4),
+                    vir::stroke(theme::er::EDGE, 1.5),
+                    Z_AXIS,
+                ));
             }
         }
         Cardinality::OneOrMany => {
             let x1 = pos.x + dir * sz * 0.15;
-            elements.push(vir::line_node(Point::new(x1, pos.y - sz * 0.4), Point::new(x1, pos.y + sz * 0.4), vir::stroke(theme::er::EDGE, 2.0), Z_AXIS));
+            elements.push(vir::line_node(
+                Point::new(x1, pos.y - sz * 0.4),
+                Point::new(x1, pos.y + sz * 0.4),
+                vir::stroke(theme::er::EDGE, 2.0),
+                Z_AXIS,
+            ));
             let x2 = pos.x + dir * sz * 0.45;
-            elements.push(vir::line_node(Point::new(x2, pos.y - sz * 0.4), Point::new(x2, pos.y + sz * 0.4), vir::stroke(theme::er::EDGE, 2.0), Z_AXIS));
+            elements.push(vir::line_node(
+                Point::new(x2, pos.y - sz * 0.4),
+                Point::new(x2, pos.y + sz * 0.4),
+                vir::stroke(theme::er::EDGE, 2.0),
+                Z_AXIS,
+            ));
             let fork_x = pos.x + dir * sz;
-            elements.push(vir::line_node(Point::new(x2, pos.y), Point::new(fork_x, pos.y), stroke, Z_AXIS));
+            elements.push(vir::line_node(
+                Point::new(x2, pos.y),
+                Point::new(fork_x, pos.y),
+                stroke,
+                Z_AXIS,
+            ));
             for i in -1..=1 {
-                elements.push(vir::line_node(Point::new(fork_x, pos.y), Point::new(fork_x + dir * sz * 0.2, pos.y + i as f64 * sz * 0.4), vir::stroke(theme::er::EDGE, 1.5), Z_AXIS));
-                    }
-                    }
-                    }
+                elements.push(vir::line_node(
+                    Point::new(fork_x, pos.y),
+                    Point::new(fork_x + dir * sz * 0.2, pos.y + i as f64 * sz * 0.4),
+                    vir::stroke(theme::er::EDGE, 1.5),
+                    Z_AXIS,
+                ));
+            }
+        }
+    }
 }

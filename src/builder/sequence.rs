@@ -1,21 +1,14 @@
 use crate::{
-    ast::{MessageArrow, NotePlacement, SequenceBlock, SequenceBlockKind, SequenceDiagram, SequenceItem, SequenceStatement},
+    ast::{
+        MessageArrow, NotePlacement, SequenceBlock, SequenceBlockKind, SequenceDiagram,
+        SequenceItem, SequenceStatement,
+    },
     builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
-    vir::{self,
-        Element,
-        SceneNode,
-        TextAlign,
-        TextBaseline,
-        Z_AXIS,
-        Z_LABEL,
-        Z_SERIES,
-        theme,
-    },
+    vir::{self, Element, SceneNode, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, theme},
 };
 use lievisual::geometry::Point;
-use lievisual::text::{compute_text_offset, layout_text, RichSpan};
-
+use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
 const BOX_HEIGHT: f64 = 40.0;
 const BOX_MIN_WIDTH: f64 = 80.0;
@@ -62,8 +55,17 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
     let mut col_widths: Vec<f64> = Vec::with_capacity(seq.participants.len());
     for p in &seq.participants {
         let display_name = p.alias.as_deref().unwrap_or(&p.name);
-        let text_style = vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, TextAlign::Left, TextBaseline::Top);
-        let layout = layout_text(&[RichSpan::new(display_name.to_string(), text_style.clone())], None);
+        let text_style = vir::text_style(
+            theme::sequence::TEXT,
+            FONT_SIZE,
+            theme::FONT_FAMILY,
+            TextAlign::Left,
+            TextBaseline::Top,
+        );
+        let layout = layout_text(
+            &[RichSpan::new(display_name.to_string(), text_style.clone())],
+            None,
+        );
         let text_w = layout.width;
         col_widths.push(BOX_MIN_WIDTH.max(text_w + PAD_X * 2.0));
     }
@@ -87,12 +89,45 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         let display_name = p.alias.as_deref().unwrap_or(&p.name);
 
         let rect = lievisual::geometry::Rect::new(cx - bw / 2.0, box_top, bw, box_bottom - box_top);
-        elements.push(SceneNode::from(Element::RoundedRect { rect, radius: theme::NODE_RADIUS, style: vir::fs_both(theme::sequence::ACTOR_FILL, theme::sequence::ACTOR_STROKE, 2.0) }).with_z(Z_SERIES));
+        elements.push(
+            SceneNode::from(Element::RoundedRect {
+                rect,
+                radius: theme::NODE_RADIUS,
+                style: vir::fs_both(
+                    theme::sequence::ACTOR_FILL,
+                    theme::sequence::ACTOR_STROKE,
+                    2.0,
+                ),
+            })
+            .with_z(Z_SERIES),
+        );
 
-        let ts = vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, TextAlign::Left, TextBaseline::Top);
-        let layout = layout_text(&[RichSpan::new(display_name.to_string(), ts)], Some(bw - 8.0));
+        let ts = vir::text_style(
+            theme::sequence::TEXT,
+            FONT_SIZE,
+            theme::FONT_FAMILY,
+            TextAlign::Left,
+            TextBaseline::Top,
+        );
+        let layout = layout_text(
+            &[RichSpan::new(display_name.to_string(), ts)],
+            Some(bw - 8.0),
+        );
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
-        elements.push(vir::text_node(display_name.to_string(), Point::new(cx + x_off, (box_top + box_bottom) / 2.0 + y_off), vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, TextAlign::Center, TextBaseline::Middle), 0.0, Some(bw - 8.0), Z_LABEL));
+        elements.push(vir::text_node(
+            display_name.to_string(),
+            Point::new(cx + x_off, (box_top + box_bottom) / 2.0 + y_off),
+            vir::text_style(
+                theme::sequence::TEXT,
+                FONT_SIZE,
+                theme::FONT_FAMILY,
+                TextAlign::Center,
+                TextBaseline::Middle,
+            ),
+            0.0,
+            Some(bw - 8.0),
+            Z_LABEL,
+        ));
     }
 
     // ---- 收集有序的语句行（含分组块），统一计算垂直布局 ----
@@ -285,27 +320,59 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         let y = box_bottom;
         while y < lifeline_bottom {
             let end = (y + LIFELINE_DASH).min(lifeline_bottom);
-            elements.push(vir::line_node(Point::new(*cx, y), Point::new(*cx, end), vir::stroke(theme::sequence::LIFELINE, 0.0), Z_AXIS));
+            elements.push(vir::line_node(
+                Point::new(*cx, y),
+                Point::new(*cx, end),
+                vir::stroke(theme::sequence::LIFELINE, 0.0),
+                Z_AXIS,
+            ));
         }
     }
 
     // ---- 绘制分组块边框 + 标签 ----
     for b in &blocks {
         let x0 = col_centers[0] - col_widths[0] / 2.0 - BLOCK_PAD + b.depth as f64 * BLOCK_INDENT;
-        let x1 = *col_centers.last().unwrap() + col_widths.last().unwrap() / 2.0 + BLOCK_PAD
+        let x1 = *col_centers.last().unwrap()
+            + col_widths.last().unwrap() / 2.0
+            + BLOCK_PAD
             + b.depth as f64 * BLOCK_INDENT;
-        let rect = lievisual::geometry::Rect::new(
-            x0,
-            b.y_top,
-            x1 - x0,
-            b.y_bottom - b.y_top,
+        let rect = lievisual::geometry::Rect::new(x0, b.y_top, x1 - x0, b.y_bottom - b.y_top);
+        elements.push(
+            SceneNode::from(Element::RoundedRect {
+                rect,
+                radius: theme::NODE_RADIUS,
+                style: vir::fs_both(
+                    theme::sequence::BLOCK_FILL,
+                    theme::sequence::BLOCK_STROKE,
+                    1.0,
+                ),
+            })
+            .with_z(Z_AXIS),
         );
-        elements.push(SceneNode::from(Element::RoundedRect { rect, radius: theme::NODE_RADIUS, style: vir::fs_both(theme::sequence::BLOCK_FILL, theme::sequence::BLOCK_STROKE, 1.0) }).with_z(Z_AXIS));
         // 标签
-        let ts = vir::text_style(theme::sequence::BLOCK_TEXT, FONT_SIZE * 0.85, theme::FONT_FAMILY, TextAlign::Left, TextBaseline::Top);
+        let ts = vir::text_style(
+            theme::sequence::BLOCK_TEXT,
+            FONT_SIZE * 0.85,
+            theme::FONT_FAMILY,
+            TextAlign::Left,
+            TextBaseline::Top,
+        );
         let layout = layout_text(&[RichSpan::new(b.label.clone(), ts.clone())], None);
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Left, TextBaseline::Middle);
-        elements.push(vir::text_node(b.label.clone(), Point::new(x0 + 8.0 + x_off, b.y_top + BLOCK_LABEL_H / 2.0 + y_off), vir::text_style(theme::sequence::BLOCK_TEXT, FONT_SIZE * 0.85, theme::FONT_FAMILY, TextAlign::Left, TextBaseline::Top), 0.0, None, Z_LABEL));
+        elements.push(vir::text_node(
+            b.label.clone(),
+            Point::new(x0 + 8.0 + x_off, b.y_top + BLOCK_LABEL_H / 2.0 + y_off),
+            vir::text_style(
+                theme::sequence::BLOCK_TEXT,
+                FONT_SIZE * 0.85,
+                theme::FONT_FAMILY,
+                TextAlign::Left,
+                TextBaseline::Top,
+            ),
+            0.0,
+            None,
+            Z_LABEL,
+        ));
     }
 
     // ---- 绘制消息 ----
@@ -320,29 +387,63 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         let arrow_y = r.y + MESSAGE_SPACING * 0.3;
 
         if r.fi == r.ti {
-            elements.push(vir::polyline_node(vec![Point::new(from_x, arrow_y)], vir::stroke(theme::sequence::EDGE, 1.5), Z_AXIS));
+            elements.push(vir::polyline_node(
+                vec![Point::new(from_x, arrow_y)],
+                vir::stroke(theme::sequence::EDGE, 1.5),
+                Z_AXIS,
+            ));
         } else {
             let dir = if to_x > from_x { 1.0 } else { -1.0 };
             let stroke = vir::stroke(theme::sequence::EDGE, 1.5);
 
-            elements.push(vir::line_node(Point::new(from_x, arrow_y), Point::new(to_x, arrow_y), stroke.clone(), Z_AXIS));
+            elements.push(vir::line_node(
+                Point::new(from_x, arrow_y),
+                Point::new(to_x, arrow_y),
+                stroke.clone(),
+                Z_AXIS,
+            ));
 
             match r.arrow {
                 MessageArrow::Solid | MessageArrow::Dashed => {}
                 MessageArrow::SolidTip | MessageArrow::DashedTip => {
                     let sz = 8.0;
-                    elements.push(vir::line_node(Point::new(to_x, arrow_y), Point::new(to_x - dir * sz, arrow_y - sz * 0.5), stroke.clone(), Z_AXIS));
-                    elements.push(vir::line_node(Point::new(to_x, arrow_y), Point::new(to_x - dir * sz, arrow_y + sz * 0.5), stroke, Z_AXIS));
+                    elements.push(vir::line_node(
+                        Point::new(to_x, arrow_y),
+                        Point::new(to_x - dir * sz, arrow_y - sz * 0.5),
+                        stroke.clone(),
+                        Z_AXIS,
+                    ));
+                    elements.push(vir::line_node(
+                        Point::new(to_x, arrow_y),
+                        Point::new(to_x - dir * sz, arrow_y + sz * 0.5),
+                        stroke,
+                        Z_AXIS,
+                    ));
                 }
                 MessageArrow::Cross => {
                     let sz = 5.0;
                     let tip_x = to_x - dir * sz;
-                    elements.push(vir::line_node(Point::new(tip_x, arrow_y - sz), Point::new(tip_x, arrow_y + sz), stroke, Z_AXIS));
+                    elements.push(vir::line_node(
+                        Point::new(tip_x, arrow_y - sz),
+                        Point::new(tip_x, arrow_y + sz),
+                        stroke,
+                        Z_AXIS,
+                    ));
                 }
                 MessageArrow::Open => {
                     let sz = 8.0;
-                    elements.push(vir::line_node(Point::new(to_x - dir * sz, arrow_y - sz * 0.5), Point::new(to_x, arrow_y), stroke.clone(), Z_AXIS));
-                    elements.push(vir::line_node(Point::new(to_x - dir * sz, arrow_y + sz * 0.5), Point::new(to_x, arrow_y), stroke, Z_AXIS));
+                    elements.push(vir::line_node(
+                        Point::new(to_x - dir * sz, arrow_y - sz * 0.5),
+                        Point::new(to_x, arrow_y),
+                        stroke.clone(),
+                        Z_AXIS,
+                    ));
+                    elements.push(vir::line_node(
+                        Point::new(to_x - dir * sz, arrow_y + sz * 0.5),
+                        Point::new(to_x, arrow_y),
+                        stroke,
+                        Z_AXIS,
+                    ));
                 }
             }
         }
@@ -350,11 +451,30 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         // 消息文本
         if !r.text.is_empty() {
             let mid_x = (from_x + to_x) / 2.0;
-            let ts = vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, TextAlign::Left, TextBaseline::Top);
+            let ts = vir::text_style(
+                theme::sequence::TEXT,
+                FONT_SIZE,
+                theme::FONT_FAMILY,
+                TextAlign::Left,
+                TextBaseline::Top,
+            );
             let layout = layout_text(&[RichSpan::new(r.text.clone(), ts.clone())], Some(200.0));
             let (x_off, y_off) =
                 compute_text_offset(&layout, TextAlign::Center, TextBaseline::Bottom);
-            elements.push(vir::text_node(r.text.clone(), Point::new(mid_x + x_off, arrow_y - 4.0 + y_off), vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, TextAlign::Left, TextBaseline::Top), 0.0, Some(200.0), Z_LABEL));
+            elements.push(vir::text_node(
+                r.text.clone(),
+                Point::new(mid_x + x_off, arrow_y - 4.0 + y_off),
+                vir::text_style(
+                    theme::sequence::TEXT,
+                    FONT_SIZE,
+                    theme::FONT_FAMILY,
+                    TextAlign::Left,
+                    TextBaseline::Top,
+                ),
+                0.0,
+                Some(200.0),
+                Z_LABEL,
+            ));
         }
     }
 
@@ -368,11 +488,13 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         let (min_ref_x, max_ref_x) = if r.targets.is_empty() {
             (0.0, 0.0)
         } else {
-            let mn = r.targets
+            let mn = r
+                .targets
                 .iter()
                 .map(|i| col_centers[*i] - col_widths[*i] / 2.0)
                 .fold(f64::MAX, f64::min);
-            let mx = r.targets
+            let mx = r
+                .targets
                 .iter()
                 .map(|i| col_centers[*i] + col_widths[*i] / 2.0)
                 .fold(f64::MIN, f64::max);
@@ -396,12 +518,45 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         };
 
         let note_rect = lievisual::geometry::Rect::new(nx, note_y, nw, NOTE_HEIGHT_BR);
-        elements.push(SceneNode::from(Element::RoundedRect { rect: note_rect, radius: theme::NODE_RADIUS, style: vir::fs_both(theme::sequence::NOTE_FILL, theme::sequence::NOTE_STROKE, 1.5) }).with_z(Z_SERIES));
+        elements.push(
+            SceneNode::from(Element::RoundedRect {
+                rect: note_rect,
+                radius: theme::NODE_RADIUS,
+                style: vir::fs_both(
+                    theme::sequence::NOTE_FILL,
+                    theme::sequence::NOTE_STROKE,
+                    1.5,
+                ),
+            })
+            .with_z(Z_SERIES),
+        );
 
-        let ts = vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, TextAlign::Left, TextBaseline::Top);
-        let layout = layout_text(&[RichSpan::new(r.text.clone(), ts.clone())], Some(nw - 10.0));
+        let ts = vir::text_style(
+            theme::sequence::TEXT,
+            FONT_SIZE,
+            theme::FONT_FAMILY,
+            TextAlign::Left,
+            TextBaseline::Top,
+        );
+        let layout = layout_text(
+            &[RichSpan::new(r.text.clone(), ts.clone())],
+            Some(nw - 10.0),
+        );
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
-        elements.push(vir::text_node(r.text.clone(), Point::new(nx + nw / 2.0 + x_off, note_y + NOTE_HEIGHT_BR / 2.0 + y_off), vir::text_style(theme::sequence::TEXT, FONT_SIZE, theme::FONT_FAMILY, TextAlign::Left, TextBaseline::Top), 0.0, Some(nw - 10.0), Z_LABEL));
+        elements.push(vir::text_node(
+            r.text.clone(),
+            Point::new(nx + nw / 2.0 + x_off, note_y + NOTE_HEIGHT_BR / 2.0 + y_off),
+            vir::text_style(
+                theme::sequence::TEXT,
+                FONT_SIZE,
+                theme::FONT_FAMILY,
+                TextAlign::Left,
+                TextBaseline::Top,
+            ),
+            0.0,
+            Some(nw - 10.0),
+            Z_LABEL,
+        ));
     }
 
     elements

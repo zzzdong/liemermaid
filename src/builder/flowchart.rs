@@ -1,20 +1,20 @@
 use std::collections::HashMap;
 
-use petgraph::graph::{DiGraph, NodeIndex};
 use lievisual::geometry::{Point, Rect};
+use petgraph::graph::{DiGraph, NodeIndex};
 use vello_cpu::kurbo::BezPath;
 
 use crate::{
     ast::{Direction, Flowchart, NodeShape},
     builder::types::OutputConfig,
     error::DiagramResult,
-    vir::{self,
-        draw_arrow_head, theme, Stroke, TextAlign, TextBaseline,
-        Z_AXIS, Z_LABEL, Z_SERIES, Z_SUBGRAPH, Z_SUBGRAPH_LABEL,
+    vir::{
+        self, Stroke, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, Z_SUBGRAPH,
+        Z_SUBGRAPH_LABEL, draw_arrow_head, theme,
     },
 };
 use lievisual::scene::SceneNode;
-use lievisual::text::{compute_text_offset, layout_text, RichSpan};
+use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
 use super::layout::{
     edges::route_edges,
@@ -24,8 +24,8 @@ use super::layout::{
     recognize::{all_flowchart_nodes, compute_flowchart_back_edges, recognize_structure},
     sugiyama::{NodeSize, SugiyamaConfig, SugiyamaLayout, SugiyamaResult},
     types::{
-        Layout, LayoutEdge, LayoutEngine, LayoutMetadata, LayoutNode, NodeMetrics, NodePosition,
-        NodeStyle, RoutedEdge, Size, LayoutSubgraph,
+        Layout, LayoutEdge, LayoutEngine, LayoutMetadata, LayoutNode, LayoutSubgraph, NodeMetrics,
+        NodePosition, NodeStyle, RoutedEdge, Size,
     },
 };
 
@@ -37,7 +37,9 @@ const MARGIN: f64 = 40.0;
 /// 子图标题区高度（容器框顶部留白）
 const SUBGRAPH_TITLE_H: f64 = 22.0;
 
-fn edge_stroke() -> Stroke { vir::stroke(theme::flowchart::EDGE, theme::EDGE_WIDTH) }
+fn edge_stroke() -> Stroke {
+    vir::stroke(theme::flowchart::EDGE, theme::EDGE_WIDTH)
+}
 
 /// 计算内容的包围盒尺寸（不包含画布边距）
 fn compute_content_bounds(
@@ -96,7 +98,7 @@ fn has_subgraphs(fc: &Flowchart) -> bool {
 /// 变换后整体平移使坐标非负（与 dagre 的 bounding box 一致）。
 /// LR/RL 同时互换节点矩形宽高，使旋转后矩形方向与坐标排列匹配。
 fn transform_sugiyama_direction(result: &mut SugiyamaResult, direction: Direction) {
-    use lievisual::geometry::{Point};
+    use lievisual::geometry::Point;
 
     let map = |p: Point| -> Point {
         match direction {
@@ -119,12 +121,15 @@ fn transform_sugiyama_direction(result: &mut SugiyamaResult, direction: Directio
     }
     let mut mapped_routes: HashMap<(NodeIndex, NodeIndex), Vec<Point>> = HashMap::new();
     for (k, pts) in result.edge_routes.iter() {
-        let qs: Vec<Point> = pts.iter().map(|&p| {
-            let q = map(p);
-            min_x = min_x.min(q.x);
-            min_y = min_y.min(q.y);
-            q
-        }).collect();
+        let qs: Vec<Point> = pts
+            .iter()
+            .map(|&p| {
+                let q = map(p);
+                min_x = min_x.min(q.x);
+                min_y = min_y.min(q.y);
+                q
+            })
+            .collect();
         mapped_routes.insert(*k, qs);
     }
 
@@ -383,14 +388,13 @@ fn render_layout(layout: &Layout) -> Vec<SceneNode> {
                 TextAlign::Left,
                 TextBaseline::Top,
             );
-            let title_position = Point::new(
-                rect.min_x() + 10.0,
-                rect.min_y() + 6.0,
-            );
+            let title_position = Point::new(rect.min_x() + 10.0, rect.min_y() + 6.0);
             elements.push(vir::text_node(
                 title.clone(),
                 title_position,
-                title_style.with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+                title_style
+                    .with_align(TextAlign::Left)
+                    .with_baseline(TextBaseline::Top),
                 0.0,
                 None,
                 Z_SUBGRAPH_LABEL,
@@ -416,13 +420,13 @@ fn render_layout(layout: &Layout) -> Vec<SceneNode> {
                     let first = pts[0];
                     let last = pts[pts.len() - 1];
                     let mid = Point::new((first.x + last.x) / 2.0, (first.y + last.y) / 2.0);
-                    path.curve_to(
-                        Point::new(mid.x, first.y),
-                        Point::new(mid.x, last.y),
-                        last,
-                    );
+                    path.curve_to(Point::new(mid.x, first.y), Point::new(mid.x, last.y), last);
                 }
-                elements.push(vir::path_node(path, vir::fs_stroke(theme::flowchart::EDGE, theme::EDGE_WIDTH), Z_AXIS));
+                elements.push(vir::path_node(
+                    path,
+                    vir::fs_stroke(theme::flowchart::EDGE, theme::EDGE_WIDTH),
+                    Z_AXIS,
+                ));
             } else {
                 elements.push(vir::polyline_node(pts.clone(), edge_stroke(), Z_AXIS));
             }
@@ -588,7 +592,12 @@ fn draw_layout_node(
             let outer_r = size.width.min(size.height) / 2.0;
             let inner_r = outer_r * 0.75;
             elements.push(vir::circle_node(center, outer_r, style.clone(), Z_SERIES));
-            elements.push(vir::circle_node(center, inner_r, vir::fs_stroke(stroke, 2.0), Z_SERIES));
+            elements.push(vir::circle_node(
+                center,
+                inner_r,
+                vir::fs_stroke(stroke, 2.0),
+                Z_SERIES,
+            ));
         }
         Some(NodeShape::Stadium) => {
             let w = size.width / 2.0;
@@ -628,7 +637,11 @@ fn draw_layout_node(
             body.line_to(Point::new(center.x + w, center.y + h));
             body.line_to(Point::new(center.x - w, center.y + h));
             body.close_path();
-            elements.push(vir::path_node(body, vir::fs_both(fill, stroke, 2.0), Z_SERIES));
+            elements.push(vir::path_node(
+                body,
+                vir::fs_both(fill, stroke, 2.0),
+                Z_SERIES,
+            ));
             let mut top = BezPath::new();
             top.move_to(Point::new(center.x - w, center.y - h * 0.7));
             for i in 0..=ellipse_segments {
@@ -639,7 +652,11 @@ fn draw_layout_node(
                 ));
             }
             top.close_path();
-            elements.push(vir::path_node(top, vir::fs_both(fill, stroke, 2.0), Z_SERIES));
+            elements.push(vir::path_node(
+                top,
+                vir::fs_both(fill, stroke, 2.0),
+                Z_SERIES,
+            ));
         }
         Some(NodeShape::Subroutine) => {
             let w = size.width / 2.0;
@@ -743,7 +760,12 @@ fn draw_layout_node(
             elements.push(vir::path_node(path, style, Z_SERIES));
         }
         _ => {
-            elements.push(vir::rect_node(rect, Some(theme::NODE_RADIUS), style, Z_SERIES));
+            elements.push(vir::rect_node(
+                rect,
+                Some(theme::NODE_RADIUS),
+                style,
+                Z_SERIES,
+            ));
         }
     }
 
@@ -761,7 +783,10 @@ fn draw_layout_node(
     } else {
         None
     };
-    let layout = layout_text(&[RichSpan::new(text.to_string(), text_style.clone())], max_w);
+    let layout = layout_text(
+        &[RichSpan::new(text.to_string(), text_style.clone())],
+        max_w,
+    );
 
     let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
     let text_position = Point::new(center.x + x_off, center.y + y_off);
@@ -769,7 +794,9 @@ fn draw_layout_node(
     elements.push(vir::text_node(
         text.to_string(),
         text_position,
-        text_style.with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+        text_style
+            .with_align(TextAlign::Left)
+            .with_baseline(TextBaseline::Top),
         0.0,
         max_w,
         Z_LABEL,
@@ -782,7 +809,7 @@ mod direction_transform_tests {
     use std::collections::{HashMap, HashSet};
 
     fn sample_result() -> SugiyamaResult {
-        use lievisual::geometry::{Point};
+        use lievisual::geometry::Point;
         let a = NodeIndex::new(0);
         let b = NodeIndex::new(1);
         let c = NodeIndex::new(2);
@@ -792,7 +819,13 @@ mod direction_transform_tests {
         positions.insert(c, Point::new(0.0, 200.0));
         let mut sizes = HashMap::new();
         for n in [a, b, c] {
-            sizes.insert(n, NodeSize { width: 100.0, height: 40.0 });
+            sizes.insert(
+                n,
+                NodeSize {
+                    width: 100.0,
+                    height: 40.0,
+                },
+            );
         }
         let mut edge_routes = HashMap::new();
         edge_routes.insert((a, c), vec![Point::new(0.0, 20.0), Point::new(0.0, 180.0)]);

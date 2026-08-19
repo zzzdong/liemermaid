@@ -10,12 +10,14 @@
 //!
 //! 历史 `src/visual.rs`（`VisualElement` 及其私有样式类型）已删除，统一改用 lievisual IR。
 
-use vello_cpu::kurbo::BezPath;
 use lievisual::geometry::{Point, Rect};
 use lievisual::text::TextStyle as LieTextStyle;
+use vello_cpu::kurbo::BezPath;
 
 pub use lievisual::geometry::{Color, Point as GeoPoint, Rect as GeoRect, Transform};
-pub use lievisual::scene::{Element, Fill, FillStrokeStyle, GradientStop, LinearGradient, SceneNode, Stroke};
+pub use lievisual::scene::{
+    Element, Fill, FillStrokeStyle, GradientStop, LinearGradient, SceneNode, Stroke,
+};
 pub use lievisual::text::{FontStyle, TextAlign, TextBaseline, TextStyle};
 
 // ---------------------------------------------------------------------------
@@ -104,11 +106,26 @@ pub fn polyline_node(points: Vec<Point>, style: Stroke, z: i32) -> SceneNode {
 }
 
 pub fn path_node(path: BezPath, style: FillStrokeStyle, z: i32) -> SceneNode {
-    SceneNode::from(Element::Path { path, style, closed: false }).with_z(z)
+    SceneNode::from(Element::Path {
+        path,
+        style,
+        closed: false,
+    })
+    .with_z(z)
 }
 
-pub fn gradient_path_node(path: BezPath, gradient: LinearGradient, stroke: Option<Stroke>, z: i32) -> SceneNode {
-    SceneNode::from(Element::GradientPath { path, gradient, stroke }).with_z(z)
+pub fn gradient_path_node(
+    path: BezPath,
+    gradient: LinearGradient,
+    stroke: Option<Stroke>,
+    z: i32,
+) -> SceneNode {
+    SceneNode::from(Element::GradientPath {
+        path,
+        gradient,
+        stroke,
+    })
+    .with_z(z)
 }
 
 pub fn text_node(
@@ -152,7 +169,11 @@ pub fn draw_arrow_head(elements: &mut Vec<SceneNode>, tip: &Point, dir: &Point, 
     path.line_to(Point::new(p1.x, p1.y));
     path.line_to(Point::new(p2.x, p2.y));
     path.close_path();
-    elements.push(path_node(path, fs_both(style.color, style.color, style.width), Z_AXIS));
+    elements.push(path_node(
+        path,
+        fs_both(style.color, style.color, style.width),
+        Z_AXIS,
+    ));
 }
 
 /// 历史 `GradientDef { stops, angle }` 到 lievisual `LinearGradient` 的兼容构造。

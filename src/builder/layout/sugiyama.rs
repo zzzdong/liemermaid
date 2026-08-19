@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use lievisual::geometry::Point;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
-use lievisual::geometry::{Point};
 
 /// Sugiyama 布局配置参数
 #[derive(Debug, Clone)]
@@ -103,12 +103,8 @@ impl<'a> SugiyamaLayout<'a> {
         let mut res = work_layout.run_inner(&work_sizes);
 
         // 用虚拟节点链重建每条原始边的折线（按层顺序贯穿 dummy）
-        let edge_routes = self.rebuild_routes_from_dummies(
-            &res,
-            &edge_dummies,
-            &real_to_work,
-            &work_graph,
-        );
+        let edge_routes =
+            self.rebuild_routes_from_dummies(&res, &edge_dummies, &real_to_work, &work_graph);
         res.edge_routes = edge_routes;
 
         // 仅保留真实节点尺寸（虚拟节点尺寸对外无意义）
@@ -117,10 +113,11 @@ impl<'a> SugiyamaLayout<'a> {
         // 反馈弧/层号映射回真实节点
         let mut feedback_arcs = HashSet::new();
         for (u, v) in work_feedback {
-            if let (Some(&wu), Some(&wv)) = (real_to_work.get(&u), real_to_work.get(&v)) {
-                if wu == u && wv == v {
-                    feedback_arcs.insert((u, v));
-                }
+            if let (Some(&wu), Some(&wv)) = (real_to_work.get(&u), real_to_work.get(&v))
+                && wu == u
+                && wv == v
+            {
+                feedback_arcs.insert((u, v));
             }
         }
         res.feedback_arcs = feedback_arcs;
@@ -156,8 +153,7 @@ impl<'a> SugiyamaLayout<'a> {
             self.assign_coordinates_bk(&ordered, &sizes, &sccs, &scc_id, &feedback_arcs);
 
         // Phase 4: 边路由
-        let edge_routes =
-            self.route_edges(&positions, &sizes, &layers, &feedback_arcs, &scc_id);
+        let edge_routes = self.route_edges(&positions, &sizes, &layers, &feedback_arcs, &scc_id);
 
         SugiyamaResult {
             positions,
@@ -219,7 +215,7 @@ impl<'a> SugiyamaLayout<'a> {
 
             let lu = layers.get(&u).copied().unwrap_or(0);
             let lv = layers.get(&v).copied().unwrap_or(0);
-            let span = if lv > lu { lv - lu } else { 0 };
+            let span = lv.saturating_sub(lu);
 
             if span >= 2 {
                 // 插入 span-1 个 dummy，逐层一段
@@ -227,7 +223,13 @@ impl<'a> SugiyamaLayout<'a> {
                 let mut chain: Vec<NodeIndex> = Vec::new();
                 for _ in 0..span - 1 {
                     let dummy = work.add_node("__dummy__".to_string());
-                    work_sizes.insert(dummy, NodeSize { width: 0.0, height: 0.0 });
+                    work_sizes.insert(
+                        dummy,
+                        NodeSize {
+                            width: 0.0,
+                            height: 0.0,
+                        },
+                    );
                     work.add_edge(prev, dummy, ());
                     chain.push(dummy);
                     prev = dummy;
@@ -267,10 +269,10 @@ impl<'a> SugiyamaLayout<'a> {
             let chain = edge_dummies.get(&(u, v)).unwrap_or(&empty_chain);
             // 原始边无 dummy（span<=1）：直接用工作图边 route
             if chain.is_empty() {
-                if let (Some(&wu), Some(&wv)) = (real_to_work.get(&u), real_to_work.get(&v)) {
-                    if let Some(pts) = route_of(wu, wv) {
-                        out.insert((u, v), pts);
-                    }
+                if let (Some(&wu), Some(&wv)) = (real_to_work.get(&u), real_to_work.get(&v))
+                    && let Some(pts) = route_of(wu, wv)
+                {
+                    out.insert((u, v), pts);
                 }
                 continue;
             }
@@ -299,12 +301,10 @@ impl<'a> SugiyamaLayout<'a> {
             }
             if full.is_empty() {
                 // 兜底：直线连接源与目标中心
-                if let (Some(&wu), Some(&wv)) = (real_to_work.get(&u), real_to_work.get(&v)) {
-                    if let (Some(pu), Some(pv)) =
-                        (res.positions.get(&wu), res.positions.get(&wv))
-                    {
-                        full = vec![*pu, *pv];
-                    }
+                if let (Some(&wu), Some(&wv)) = (real_to_work.get(&u), real_to_work.get(&v))
+                    && let (Some(pu), Some(pv)) = (res.positions.get(&wu), res.positions.get(&wv))
+                {
+                    full = vec![*pu, *pv];
                 }
             }
             out.insert((u, v), full);
@@ -448,7 +448,11 @@ impl<'a> SugiyamaLayout<'a> {
         feedback_arcs: &HashSet<(NodeIndex, NodeIndex)>,
         sccs: &[Vec<NodeIndex>],
     ) -> HashMap<NodeIndex, usize> {
-        let use_ns = self.config.ranker.trim().eq_ignore_ascii_case("network-simplex");
+        let use_ns = self
+            .config
+            .ranker
+            .trim()
+            .eq_ignore_ascii_case("network-simplex");
         if use_ns {
             return self.assign_layers_network_simplex(feedback_arcs, sccs);
         }
@@ -1523,11 +1527,11 @@ fn build_feasible_tree(
     }
 
     for &u in &nodes {
-        if let Some(p) = candidate_parent[u] {
-            if parent[u].is_none() {
-                parent[u] = Some(p);
-                tree_edge[u] = Some((p, u));
-            }
+        if let Some(p) = candidate_parent[u]
+            && parent[u].is_none()
+        {
+            parent[u] = Some(p);
+            tree_edge[u] = Some((p, u));
         }
     }
 }
@@ -1668,9 +1672,10 @@ fn exchange(
     // 更新树结构：移除 leave 边，加入 enter 边
     if let Some(lp) = leave_parent {
         // 标记旧树边为非树
-        if let Some(idx) = edges.iter().position(|&(u, v)| {
-            (u == lp && v == leave_node) || (u == leave_node && v == lp)
-        }) {
+        if let Some(idx) = edges
+            .iter()
+            .position(|&(u, v)| (u == lp && v == leave_node) || (u == leave_node && v == lp))
+        {
             in_tree[idx] = false;
         }
         // 更新父
@@ -1681,7 +1686,10 @@ fn exchange(
     // 加入 enter 边 (a->b)
     parent[b] = Some(a);
     tree_edge[b] = Some((a, b));
-    if let Some(idx) = edges.iter().position(|&(u, v)| (u == a && v == b) || (u == b && v == a)) {
+    if let Some(idx) = edges
+        .iter()
+        .position(|&(u, v)| (u == a && v == b) || (u == b && v == a))
+    {
         in_tree[idx] = true;
     }
 }

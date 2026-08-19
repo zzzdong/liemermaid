@@ -55,8 +55,11 @@ fn build_petgraph(fc: &Flowchart) -> (DiGraph<NodeId, ()>, HashMap<NodeId, NodeI
         }
     }
 
-    let add_edge = |edge: &crate::ast::Edge, id_to_idx: &mut HashMap<NodeId, NodeIndex>, graph: &mut DiGraph<NodeId, ()>| {
-        if let (Some(&from), Some(&to)) = (id_to_idx.get(&edge.source), id_to_idx.get(&edge.target)) {
+    let add_edge = |edge: &crate::ast::Edge,
+                    id_to_idx: &mut HashMap<NodeId, NodeIndex>,
+                    graph: &mut DiGraph<NodeId, ()>| {
+        if let (Some(&from), Some(&to)) = (id_to_idx.get(&edge.source), id_to_idx.get(&edge.target))
+        {
             graph.add_edge(from, to, ());
         }
     };

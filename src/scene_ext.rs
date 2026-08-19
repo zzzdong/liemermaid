@@ -28,9 +28,7 @@ pub fn render_scene_png(scene: &lievisual::Scene) -> Vec<u8> {
     use lievisual::render::VelloPixmapRenderer;
     let w = (scene.width.round() as i64).max(1) as u32;
     let h = (scene.height.round() as i64).max(1) as u32;
-    let mut renderer =
-        VelloPixmapRenderer::new(w, h)
-            .with_background(scene.background);
+    let mut renderer = VelloPixmapRenderer::new(w, h).with_background(scene.background);
     renderer.render_png(scene)
 }
 
