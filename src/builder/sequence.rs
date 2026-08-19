@@ -317,7 +317,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
     // ---- 生命线（虚线分段绘制） ----
     let lifeline_bottom = cur_y;
     for cx in &col_centers {
-        let y = box_bottom;
+        let mut y = box_bottom;
         while y < lifeline_bottom {
             let end = (y + LIFELINE_DASH).min(lifeline_bottom);
             elements.push(vir::line_node(
@@ -326,6 +326,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                 vir::stroke(theme::sequence::LIFELINE, 0.0),
                 Z_AXIS,
             ));
+            y += LIFELINE_DASH;
         }
     }
 
@@ -441,6 +442,35 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                     elements.push(vir::line_node(
                         Point::new(to_x - dir * sz, arrow_y + sz * 0.5),
                         Point::new(to_x, arrow_y),
+                        stroke,
+                        Z_AXIS,
+                    ));
+                }
+                MessageArrow::Both => {
+                    // 终点三角箭头
+                    let sz = 8.0;
+                    elements.push(vir::line_node(
+                        Point::new(to_x, arrow_y),
+                        Point::new(to_x - dir * sz, arrow_y - sz * 0.5),
+                        stroke.clone(),
+                        Z_AXIS,
+                    ));
+                    elements.push(vir::line_node(
+                        Point::new(to_x, arrow_y),
+                        Point::new(to_x - dir * sz, arrow_y + sz * 0.5),
+                        stroke.clone(),
+                        Z_AXIS,
+                    ));
+                    // 起点反向箭头
+                    elements.push(vir::line_node(
+                        Point::new(from_x, arrow_y),
+                        Point::new(from_x + dir * sz, arrow_y - sz * 0.5),
+                        stroke.clone(),
+                        Z_AXIS,
+                    ));
+                    elements.push(vir::line_node(
+                        Point::new(from_x, arrow_y),
+                        Point::new(from_x + dir * sz, arrow_y + sz * 0.5),
                         stroke,
                         Z_AXIS,
                     ));

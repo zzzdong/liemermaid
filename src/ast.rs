@@ -67,6 +67,14 @@ pub enum ArrowType {
     Solid,
     Dotted,
     Thick,
+    /// 无箭头（`---`）
+    NoArrow,
+    /// 双向箭头（`<-->`）
+    Both,
+    /// 终点圆点（`--o`）
+    Circle,
+    /// 终点叉号（`--x`）
+    Cross,
     Labeled(String),
 }
 
@@ -121,7 +129,7 @@ pub struct Participant {
     pub kind: ParticipantKind,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ParticipantKind {
     Participant,
     Actor,
@@ -129,6 +137,8 @@ pub enum ParticipantKind {
     Control,
     Entity,
     Database,
+    Collections,
+    Queue,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -147,6 +157,8 @@ pub enum MessageArrow {
     DashedTip,
     Cross,
     Open,
+    /// 双向箭头（`<<->>` / `<<-->>`）
+    Both,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

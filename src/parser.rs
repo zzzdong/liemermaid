@@ -248,14 +248,37 @@ impl MermaidParser {
                 let mut arrow_type = Self::parse_edge_arrow(inner.clone())?;
                 let mut label = None;
                 for arrow_inner in inner.into_inner() {
-                    if arrow_inner.as_rule() == Rule::edge_arrow_labeled
-                        && let Some(label_pair) = arrow_inner
-                            .into_inner()
-                            .find(|p| p.as_rule() == Rule::edge_label)
-                    {
-                        let label_text = label_pair.as_str().to_string();
-                        label = Some(label_text.clone());
-                        arrow_type = ArrowType::Labeled(label_text);
+                    match arrow_inner.as_rule() {
+                        // -->|text| 形式
+                        Rule::edge_arrow_labeled => {
+                            if let Some(label_pair) = arrow_inner
+                                .into_inner()
+                                .find(|p| p.as_rule() == Rule::edge_label)
+                            {
+                                let label_text = label_pair.as_str().trim().to_string();
+                                label = Some(label_text.clone());
+                                arrow_type = ArrowType::Labeled(label_text);
+                            }
+                        }
+                        // -- text --> / == text ==> / -. text .-> 形式
+                        Rule::edge_arrow_solid_text
+                        | Rule::edge_arrow_thick_text
+                        | Rule::edge_arrow_dotted_text => {
+                            let label_pair = arrow_inner.into_inner().find(|p| {
+                                matches!(
+                                    p.as_rule(),
+                                    Rule::edge_text_solid
+                                        | Rule::edge_text_thick
+                                        | Rule::edge_text_dotted
+                                )
+                            });
+                            if let Some(label_pair) = label_pair {
+                                let label_text = label_pair.as_str().trim().to_string();
+                                label = Some(label_text.clone());
+                                arrow_type = ArrowType::Labeled(label_text);
+                            }
+                        }
+                        _ => {}
                     }
                 }
                 arrows.push((arrow_type, label));
@@ -286,6 +309,10 @@ impl MermaidParser {
             "-->" => Ok(ArrowType::Solid),
             "-.->" => Ok(ArrowType::Dotted),
             "==>" => Ok(ArrowType::Thick),
+            "---" => Ok(ArrowType::NoArrow),
+            "--o" => Ok(ArrowType::Circle),
+            "--x" => Ok(ArrowType::Cross),
+            "<-->" => Ok(ArrowType::Both),
             _ => Ok(ArrowType::Solid), // 带标签的箭头也会匹配到这里，但标签由 edge_label 处理
         }
     }
@@ -329,12 +356,8 @@ impl MermaidParser {
             };
             match actual_pair.as_rule() {
                 Rule::participant => {
-                    let p = Self::parse_participant(actual_pair, ParticipantKind::Participant)?;
-                    participant_names.insert(p.name.clone());
-                    participants.push(p);
-                }
-                Rule::actor => {
-                    let p = Self::parse_participant(actual_pair, ParticipantKind::Actor)?;
+                    let kind = Self::participant_kind_of(&actual_pair);
+                    let p = Self::parse_participant(actual_pair, kind)?;
                     participant_names.insert(p.name.clone());
                     participants.push(p);
                 }
@@ -580,6 +603,26 @@ impl MermaidParser {
         Ok(result)
     }
 
+    /// 从 participant 规则中提取参与者类型关键字对应的 [`ParticipantKind`]。
+    fn participant_kind_of(pair: &pest::iterators::Pair<Rule>) -> ParticipantKind {
+        let kw = pair
+            .clone()
+            .into_inner()
+            .find(|p| p.as_rule() == Rule::participant_kind)
+            .map(|p| p.as_str())
+            .unwrap_or("participant");
+        match kw {
+            "actor" => ParticipantKind::Actor,
+            "boundary" => ParticipantKind::Boundary,
+            "control" => ParticipantKind::Control,
+            "entity" => ParticipantKind::Entity,
+            "database" => ParticipantKind::Database,
+            "collections" => ParticipantKind::Collections,
+            "queue" => ParticipantKind::Queue,
+            _ => ParticipantKind::Participant,
+        }
+    }
+
     fn parse_participant(
         pair: pest::iterators::Pair<Rule>,
         kind: ParticipantKind,
@@ -626,8 +669,9 @@ impl MermaidParser {
             "->>" => Ok(MessageArrow::SolidTip),
             "-->" => Ok(MessageArrow::Dashed),
             "-->>" => Ok(MessageArrow::DashedTip),
-            "-x" => Ok(MessageArrow::Cross),
-            "-)" => Ok(MessageArrow::Open),
+            "-x" | "--x" => Ok(MessageArrow::Cross),
+            "-)" | "--)" => Ok(MessageArrow::Open),
+            "<<->>" | "<<-->>" => Ok(MessageArrow::Both),
             _ => Ok(MessageArrow::Solid),
         }
     }
@@ -1244,12 +1288,123 @@ mod tests {
     }
 
     #[test]
+    fn parses_flowchart_inline_text_edges() {
+        // -- text --> / == text ==> / -. text .-> 内联文本边
+        let input = "flowchart TD\nA -- yes --> B\nB == strong ==> C\nC -. dotted .-> A";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Flowchart(flowchart) => {
+                assert_eq!(flowchart.edges.len(), 3);
+                assert_eq!(flowchart.edges[0].label.as_deref(), Some("yes"));
+                assert_eq!(
+                    flowchart.edges[0].arrow_type,
+                    ArrowType::Labeled("yes".to_string())
+                );
+                assert_eq!(flowchart.edges[1].label.as_deref(), Some("strong"));
+                assert_eq!(
+                    flowchart.edges[1].arrow_type,
+                    ArrowType::Labeled("strong".to_string())
+                );
+                assert_eq!(flowchart.edges[2].label.as_deref(), Some("dotted"));
+                assert_eq!(
+                    flowchart.edges[2].arrow_type,
+                    ArrowType::Labeled("dotted".to_string())
+                );
+            }
+            _ => panic!("expected Flowchart"),
+        }
+    }
+
+    #[test]
+    fn parses_flowchart_inline_text_no_spaces() {
+        // 无空格紧凑写法：A--text-->B
+        let input = "flowchart LR\nA--go-->B";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Flowchart(flowchart) => {
+                assert_eq!(flowchart.edges.len(), 1);
+                assert_eq!(flowchart.edges[0].source, "A");
+                assert_eq!(flowchart.edges[0].target, "B");
+                assert_eq!(flowchart.edges[0].label.as_deref(), Some("go"));
+            }
+            _ => panic!("expected Flowchart"),
+        }
+    }
+
+    #[test]
     fn parses_flowchart_multiple_edges() {
         let input = "flowchart TD\nA --> B\nB --> C\nC --> D";
         match MermaidParser::parse_mermaid(input).unwrap() {
             Diagram::Flowchart(fc) => {
                 assert_eq!(fc.nodes.len(), 4);
                 assert_eq!(fc.edges.len(), 3);
+            }
+            _ => panic!("expected Flowchart"),
+        }
+    }
+
+    #[test]
+    fn parses_flowchart_no_arrow_edge() {
+        let input = "flowchart LR\nA --- B";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Flowchart(fc) => {
+                assert_eq!(fc.edges.len(), 1);
+                assert_eq!(fc.edges[0].arrow_type, ArrowType::NoArrow);
+                assert_eq!(fc.edges[0].source, "A");
+                assert_eq!(fc.edges[0].target, "B");
+            }
+            _ => panic!("expected Flowchart"),
+        }
+    }
+
+    #[test]
+    fn parses_flowchart_both_arrow_edge() {
+        let input = "flowchart LR\nA <--> B";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Flowchart(fc) => {
+                assert_eq!(fc.edges.len(), 1);
+                assert_eq!(fc.edges[0].arrow_type, ArrowType::Both);
+            }
+            _ => panic!("expected Flowchart"),
+        }
+    }
+
+    #[test]
+    fn parses_flowchart_no_arrow_does_not_swallow_solid() {
+        // 确保 --- 不会破坏已有的 --> 解析
+        let input = "flowchart LR\nA --> B\nC --- D";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Flowchart(fc) => {
+                assert_eq!(fc.edges.len(), 2);
+                assert_eq!(fc.edges[0].arrow_type, ArrowType::Solid);
+                assert_eq!(fc.edges[1].arrow_type, ArrowType::NoArrow);
+            }
+            _ => panic!("expected Flowchart"),
+        }
+    }
+
+    #[test]
+    fn parses_flowchart_circle_and_cross_edges() {
+        let input = "flowchart LR\nA --o B\nC --x D";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Flowchart(fc) => {
+                assert_eq!(fc.edges.len(), 2);
+                assert_eq!(fc.edges[0].arrow_type, ArrowType::Circle);
+                assert_eq!(fc.edges[1].arrow_type, ArrowType::Cross);
+            }
+            _ => panic!("expected Flowchart"),
+        }
+    }
+
+    #[test]
+    fn parses_flowchart_circle_cross_no_swallow() {
+        // --o / --x 不应破坏 --> 与 ---
+        let input = "flowchart LR\nA --> B\nC --- D\nE --o F\nG --x H";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Flowchart(fc) => {
+                assert_eq!(fc.edges.len(), 4);
+                assert_eq!(fc.edges[0].arrow_type, ArrowType::Solid);
+                assert_eq!(fc.edges[1].arrow_type, ArrowType::NoArrow);
+                assert_eq!(fc.edges[2].arrow_type, ArrowType::Circle);
+                assert_eq!(fc.edges[3].arrow_type, ArrowType::Cross);
             }
             _ => panic!("expected Flowchart"),
         }
@@ -1306,6 +1461,72 @@ mod tests {
                 assert_eq!(seq.participants.len(), 4);
                 assert!(seq.participants.iter().any(|p| p.name == "Alice"));
                 assert!(seq.participants.iter().any(|p| p.name == "bob"));
+            }
+            _ => panic!("expected Sequence"),
+        }
+    }
+
+    #[test]
+    fn parses_sequence_participant_kinds() {
+        let input = "sequenceDiagram\nparticipant A\nactor B\nboundary C\ncontrol D\nentity E\ndatabase F\ncollections G\nqueue H";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Sequence(seq) => {
+                let kinds: Vec<ParticipantKind> = seq
+                    .participants
+                    .iter()
+                    .map(|p| p.kind)
+                    .collect();
+                assert_eq!(
+                    kinds,
+                    vec![
+                        ParticipantKind::Participant,
+                        ParticipantKind::Actor,
+                        ParticipantKind::Boundary,
+                        ParticipantKind::Control,
+                        ParticipantKind::Entity,
+                        ParticipantKind::Database,
+                        ParticipantKind::Collections,
+                        ParticipantKind::Queue,
+                    ]
+                );
+            }
+            _ => panic!("expected Sequence"),
+        }
+    }
+
+    #[test]
+    fn parses_sequence_both_arrows() {
+        let input = "sequenceDiagram\nA <<->> B\nC <<-->> D";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Sequence(seq) => {
+                assert_eq!(seq.statements.len(), 2);
+                match &seq.statements[0] {
+                    SequenceStatement::Message(m) => assert_eq!(m.arrow, MessageArrow::Both),
+                    _ => panic!("expected Message"),
+                }
+                match &seq.statements[1] {
+                    SequenceStatement::Message(m) => assert_eq!(m.arrow, MessageArrow::Both),
+                    _ => panic!("expected Message"),
+                }
+            }
+            _ => panic!("expected Sequence"),
+        }
+    }
+
+    #[test]
+    fn parses_sequence_dashed_cross_open_arrows() {
+        let input = "sequenceDiagram\nA --x B\nC --) D";
+        match MermaidParser::parse_mermaid(input).unwrap() {
+            Diagram::Sequence(seq) => {
+                assert_eq!(seq.statements.len(), 2);
+                match &seq.statements[0] {
+                    SequenceStatement::Message(m) => assert_eq!(m.arrow, MessageArrow::Cross),
+                    _ => panic!("expected Message"),
+                }
+                match &seq.statements[1] {
+                    SequenceStatement::Message(m) => assert_eq!(m.arrow, MessageArrow::Open),
+                    _ => panic!("expected Message"),
+                }
             }
             _ => panic!("expected Sequence"),
         }

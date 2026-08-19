@@ -176,6 +176,52 @@ pub fn draw_arrow_head(elements: &mut Vec<SceneNode>, tip: &Point, dir: &Point, 
     ));
 }
 
+/// 边终点圆点标记（`--o`），实心圆。
+pub fn draw_arrow_circle(elements: &mut Vec<SceneNode>, tip: &Point, style: &Stroke) {
+    let r = 5.0;
+    let mut path = BezPath::new();
+    // 用贝塞尔近似圆
+    let k = 0.5522847498;
+    path.move_to(Point::new(tip.x + r, tip.y));
+    path.curve_to(
+        Point::new(tip.x + r, tip.y + r * k),
+        Point::new(tip.x + r * k, tip.y + r),
+        Point::new(tip.x, tip.y + r),
+    );
+    path.curve_to(
+        Point::new(tip.x - r * k, tip.y + r),
+        Point::new(tip.x - r, tip.y + r * k),
+        Point::new(tip.x - r, tip.y),
+    );
+    path.curve_to(
+        Point::new(tip.x - r, tip.y - r * k),
+        Point::new(tip.x - r * k, tip.y - r),
+        Point::new(tip.x, tip.y - r),
+    );
+    path.curve_to(
+        Point::new(tip.x + r * k, tip.y - r),
+        Point::new(tip.x + r, tip.y - r * k),
+        Point::new(tip.x + r, tip.y),
+    );
+    path.close_path();
+    elements.push(path_node(
+        path,
+        fs_both(style.color, style.color, style.width),
+        Z_AXIS,
+    ));
+}
+
+/// 边终点叉号标记（`--x`），两条交叉线。
+pub fn draw_arrow_cross(elements: &mut Vec<SceneNode>, tip: &Point, style: &Stroke) {
+    let sz = 5.0;
+    let mut path = BezPath::new();
+    path.move_to(Point::new(tip.x - sz, tip.y - sz));
+    path.line_to(Point::new(tip.x + sz, tip.y + sz));
+    path.move_to(Point::new(tip.x - sz, tip.y + sz));
+    path.line_to(Point::new(tip.x + sz, tip.y - sz));
+    elements.push(path_node(path, fs_stroke(style.color, style.width), Z_AXIS));
+}
+
 /// 历史 `GradientDef { stops, angle }` 到 lievisual `LinearGradient` 的兼容构造。
 pub fn gradient_def(angle_deg: f64, stops: Vec<(f64, Color)>) -> LinearGradient {
     let a = angle_deg.to_radians();

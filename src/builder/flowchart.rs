@@ -5,12 +5,12 @@ use petgraph::graph::{DiGraph, NodeIndex};
 use vello_cpu::kurbo::BezPath;
 
 use crate::{
-    ast::{Direction, Flowchart, NodeShape},
+    ast::{ArrowType, Direction, Flowchart, NodeShape},
     builder::types::OutputConfig,
     error::DiagramResult,
     vir::{
         self, Stroke, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, Z_SUBGRAPH,
-        Z_SUBGRAPH_LABEL, draw_arrow_head, theme,
+        Z_SUBGRAPH_LABEL, draw_arrow_circle, draw_arrow_cross, draw_arrow_head, theme,
     },
 };
 use lievisual::scene::SceneNode;
@@ -183,15 +183,39 @@ fn render_sugiyama_flowchart(
             && route.len() >= 2
         {
             elements.push(vir::polyline_node(route.clone(), edge_stroke(), Z_AXIS));
-            // 箭头：最后一段方向
             let last = route.last().unwrap();
-            let prev = route[route.len() - 2];
-            let dx = last.x - prev.x;
-            let dy = last.y - prev.y;
-            let len = (dx * dx + dy * dy).sqrt();
-            if len > 0.0 {
-                let ud = Point::new(dx / len, dy / len);
-                draw_arrow_head(&mut elements, last, &ud, &edge_stroke());
+            let first = route.first().unwrap();
+            // 终点标记（NoArrow 不画）
+            let arrow = &edge.arrow_type;
+            match arrow {
+                ArrowType::NoArrow => {}
+                ArrowType::Circle => {
+                    draw_arrow_circle(&mut elements, last, &edge_stroke());
+                }
+                ArrowType::Cross => {
+                    draw_arrow_cross(&mut elements, last, &edge_stroke());
+                }
+                _ => {
+                    let prev = route[route.len() - 2];
+                    let dx = last.x - prev.x;
+                    let dy = last.y - prev.y;
+                    let len = (dx * dx + dy * dy).sqrt();
+                    if len > 0.0 {
+                        let ud = Point::new(dx / len, dy / len);
+                        draw_arrow_head(&mut elements, last, &ud, &edge_stroke());
+                    }
+                }
+            }
+            // 双向箭头：起点也画一个反向箭头
+            if arrow == &ArrowType::Both {
+                let next = route[1];
+                let dx = first.x - next.x;
+                let dy = first.y - next.y;
+                let len = (dx * dx + dy * dy).sqrt();
+                if len > 0.0 {
+                    let ud = Point::new(dx / len, dy / len);
+                    draw_arrow_head(&mut elements, first, &ud, &edge_stroke());
+                }
             }
         }
     }

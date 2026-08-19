@@ -30,11 +30,21 @@ node_shape = { node_shape_double_circle | node_shape_circle | node_shape_stadium
 node_text = { text }
 node_decl = { identifier ~ (node_shape)? }
 
+edge_text_solid = @{ (!("-->" | NEWLINE) ~ ANY)* }
+edge_text_thick = @{ (!("==>" | NEWLINE) ~ ANY)* }
+edge_text_dotted = @{ (!(".->" | NEWLINE) ~ ANY)* }
 edge_arrow_solid = { "-->" }
 edge_arrow_dotted = { "-.->" }
 edge_arrow_thick = { "==>" }
+edge_arrow_no_arrow = { "---" }
+edge_arrow_circle = { "--o" }
+edge_arrow_cross = { "--x" }
+edge_arrow_both = { "<-->" }
 edge_arrow_labeled = { "-->|" ~ edge_label ~ "|" }
-edge_arrow = { edge_arrow_labeled | edge_arrow_thick | edge_arrow_dotted | edge_arrow_solid }
+edge_arrow_solid_text = { "--" ~ edge_text_solid ~ "-->" }
+edge_arrow_thick_text = { "==" ~ edge_text_thick ~ "==>" }
+edge_arrow_dotted_text = { "-." ~ edge_text_dotted ~ ".->" }
+edge_arrow = { edge_arrow_labeled | edge_arrow_solid | edge_arrow_no_arrow | edge_arrow_circle | edge_arrow_cross | edge_arrow_dotted | edge_arrow_thick | edge_arrow_solid_text | edge_arrow_thick_text | edge_arrow_dotted_text | edge_arrow_both }
 edge = { identifier ~ (edge_arrow ~ identifier)+ }
 
 subgraph = { "subgraph" ~ subgraph_title? ~ NEWLINE+ ~ (subgraph_stmt ~ (NEWLINE+ ~ subgraph_stmt)*)? ~ NEWLINE* ~ "end" }
@@ -42,15 +52,19 @@ subgraph_stmt = _{ edge | subgraph | (!"end" ~ node_decl) }
 flowchart_statement = { edge | subgraph | node_decl }
 flowchart_diagram = { ("flowchart" | "graph") ~ direction? ~ NEWLINE+ ~ (flowchart_statement ~ (NEWLINE+ ~ flowchart_statement)*)? }
 
-participant = { "participant" ~ identifier ~ ("as" ~ identifier)? }
-actor = { "actor" ~ identifier }
+participant_kind = { "participant" | "actor" | "boundary" | "control" | "entity" | "database" | "collections" | "queue" }
+participant = { participant_kind ~ identifier ~ ("as" ~ identifier)? }
 message_arrow_solid = { "->" }
 message_arrow_solid_tip = { "->>" }
 message_arrow_dashed = { "-->" }
 message_arrow_dashed_tip = { "-->>" }
 message_arrow_cross = { "-x" }
 message_arrow_open = { "-)" }
-message_arrow = { message_arrow_open | message_arrow_cross | message_arrow_dashed_tip | message_arrow_dashed | message_arrow_solid_tip | message_arrow_solid }
+message_arrow_both_solid = { "<<->>" }
+message_arrow_both_dashed = { "<<-->>" }
+message_arrow_dashed_cross = { "--x" }
+message_arrow_dashed_open = { "--)" }
+message_arrow = { message_arrow_both_solid | message_arrow_both_dashed | message_arrow_open | message_arrow_dashed_open | message_arrow_cross | message_arrow_dashed_cross | message_arrow_dashed_tip | message_arrow_dashed | message_arrow_solid_tip | message_arrow_solid }
 message = { identifier ~ message_arrow ~ identifier ~ (":" ~ free_text)? }
 note_placement = { ("left" | "right") ~ "of" | "over" }
 note_target = { identifier ~ ("," ~ identifier)? }
@@ -64,7 +78,7 @@ alt_block = { "alt" ~ seq_alt_branch ~ (NEWLINE* ~ "else" ~ seq_alt_branch)* ~ N
 opt_block = { "opt" ~ seq_block_label? ~ NEWLINE+ ~ (seq_block_stmt ~ (NEWLINE+ ~ seq_block_stmt)*)? ~ NEWLINE* ~ "end" }
 par_block = { "par" ~ seq_alt_branch ~ (NEWLINE* ~ "and" ~ seq_alt_branch)* ~ NEWLINE* ~ "end" }
 seq_block = { loop_block | alt_block | opt_block | par_block }
-sequence_statement = { participant | actor | message | note | activation | seq_block }
+sequence_statement = { participant | message | note | activation | seq_block }
 sequence_diagram = { "sequenceDiagram" ~ NEWLINE+ ~ (sequence_statement ~ (NEWLINE+ ~ sequence_statement)*)? ~ NEWLINE* }
 
 visibility = { "+" | "-" | "#" | "~" }
