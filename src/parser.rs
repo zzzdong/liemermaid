@@ -190,26 +190,51 @@ impl MermaidParser {
         let mut text = None;
         for inner in pair.into_inner() {
             if inner.as_rule() == Rule::node_shape {
-                shape = Some(Self::parse_node_shape(&inner)?);
-                // 递归搜索 node_text（可能嵌套在 node_shape → node_shape_brackets 内部）
-                text = Self::find_node_text_recursive(&inner);
+                // 找到具体的 shape 子规则（atomic，整个 span 即文本含定界符）
+                let shape_pair = inner.clone().into_inner().next().unwrap_or(inner.clone());
+                shape = Some(Self::parse_node_shape(&shape_pair)?);
+                text = Self::extract_shape_text(&shape_pair);
                 break;
             }
         }
         Ok(Node { id, shape, text })
     }
 
-    /// 递归搜索 parse 树中的 node_text
-    fn find_node_text_recursive(pair: &pest::iterators::Pair<Rule>) -> Option<String> {
-        for child in pair.clone().into_inner() {
-            if child.as_rule() == Rule::node_text {
-                return Self::extract_optional_string(child, Rule::text);
-            }
-            if let found @ Some(_) = Self::find_node_text_recursive(&child) {
-                return found;
-            }
+    /// 从 atomic shape pair 中按定界符长度切片提取文本
+    fn extract_shape_text(shape_pair: &pest::iterators::Pair<Rule>) -> Option<String> {
+        let s = shape_pair.as_str();
+        let (prefix_len, suffix_len) = match shape_pair.as_rule() {
+            Rule::node_shape_double_circle => (3, 3),
+            Rule::node_shape_circle => (2, 2),
+            Rule::node_shape_stadium => (2, 2),
+            Rule::node_shape_database => (2, 2),
+            Rule::node_shape_subroutine => (2, 2),
+            Rule::node_shape_hexagon => (2, 2),
+            Rule::node_shape_parens => (1, 1),
+            Rule::node_shape_brackets => (1, 1),
+            Rule::node_shape_diamond => (1, 1),
+            Rule::node_shape_asymmetric => (1, 1),
+            Rule::node_shape_parallelogram => (2, 2),
+            Rule::node_shape_parallelogram_alt => (2, 2),
+            Rule::node_shape_trapezoid => (2, 2),
+            Rule::node_shape_trapezoid_alt => (2, 2),
+            _ => return None,
+        };
+        if s.len() < prefix_len + suffix_len {
+            return None;
         }
-        None
+        let inner = &s[prefix_len..s.len() - suffix_len];
+        let trimmed = inner.trim();
+        // 若整体被双引号包裹，去掉外层引号
+        let unquoted = if trimmed.len() >= 2
+            && trimmed.starts_with('"')
+            && trimmed.ends_with('"')
+        {
+            &trimmed[1..trimmed.len() - 1]
+        } else {
+            trimmed
+        };
+        Some(unquoted.to_string())
     }
 
     fn parse_node_shape(pair: &pest::iterators::Pair<Rule>) -> Result<NodeShape> {
@@ -321,7 +346,19 @@ impl MermaidParser {
     }
 
     fn parse_subgraph(pair: pest::iterators::Pair<Rule>) -> Result<Subgraph> {
-        let title = Self::extract_optional_string(pair.clone(), Rule::subgraph_title);
+        // subgraph_id = identifier ~ ("[" ~ subgraph_title ~ "]")?
+        // 提取 subgraph_title（如果有 [title] 形式）
+        let title = pair
+            .clone()
+            .into_inner()
+            .find(|p| p.as_rule() == Rule::subgraph_id)
+            .and_then(|id_pair| {
+                id_pair
+                    .clone()
+                    .into_inner()
+                    .find(|p| p.as_rule() == Rule::subgraph_title)
+                    .map(|t| t.as_str().trim().to_string())
+            });
         let mut nodes = Vec::new();
         let mut edges = Vec::new();
 
