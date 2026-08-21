@@ -21,6 +21,7 @@
 //! - 与 pest 版不同，winnow 版是**手写的组合式解析器**：逐条语句解析，
 //!   支持行内注释、重复声明覆盖、引号 id 等。
 
+pub mod common;
 pub mod flowchart;
 
 use crate::ast::Flowchart;
