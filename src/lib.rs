@@ -2,6 +2,7 @@ pub mod ast;
 pub mod builder;
 pub mod error;
 pub mod parser;
+pub mod parser2;
 pub mod scene_ext;
 pub mod vir;
 pub use ast::Diagram;

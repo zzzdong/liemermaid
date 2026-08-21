@@ -5,6 +5,9 @@ pub enum ParseError {
     #[error("pest parse error: {0}")]
     Pest(#[from] Box<pest::error::Error<super::parser::Rule>>),
 
+    #[error("winnow parse error: {0}")]
+    Winnow(String),
+
     #[error("no diagram found in input")]
     NoDiagram,
 
