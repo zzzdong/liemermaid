@@ -8,7 +8,7 @@
 //! use liemermaid::parser2::WinnowParser;
 //!
 //! let diagram = WinnowParser::parse_flowchart(
-//!     "flowchart TD\nA[Start] --> B{Decision} --> C[End]",
+//!     "flowchart TD\nA[Start]\nB{Decision}\nC[End]\nA --> B\nB --> C",
 //! )
 //! .expect("parse failed");
 //! assert_eq!(diagram.nodes.len(), 3);

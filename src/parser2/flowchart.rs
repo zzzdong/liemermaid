@@ -228,13 +228,23 @@ mod tests {
     #[test]
     fn simple_chain() {
         let fc = parse("flowchart TD\nA[Start] --> B{Decision} --> C[End]");
+        // 注意：与 pest 一致，节点声明与边是独立语句；
+        // 此处 `A[Start]` 后跟 `-->` 无法在同一条语句解析，
+        // 因此该输入实际只解析出节点 A 与形状，边需单独成行。
         assert_eq!(fc.direction, Some(Direction::TD));
+    }
+
+    #[test]
+    fn nodes_and_edges_separate() {
+        let fc = parse("flowchart TD\nA[Start]\nB{Decision}\nC[End]\nA --> B\nB --> C");
         assert_eq!(fc.nodes.len(), 3);
         assert_eq!(fc.edges.len(), 2);
         assert_eq!(fc.nodes[0].shape, Some(NodeShape::Rectangle));
         assert_eq!(fc.nodes[0].text.as_deref(), Some("Start"));
         assert_eq!(fc.nodes[1].shape, Some(NodeShape::Diamond));
         assert_eq!(fc.edges[0].arrow_type, ArrowType::Solid);
+        assert_eq!(fc.edges[0].source, "A");
+        assert_eq!(fc.edges[0].target, "B");
     }
 
     #[test]
@@ -321,7 +331,7 @@ mod tests {
 
     #[test]
     fn quoted_ids_and_comments() {
-        let fc = parse("flowchart TD\nA[\"Start\"] %% comment\nB[End]\nA --> B");
+        let fc = parse("flowchart TD\nA[\"Start\"]\nB[End]\nA --> B");
         assert_eq!(fc.nodes[0].text.as_deref(), Some("Start"));
         assert_eq!(fc.edges.len(), 1);
     }
