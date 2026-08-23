@@ -60,6 +60,11 @@ pub fn stroke(color: Color, width: f64) -> Stroke {
     Stroke::new(color, width)
 }
 
+/// 便捷构造虚线描边。
+pub fn dashed_stroke(color: Color, width: f64, dash_array: Vec<f64>) -> Stroke {
+    Stroke::dashed(color, width, dash_array)
+}
+
 /// 仅填充样式。
 pub fn fs_fill(color: Color) -> FillStrokeStyle {
     FillStrokeStyle::fill(color)

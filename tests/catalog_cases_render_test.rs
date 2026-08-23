@@ -1,7 +1,7 @@
 //! 目录冒烟测试：catalog 中每个用例必须能被 liemermaid 解析并渲染。
 //!
-//! 与 `golden_snapshot_test.rs` 配合：本测试保证用例源码对 liemermaid 有效；
-//! 快照测试保证布局与官方对齐。
+//! 与 `official_compare_test.rs` 配合：本测试保证用例源码对 liemermaid 有效；
+//! 官方对比测试保证布局与官方 mermaid-cli 输出对齐。
 
 use serde::Deserialize;
 

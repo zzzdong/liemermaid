@@ -58,6 +58,6 @@ case "$MODE" in
         ;;
 esac
 
-echo "==> 运行 Rust 结构化对拍测试..."
+echo "==> 运行 Rust 结构化对拍测试（与官方 mermaid-cli 对比）..."
 cd "$ROOT"
-cargo test --test golden_snapshot_test
+cargo test --test official_compare_test

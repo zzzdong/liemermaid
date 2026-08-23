@@ -1,14 +1,16 @@
-//! 端到端官方对比测试（两层）。
+//! 端到端官方对比测试（与官方 mermaid-cli 输出对比）。
 //!
 //! 层 1（语义层）：用 `semantics` 模块从 liemermaid 输出与官方 mermaid-cli 输出各抽
 //! 取结构化语义（文本集合 / 节点标签集合 / 归一语义类型计数），做跨引擎正确性比对。
 //! 文本集合与节点标签集合要求**相等**（强判据）；类型计数记录偏差（弱判据）。
 //!
-//! 层 2（像素/结构层）：复用 `svgdiff` 对比两边生成的 SVG 在元素数量、文本、颜色、
+//! 层 2（结构层）：复用 `svgdiff` 对比两边生成的 SVG 在元素数量、文本、颜色、
 //! 相对布局/包围盒等维度的差异，作为"渲染像不像"的辅助信号。
 //!
 //! 官方 golden 来源：`tests/golden/golden/{type}__{name}.svg`（由 mermaid-cli 生成）。
 //! liemermaid 输出：实时 `liemermaid::render` 渲染 catalog 中的 `.mmd` 源码。
+//!
+//! 注：本套件只与官方输出对比，不再做 liemermaid 自回归（自比）测试。
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -40,8 +42,6 @@ struct Case {
     #[serde(rename = "type")]
     typ: String,
     name: String,
-    #[serde(default)]
-    liemermaid: bool,
     #[serde(default = "default_true")]
     compare: bool,
     source: String,
@@ -145,47 +145,5 @@ fn official_semantic_compare() {
         struct_failures.len(),
         struct_failures
     );
-    let _ = failures;
-}
-
-#[test]
-fn liemermaid_self_golden() {
-    // 保留自比回归兜底（防意外结构崩溃）。
-    let cases = load_catalog();
-    let mut failures: BTreeMap<String, String> = BTreeMap::new();
-    let mut checked = 0usize;
-    for c in &cases {
-        if !c.liemermaid || !c.compare {
-            continue;
-        }
-        let key = format!("{}__{}", c.typ, c.name);
-        let src_path = Path::new(CASES_DIR).join(&c.source);
-        let golden_path = Path::new("tests/golden/liemermaid_golden")
-            .join(format!("{}.svg", key));
-        let src = match fs::read_to_string(&src_path) {
-            Ok(s) => s,
-            Err(_) => continue,
-        };
-        let golden = match fs::read_to_string(&golden_path) {
-            Ok(s) => s,
-            Err(_) => continue,
-        };
-        let ours = match liemermaid::render(&src, 900, 700) {
-            Ok(s) => s,
-            Err(_) => continue,
-        };
-        let d = svgdiff::compare(
-            &svgdiff::summarize(&svgdiff::parse(&ours)),
-            &svgdiff::summarize(&svgdiff::parse(&golden)),
-        );
-        if !d.is_empty() {
-            failures.insert(key, d.describe());
-        }
-        checked += 1;
-    }
-    println!("liemermaid_self_golden: checked {checked} cases, {} mismatches", failures.len());
-    for (k, v) in &failures {
-        println!("--- {k} ---\n{v}");
-    }
     let _ = failures;
 }

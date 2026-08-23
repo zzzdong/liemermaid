@@ -6,7 +6,8 @@ use crate::{
     ast::PieDiagram,
     builder::{
         layout::types::LayoutEngine,
-        types::{OutputConfig, PALETTE},
+        theme,
+        types::OutputConfig,
     },
     error::{DiagramError, DiagramResult},
     vir::{self, Color, SceneNode, TextAlign, TextBaseline, Z_LABEL, Z_SERIES, Z_TITLE},
@@ -94,7 +95,7 @@ pub fn build_pie_elements(
     for (idx, (label, value)) in data_values.iter().enumerate() {
         let slice_angle = 2.0 * std::f64::consts::PI * value / total;
         let end_angle = start_angle + slice_angle;
-        let color = PALETTE[idx % PALETTE.len()];
+        let color = theme::pie::COLORS[idx % theme::pie::COLORS.len()];
 
         // 扇区路径
         let (sx, sy) = (start_angle.cos(), start_angle.sin());

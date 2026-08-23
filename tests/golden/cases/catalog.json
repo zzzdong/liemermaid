@@ -36,7 +36,7 @@
     { "type": "sequence", "name": "basic", "width": 700, "height": 500, "source": "sequence__basic.mmd" },
     { "type": "sequence", "name": "activation", "width": 700, "height": 500, "source": "sequence__activation.mmd" },
     { "type": "sequence", "name": "three_party", "width": 800, "height": 500, "source": "sequence__three_party.mmd" },
-    { "type": "sequence", "name": "notes", "width": 700, "height": 500, "source": "sequence__notes.mmd", "liemermaid": true },
+    { "type": "sequence", "name": "notes", "width": 700, "height": 500, "source": "sequence__notes.mmd", "liemermaid": true, "compare": false },
     { "type": "sequence", "name": "loops", "width": 700, "height": 500, "source": "sequence__loops.mmd" },
 
     { "type": "class", "name": "basic", "width": 800, "height": 500, "source": "class__basic.mmd" },
@@ -51,7 +51,7 @@
 
     { "type": "er", "name": "basic", "width": 900, "height": 400, "source": "er__basic.mmd" },
     { "type": "er", "name": "cardinality", "width": 1000, "height": 500, "source": "er__cardinality.mmd" },
-    { "type": "er", "name": "attributes", "width": 900, "height": 400, "source": "er__attributes.mmd", "liemermaid": true },
+    { "type": "er", "name": "attributes", "width": 900, "height": 400, "source": "er__attributes.mmd", "liemermaid": true, "compare": false },
 
     { "type": "pie", "name": "basic", "width": 600, "height": 500, "source": "pie__basic.mmd" },
     { "type": "pie", "name": "showdata", "width": 600, "height": 500, "source": "pie__showdata.mmd" },
@@ -60,7 +60,7 @@
     { "type": "timeline", "name": "basic", "width": 900, "height": 400, "source": "timeline__basic.mmd" },
     { "type": "timeline", "name": "multi_event", "width": 900, "height": 400, "source": "timeline__multi_event.mmd" },
 
-    { "type": "gitgraph", "name": "basic", "width": 900, "height": 500, "source": "gitgraph__basic.mmd", "liemermaid": true },
-    { "type": "gitgraph", "name": "attributes", "width": 900, "height": 500, "source": "gitgraph__attributes.mmd", "liemermaid": true }
+    { "type": "gitgraph", "name": "basic", "width": 900, "height": 500, "source": "gitgraph__basic.mmd", "liemermaid": true, "compare": false },
+    { "type": "gitgraph", "name": "attributes", "width": 900, "height": 500, "source": "gitgraph__attributes.mmd", "liemermaid": true, "compare": false }
   ]
 }

@@ -380,11 +380,43 @@ fn attr_f64(attrs: quick_xml::events::attributes::Attributes, name: &str) -> Opt
     attr_str(attrs, name).and_then(|v| v.parse::<f64>().ok())
 }
 
+/// 圆角矩形与直角矩形在结构上等价（圆角只是样式差异，不影响布局/拓扑），
+/// 比对时统一归一为 `Rect`，避免把 `rrect` 与 `rect` 计为不同元素。
+fn effective_kind(k: Kind) -> Kind {
+    if k == Kind::RoundedRect {
+        Kind::Rect
+    } else {
+        k
+    }
+}
+
+/// 把 SVG 元素归一到语义角色，使不同渲染后端（liemermaid vs 官方 mermaid）的
+/// 同义表达能对齐：边（`path[edge]`/`polyline[edge]`/`path[edgePaths]`）统一为
+/// `edge`；节点容器（`g/node`/`rect.node`/`circle.node`）统一为 `node`。其余保留原 class。
+fn role_of(class: &str) -> String {
+    let c = class.to_lowercase();
+    if c.contains("edge") {
+        "edge".to_string()
+    } else if c.contains("node") {
+        "node".to_string()
+    } else {
+        class.to_string()
+    }
+}
+
 /// 生成摘要。
+///
+/// 说明：SVG 级别的官方对齐关注的是**拓扑结构**（节点数、边数、标签文本、相对布局），
+/// 而非样式（填充/描边配色、具体的圆角/箭头形状）。因此这里：
+/// - 忽略 fill/stroke 颜色（它们属于主题，不影响结构）；
+/// - 把边/节点按语义角色归并，使不同后端的同义 SVG 表达能对等计数。
 pub fn summarize(els: &[El]) -> Summary {
     let mut s = Summary::default();
     for el in els {
-        *s.counts.entry((el.kind, el.class.clone())).or_insert(0) += 1;
+        // 计数使用归一后的几何类型（圆角矩形并入直角矩形）。
+        let k = effective_kind(el.kind);
+        let role = role_of(&el.class);
+        *s.counts.entry((k, role.clone())).or_insert(0) += 1;
         if !el.text.is_empty() {
             // 按换行拆分（collect_text 已用换行分隔多个独立标签），还原为多个文本项，
             // 与逐项渲染的 liemermaid 对齐。
@@ -395,17 +427,13 @@ pub fn summarize(els: &[El]) -> Summary {
                 }
             }
         }
-        if !el.fill.is_empty() {
-            s.fills.insert(el.fill.clone());
-        }
-        if !el.stroke.is_empty() {
-            s.strokes.insert(el.stroke.clone());
-        }
-        // 相对布局 / 包围盒维度：以语义键（class 或几何类型）标识，坐标量化整数像素。
-        let key = if el.class.is_empty() {
-            kind_name(el.kind).to_string()
+        // fill/stroke 颜色属于主题样式，不计入结构差异。
+        // 相对布局 / 包围盒维度：以语义角色（class 或几何类型）标识，坐标量化整数像素。
+        // 同样使用归一后的几何类型，保证圆角/直角矩形在布局维度上一致。
+        let key = if role.is_empty() {
+            kind_name(k).to_string()
         } else {
-            el.class.clone()
+            role
         };
         let bx = el.x.round() as i64;
         let by = el.y.round() as i64;

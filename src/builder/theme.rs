@@ -13,111 +13,122 @@ pub const NODE_RADIUS: f64 = 6.0;
 // Stadium 为跑道形：两端半圆直径 = 节点高度（半圆半径 = 半高），故不再用固定小圆角
 pub const STADIUM_RADIUS: f64 = 8.0;
 
-// ---- 连线通用 ----
-pub const EDGE_COLOR: Color = Color::new(148.0 / 255.0, 163.0 / 255.0, 184.0 / 255.0, 1.0); // slate-400
+// ---- 连线通用（对齐 mermaid 默认主题）----
+pub const EDGE_COLOR: Color = Color::new(51.0 / 255.0, 51.0 / 255.0, 51.0 / 255.0, 1.0); // #333333
 pub const EDGE_WIDTH: f64 = 2.0;
-pub const TEXT_COLOR: Color = Color::new(30.0 / 255.0, 41.0 / 255.0, 59.0 / 255.0, 1.0); // slate-800
+pub const TEXT_COLOR: Color = Color::new(51.0 / 255.0, 51.0 / 255.0, 51.0 / 255.0, 1.0); // #333333
 
-// ==================== Flowchart (蓝) ====================
+// ==================== Flowchart（对齐 mermaid 默认主题）====================
 pub mod flowchart {
     use super::Color;
-    pub const FILL: Color = Color::new(238.0 / 255.0, 242.0 / 255.0, 255.0 / 255.0, 1.0); // indigo-50
-    pub const STROKE: Color = Color::new(99.0 / 255.0, 102.0 / 255.0, 241.0 / 255.0, 1.0); // indigo-500
+    // 官方默认主题：节点填充 primaryColor=#ECECFF，描边 nodeBorder=#9370DB
+    pub const FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+    pub const STROKE: Color = Color::new(147.0 / 255.0, 112.0 / 255.0, 219.0 / 255.0, 1.0); // #9370DB
     pub const TEXT: Color = super::TEXT_COLOR;
-    pub const EDGE: Color = super::EDGE_COLOR;
-    pub const SUBGRAPH_STROKE: Color = Color::new(148.0 / 255.0, 163.0 / 255.0, 184.0 / 255.0, 1.0); // slate-400
-    pub const SUBGRAPH_TITLE: Color = Color::new(71.0 / 255.0, 85.0 / 255.0, 105.0 / 255.0, 1.0); // slate-600
+    pub const EDGE: Color = super::EDGE_COLOR; // #333333 与官方 lineColor 一致
+    pub const SUBGRAPH_STROKE: Color = Color::new(147.0 / 255.0, 112.0 / 255.0, 219.0 / 255.0, 1.0); // #9370DB
+    pub const SUBGRAPH_TITLE: Color = Color::new(51.0 / 255.0, 51.0 / 255.0, 51.0 / 255.0, 1.0); // #333333
 }
 
-// ==================== State (绿) ====================
+// ==================== State（对齐 mermaid 默认主题）====================
 pub mod state {
     use super::Color;
-    pub const FILL: Color = Color::new(240.0 / 255.0, 253.0 / 255.0, 244.0 / 255.0, 1.0); // green-50
-    pub const STROKE: Color = Color::new(34.0 / 255.0, 197.0 / 255.0, 94.0 / 255.0, 1.0); // green-500
-    pub const TEXT: Color = Color::new(22.0 / 255.0, 101.0 / 255.0, 52.0 / 255.0, 1.0); // green-800
+    pub const FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+    pub const STROKE: Color = Color::new(147.0 / 255.0, 112.0 / 255.0, 219.0 / 255.0, 1.0); // #9370DB
+    pub const TEXT: Color = Color::new(51.0 / 255.0, 51.0 / 255.0, 51.0 / 255.0, 1.0); // #333333
     pub const EDGE: Color = super::EDGE_COLOR;
-    pub const START_FILL: Color = Color::new(22.0 / 255.0, 101.0 / 255.0, 52.0 / 255.0, 1.0); // green-800
-    pub const END_STROKE: Color = Color::new(34.0 / 255.0, 197.0 / 255.0, 94.0 / 255.0, 1.0); // green-500
+    pub const START_FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+    pub const END_STROKE: Color = Color::new(147.0 / 255.0, 112.0 / 255.0, 219.0 / 255.0, 1.0); // #9370DB
 }
 
-// ==================== Class (紫) ====================
+// ==================== Class（对齐 mermaid 默认主题）====================
 pub mod class {
     use super::Color;
-    pub const FILL: Color = Color::new(255.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 1.0); // white
-    pub const HEADER_FILL: Color = Color::new(250.0 / 255.0, 245.0 / 255.0, 255.0 / 255.0, 1.0); // purple-50
-    pub const STROKE: Color = Color::new(168.0 / 255.0, 85.0 / 255.0, 247.0 / 255.0, 1.0); // purple-500
+    pub const FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+    pub const HEADER_FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+    pub const STROKE: Color = Color::new(147.0 / 255.0, 112.0 / 255.0, 219.0 / 255.0, 1.0); // #9370DB
     pub const TEXT: Color = super::TEXT_COLOR;
     pub const EDGE: Color = super::EDGE_COLOR;
-    pub const SEPARATOR: Color = Color::new(214.0 / 255.0, 188.0 / 255.0, 250.0 / 255.0, 1.0); // purple-200
-    pub const DIAMOND_FILL: Color = Color::new(168.0 / 255.0, 85.0 / 255.0, 247.0 / 255.0, 1.0); // purple-500
+    pub const SEPARATOR: Color = Color::new(147.0 / 255.0, 112.0 / 255.0, 219.0 / 255.0, 1.0); // #9370DB
+    pub const DIAMOND_FILL: Color = Color::new(147.0 / 255.0, 112.0 / 255.0, 219.0 / 255.0, 1.0); // #9370DB
 }
 
-// ==================== Sequence (天蓝) ====================
+// ==================== Sequence（对齐 mermaid 默认主题）====================
 pub mod sequence {
     use super::Color;
-    pub const ACTOR_FILL: Color = Color::new(240.0 / 255.0, 249.0 / 255.0, 255.0 / 255.0, 1.0); // sky-50
-    pub const ACTOR_STROKE: Color = Color::new(14.0 / 255.0, 165.0 / 255.0, 233.0 / 255.0, 1.0); // sky-500
-    pub const FILL: Color = Color::new(240.0 / 255.0, 249.0 / 255.0, 255.0 / 255.0, 1.0); // sky-50
-    pub const STROKE: Color = Color::new(14.0 / 255.0, 165.0 / 255.0, 233.0 / 255.0, 1.0); // sky-500
+    // 官方默认主题：actorBkg=primaryColor=#ECECFF，actorBorder=nodeBorder=#9370DB
+    pub const ACTOR_FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+    pub const ACTOR_STROKE: Color = Color::new(147.0 / 255.0, 112.0 / 255.0, 219.0 / 255.0, 1.0); // #9370DB
+    pub const FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+    pub const STROKE: Color = Color::new(147.0 / 255.0, 112.0 / 255.0, 219.0 / 255.0, 1.0); // #9370DB
     pub const TEXT: Color = super::TEXT_COLOR;
     pub const EDGE: Color = super::EDGE_COLOR;
-    pub const LIFELINE: Color = Color::new(203.0 / 255.0, 213.0 / 255.0, 225.0 / 255.0, 1.0); // slate-300
-    pub const ACTIVATION: Color = Color::new(14.0 / 255.0, 165.0 / 255.0, 233.0 / 255.0, 1.0); // sky-500
-    pub const NOTE_FILL: Color = Color::new(254.0 / 255.0, 252.0 / 255.0, 232.0 / 255.0, 1.0); // yellow-50
-    pub const NOTE_STROKE: Color = Color::new(234.0 / 255.0, 179.0 / 255.0, 8.0 / 255.0, 1.0); // yellow-500
-    pub const BLOCK_FILL: Color = Color::new(241.0 / 255.0, 245.0 / 255.0, 249.0 / 255.0, 1.0); // slate-50
-    pub const BLOCK_STROKE: Color = Color::new(148.0 / 255.0, 163.0 / 255.0, 184.0 / 255.0, 1.0); // slate-400
-    pub const BLOCK_TEXT: Color = Color::new(71.0 / 255.0, 85.0 / 255.0, 105.0 / 255.0, 1.0); // slate-600
+    pub const LIFELINE: Color = Color::new(153.0 / 255.0, 153.0 / 255.0, 153.0 / 255.0, 1.0); // #999 官方 lifeline 灰
+    // 官方 activationBkgColor=#f4f4f4 / activationBorderColor=#666（灰），保持与官方一致
+    pub const ACTIVATION: Color = Color::new(102.0 / 255.0, 102.0 / 255.0, 102.0 / 255.0, 1.0); // #666
+    pub const NOTE_FILL: Color = Color::new(237.0 / 255.0, 242.0 / 255.0, 174.0 / 255.0, 1.0); // #EDF2AE 官方 noteBkgColor
+    pub const NOTE_STROKE: Color = Color::new(147.0 / 255.0, 112.0 / 255.0, 219.0 / 255.0, 1.0); // #9370DB
+    pub const BLOCK_FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+    pub const BLOCK_STROKE: Color = Color::new(147.0 / 255.0, 112.0 / 255.0, 219.0 / 255.0, 1.0); // #9370DB
+    pub const BLOCK_TEXT: Color = Color::new(51.0 / 255.0, 51.0 / 255.0, 51.0 / 255.0, 1.0); // #333333
 }
 
-// ==================== ER (琥珀) ====================
+// ==================== ER（对齐 mermaid 默认主题）====================
 pub mod er {
     use super::Color;
-    pub const FILL: Color = Color::new(255.0 / 255.0, 251.0 / 255.0, 235.0 / 255.0, 1.0); // amber-50
-    pub const HEADER_FILL: Color = Color::new(254.0 / 255.0, 243.0 / 255.0, 199.0 / 255.0, 1.0); // amber-100
-    pub const STROKE: Color = Color::new(245.0 / 255.0, 158.0 / 255.0, 11.0 / 255.0, 1.0); // amber-500
+    pub const FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+    pub const HEADER_FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+    pub const STROKE: Color = Color::new(147.0 / 255.0, 112.0 / 255.0, 219.0 / 255.0, 1.0); // #9370DB
     pub const TEXT: Color = super::TEXT_COLOR;
     pub const EDGE: Color = super::EDGE_COLOR;
 }
 
-// ==================== Timeline (粉) ====================
+// ==================== Timeline（对齐 mermaid 默认主题）====================
+// 官方时间线使用主题色：轴线/节点 nodeBorder=#9370DB，强调 #aaaa33，文字 #333。
 pub mod timeline {
     use super::Color;
-    pub const LINE: Color = Color::new(236.0 / 255.0, 72.0 / 255.0, 153.0 / 255.0, 1.0); // pink-500
+    pub const LINE: Color = Color::new(147.0 / 255.0, 112.0 / 255.0, 219.0 / 255.0, 1.0); // #9370DB 与节点描边一致
+    pub const ACCENT: Color = Color::new(170.0 / 255.0, 170.0 / 255.0, 51.0 / 255.0, 1.0); // #aaaa33 官方强调色
     pub const TEXT: Color = super::TEXT_COLOR;
-    pub const TITLE: Color = Color::new(30.0 / 255.0, 41.0 / 255.0, 59.0 / 255.0, 1.0); // slate-800
+    pub const TITLE: Color = Color::new(51.0 / 255.0, 51.0 / 255.0, 51.0 / 255.0, 1.0); // #333333
 }
 
 // ==================== Git Graph (多分支) ====================
+// 官方默认主题：分支色由 adjust(primaryColor=#ECECFF, {h,...}) 派生（蓝紫协调系），
+// 而非彩虹调色板。下方 8 色为 khroma adjust 同款算法算出的确切值。
 pub mod gitgraph {
     use super::Color;
     pub const BRANCH_COLORS: [Color; 8] = [
-        Color::new(99.0 / 255.0, 102.0 / 255.0, 241.0 / 255.0, 1.0), // indigo-500
-        Color::new(249.0 / 255.0, 115.0 / 255.0, 22.0 / 255.0, 1.0), // orange-500
-        Color::new(34.0 / 255.0, 197.0 / 255.0, 94.0 / 255.0, 1.0),  // green-500
-        Color::new(234.0 / 255.0, 179.0 / 255.0, 8.0 / 255.0, 1.0),  // yellow-500
-        Color::new(168.0 / 255.0, 85.0 / 255.0, 247.0 / 255.0, 1.0), // purple-500
-        Color::new(6.0 / 255.0, 182.0 / 255.0, 212.0 / 255.0, 1.0),  // cyan-500
-        Color::new(148.0 / 255.0, 163.0 / 255.0, 184.0 / 255.0, 1.0), // slate-400
-        Color::new(236.0 / 255.0, 72.0 / 255.0, 153.0 / 255.0, 1.0), // pink-500
+        Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0), // git0 = primaryColor #ECECFF
+        Color::new(255.0 / 255.0, 255.0 / 255.0, 222.0 / 255.0, 1.0), // git1 = secondaryColor #ffffde
+        Color::new(249.0 / 255.0, 255.0 / 255.0, 236.0 / 255.0, 1.0), // git2 = adjust(primary,{h:-160})
+        Color::new(236.0 / 255.0, 246.0 / 255.0, 255.0 / 255.0, 1.0), // git3 = adjust(primary,{h:-30})
+        Color::new(236.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 1.0), // git4 = adjust(primary,{h:-60})
+        Color::new(236.0 / 255.0, 255.0 / 255.0, 246.0 / 255.0, 1.0), // git5 = adjust(primary,{h:-90})
+        Color::new(255.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0), // git6 = adjust(primary,{h:+60})
+        Color::new(255.0 / 255.0, 236.0 / 255.0, 236.0 / 255.0, 1.0), // git7 = adjust(primary,{h:+120})
     ];
     pub const TEXT: Color = super::TEXT_COLOR;
     pub const COMMIT_STROKE: Color = Color::new(255.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 1.0);
 }
 
-// ==================== Pie (多色轮盘) ====================
+// ==================== Pie (多色轮盘，对齐 mermaid 默认主题) ====================
+// 官方 pie 段色由 adjust(primaryColor=#ECECFF / secondaryColor=#ffffde / tertiaryColor,
+// {h,l}) 派生（khroma 同款算法）。下方 12 色为算出的确切值。
 pub mod pie {
     use super::Color;
-    pub const COLORS: [Color; 10] = [
-        Color::new(99.0 / 255.0, 102.0 / 255.0, 241.0 / 255.0, 1.0), // indigo-500
-        Color::new(14.0 / 255.0, 165.0 / 255.0, 233.0 / 255.0, 1.0), // sky-500
-        Color::new(249.0 / 255.0, 115.0 / 255.0, 22.0 / 255.0, 1.0), // orange-500
-        Color::new(34.0 / 255.0, 197.0 / 255.0, 94.0 / 255.0, 1.0),  // green-500
-        Color::new(168.0 / 255.0, 85.0 / 255.0, 247.0 / 255.0, 1.0), // purple-500
-        Color::new(234.0 / 255.0, 179.0 / 255.0, 8.0 / 255.0, 1.0),  // yellow-500
-        Color::new(236.0 / 255.0, 72.0 / 255.0, 153.0 / 255.0, 1.0), // pink-500
-        Color::new(6.0 / 255.0, 182.0 / 255.0, 212.0 / 255.0, 1.0),  // cyan-500
-        Color::new(239.0 / 255.0, 68.0 / 255.0, 68.0 / 255.0, 1.0),  // red-500
-        Color::new(20.0 / 255.0, 184.0 / 255.0, 166.0 / 255.0, 1.0), // teal-500
+    pub const COLORS: [Color; 12] = [
+        Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0), // pie1 = primaryColor #ECECFF
+        Color::new(255.0 / 255.0, 255.0 / 255.0, 222.0 / 255.0, 1.0), // pie2 = secondaryColor #ffffde
+        Color::new(185.0 / 255.0, 255.0 / 255.0, 32.0 / 255.0, 1.0),  // pie3 = adjust(tertiary,{l:-40})
+        Color::new(185.0 / 255.0, 185.0 / 255.0, 255.0 / 255.0, 1.0), // pie4 = adjust(primary,{l:-10})
+        Color::new(255.0 / 255.0, 255.0 / 255.0, 69.0 / 255.0, 1.0),  // pie5 = adjust(secondary,{l:-30})
+        Color::new(217.0 / 255.0, 255.0 / 255.0, 134.0 / 255.0, 1.0), // pie6 = adjust(tertiary,{l:-20})
+        Color::new(255.0 / 255.0, 134.0 / 255.0, 255.0 / 255.0, 1.0), // pie7 = adjust(primary,{h:+60,l:-20})
+        Color::new(32.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 1.0),  // pie8 = adjust(primary,{h:-60,l:-40})
+        Color::new(255.0 / 255.0, 32.0 / 255.0, 32.0 / 255.0, 1.0),   // pie9 = adjust(primary,{h:120,l:-40})
+        Color::new(255.0 / 255.0, 32.0 / 255.0, 255.0 / 255.0, 1.0),  // pie10 = adjust(primary,{h:+60,l:-40})
+        Color::new(32.0 / 255.0, 255.0 / 255.0, 144.0 / 255.0, 1.0),  // pie11 = adjust(primary,{h:-90,l:-40})
+        Color::new(255.0 / 255.0, 83.0 / 255.0, 83.0 / 255.0, 1.0),   // pie12 = adjust(primary,{h:120,l:-30})
     ];
 }

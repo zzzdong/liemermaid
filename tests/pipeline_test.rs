@@ -116,18 +116,18 @@ fn flowchart_with_two_nodes_renders_elements() {
     assert!(svg.starts_with(r#"<svg xmlns="http://www.w3.org/2000/svg""#));
     assert!(svg.ends_with("</svg>\n"));
 
-    // 2. 应该有 2 个节点矩形 + 1 个画布背景矩形
+    // 2. 应该有 2 个节点矩形（SVG 背景透明，不再绘制整画布背景矩形，与官方 mermaid 对齐）
     let rect_count = svg.matches("<rect ").count();
     assert_eq!(
-        rect_count, 3,
-        "Flowchart with 2 nodes + background should have 3 rect elements"
+        rect_count, 2,
+        "Flowchart with 2 nodes should have 2 rect elements (no background rect)"
     );
 
-    // 3. 应该有 1 条折线（一条边）
-    let polyline_count = svg.matches("<polyline ").count();
+    // 3. 应该有 1 条边（liemermaid 用 <path class="edge"> 表示边，与官方 edgePaths 等价）
+    let edge_count = svg.matches("class=\"edge\"").count();
     assert_eq!(
-        polyline_count, 1,
-        "Flowchart with 1 edge should have a polyline"
+        edge_count, 1,
+        "Flowchart with 1 edge should have one edge path"
     );
 
     // 4. 文本内容
@@ -142,13 +142,13 @@ fn flowchart_with_three_chain_nodes() {
 
     let rect_count = svg.matches("<rect ").count();
     assert_eq!(
-        rect_count, 4,
-        "Chain of 3 nodes + background should have 4 rectangles"
+        rect_count, 3,
+        "Chain of 3 nodes should have 3 rectangles (no background rect)"
     );
 
-    let polyline_count = svg.matches("<polyline ").count();
+    let edge_count = svg.matches("class=\"edge\"").count();
     assert_eq!(
-        polyline_count, 2,
+        edge_count, 2,
         "Chain of 3 nodes should have exactly 2 edges"
     );
 

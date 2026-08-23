@@ -13,12 +13,17 @@
 //! | `z` 层级 | `SceneNode.z_index` |
 //! | 文本样式 | `lievisual::text::TextStyle` |
 
+use lievisual::geometry::Color;
 use lievisual::render::{Renderer, SvgRenderer};
 
 /// 用 lievisual 的 SVG 后端渲染场景为字符串。
+///
+/// SVG 输出使用透明背景：mermaid 的默认 SVG 不绘制背景 `<rect>`，底色由 CSS 的
+/// `background-color` 决定。透明背景让导出的 SVG 与官方结构对齐，嵌入时也可由容器/
+/// 样式决定底色，避免多一层整画布矩形。PNG 路径仍保留白底（见 [`render_scene_png`]）。
 pub fn render_scene_svg(scene: &lievisual::Scene) -> String {
     let mut renderer =
-        SvgRenderer::new(scene.width, scene.height).with_background(scene.background);
+        SvgRenderer::new(scene.width, scene.height).with_background(Color::TRANSPARENT);
     renderer.render_scene(scene);
     renderer.into_string()
 }

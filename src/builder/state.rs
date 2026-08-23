@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use lievisual::geometry::{Point, Rect};
+use lievisual::geometry::{Point, Rect, Transform};
 use petgraph::graph::{DiGraph, NodeIndex};
 
 use crate::{
@@ -21,12 +21,20 @@ const STATE_PAD_X: f64 = 18.0;
 const STATE_PAD_Y: f64 = 10.0;
 const FONT_SIZE: f64 = theme::FONT_SIZE;
 const SMALL_FONT: f64 = 11.0;
+const COMPOSITE_PAD: f64 = 16.0;
+const COMPOSITE_TITLE_H: f64 = 22.0;
+const Z_INNER: i32 = Z_SERIES + 1;
 
 /// State diagram node kinds for layout
 #[derive(Debug, Clone)]
 enum StateNode {
     Start,
     End,
+    /// fork / join 伪节点：只画形状，不显示文本标签（与官方 mermaid 一致）。
+    Fork,
+    Join,
+    /// 复合状态：渲染为带标题的嵌套容器，内部递归放置子状态图。
+    Composite,
     Normal {
         description: Option<String>,
         label: Option<String>,
@@ -50,10 +58,16 @@ impl<'a> LayoutEngine for StateEngine<'a> {
 }
 
 pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> Vec<SceneNode> {
+    let config = SugiyamaConfig::default();
+    render_state_diagram(diagram, &config).0
+}
+
+/// 渲染单个状态图（递归用于复合状态）。返回图元与包围盒尺寸，坐标已归一化到 (0,0) 起。
+fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec<SceneNode>, f64, f64) {
     let mut elements = Vec::new();
 
     if diagram.transitions.is_empty() && diagram.states.is_empty() {
-        return elements;
+        return (elements, 0.0, 0.0);
     }
 
     // ---- Collect all state nodes ----
@@ -72,6 +86,56 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
             _ => None,
         })
         .collect();
+
+    // fork / join / composite 节点集合：用于决定节点种类（官方 mermaid 中这些节点
+    // 不显示普通文本标签，fork/join 只画形状，composite 渲染为带标题的嵌套容器）。
+    let fork_ids: HashSet<String> = diagram
+        .states
+        .iter()
+        .filter_map(|s| match s {
+            State::Fork { id } => Some(id.clone()),
+            _ => None,
+        })
+        .collect();
+    let join_ids: HashSet<String> = diagram
+        .states
+        .iter()
+        .filter_map(|s| match s {
+            State::Join { id } => Some(id.clone()),
+            _ => None,
+        })
+        .collect();
+    let composite_inner: HashMap<String, StateDiagram> = diagram
+        .states
+        .iter()
+        .filter_map(|s| match s {
+            State::Composite { id, inner } => Some((id.clone(), (**inner).clone())),
+            _ => None,
+        })
+        .collect();
+
+    // 预计算复合状态内部子图的包围盒尺寸（用于主布局中为其预留容器大小）。
+    let mut composite_bounds: HashMap<String, (f64, f64)> = HashMap::new();
+    for (id, inner) in &composite_inner {
+        let (_, iw, ih) = render_state_diagram(inner, config);
+        composite_bounds.insert(id.clone(), (iw, ih));
+    }
+
+    // 根据状态 id 选择布局节点种类。
+    let make_node = |id: &str, lbl: Option<String>| -> StateNode {
+        if fork_ids.contains(id) {
+            StateNode::Fork
+        } else if join_ids.contains(id) {
+            StateNode::Join
+        } else if composite_inner.contains_key(id) {
+            StateNode::Composite
+        } else {
+            StateNode::Normal {
+                description: None,
+                label: lbl,
+            }
+        }
+    };
 
     // Internal keys to distinguish start [*] from end [*]
     const START_KEY: &str = "__start__";
@@ -97,12 +161,7 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                 .or_insert(StateNode::Start);
         } else {
             let lbl = state_labels.get(&t.from).cloned();
-            state_map
-                .entry(t.from.clone())
-                .or_insert_with(|| StateNode::Normal {
-                    description: None,
-                    label: lbl,
-                });
+            state_map.entry(t.from.clone()).or_insert_with(|| make_node(&t.from, lbl));
         }
 
         if t.to == "[*]" {
@@ -111,12 +170,7 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                 .or_insert(StateNode::End);
         } else {
             let lbl = state_labels.get(&t.to).cloned();
-            state_map
-                .entry(t.to.clone())
-                .or_insert_with(|| StateNode::Normal {
-                    description: None,
-                    label: lbl,
-                });
+            state_map.entry(t.to.clone()).or_insert_with(|| make_node(&t.to, lbl));
         }
 
         // Build edge list using internal keys
@@ -150,6 +204,10 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
         let (label, desc) = match node {
             StateNode::Start => ("Start".to_string(), None),
             StateNode::End => ("End".to_string(), None),
+            StateNode::Fork => (String::new(), None),
+            // join 节点显示其 id 作为标签（官方 mermaid 行为）。
+            StateNode::Join => (id.clone(), None),
+            StateNode::Composite => (id.clone(), None),
             StateNode::Normal { label, description, .. } => {
                 (label.clone().unwrap_or_else(|| id.clone()), description.clone())
             }
@@ -209,6 +267,48 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                     },
                 );
             }
+            StateNode::Fork => {
+                // fork/join 节点的形状（粗横线）不需要文本，给一个与官方相近的尺寸。
+                let w = 40.0;
+                let h = 24.0;
+                node_layouts.insert(
+                    id.clone(),
+                    NodeLayout {
+                        width: w,
+                        height: h,
+                        label,
+                    },
+                );
+            }
+            StateNode::Join => {
+                let w = 40.0;
+                let h = 24.0;
+                node_layouts.insert(
+                    id.clone(),
+                    NodeLayout {
+                        width: w,
+                        height: h,
+                        label,
+                    },
+                );
+            }
+            StateNode::Composite => {
+                // 容器尺寸 = 内部子图包围盒 + 标题高度 + 内边距。
+                let (iw, ih) = composite_bounds
+                    .get(id)
+                    .copied()
+                    .unwrap_or((120.0, 80.0));
+                let w = iw + COMPOSITE_PAD * 2.0;
+                let h = ih + COMPOSITE_TITLE_H + COMPOSITE_PAD * 2.0;
+                node_layouts.insert(
+                    id.clone(),
+                    NodeLayout {
+                        width: w,
+                        height: h,
+                        label,
+                    },
+                );
+            }
             StateNode::Normal { .. } => {
                 let w = text_w.max(80.0) + STATE_PAD_X * 2.0;
                 let h = (text_h + desc_text_h).max(40.0) + STATE_PAD_Y * 2.0;
@@ -261,7 +361,7 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
         crossing_iterations: 10,
         ..Default::default()
     };
-    let sugiyama = SugiyamaLayout::new(config, &graph);
+    let sugiyama = SugiyamaLayout::new(config.clone(), &graph);
     let result = sugiyama.layout(&sugiyama_node_sizes);
 
     // Convert petgraph NodeIndex positions back to string-keyed positions
@@ -406,6 +506,115 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                     Z_SERIES,
                 ).with_class("node"));
             }
+            StateNode::Fork => {
+                // fork 节点：粗横线 + 向下小三角（官方 mermaid 表现）。
+                let w = nl.width / 2.0;
+                let y = pos.y;
+                elements.push(vir::line_node(
+                    Point::new(pos.x - w, y),
+                    Point::new(pos.x + w, y),
+                    vir::Stroke::new(theme::state::STROKE, 6.0),
+                    Z_SERIES,
+                ).with_class("node"));
+                let sz = 7.0;
+                elements.push(vir::line_node(
+                    Point::new(pos.x, y),
+                    Point::new(pos.x - sz * 0.5, y - sz),
+                    vir::Stroke::new(theme::state::STROKE, 2.0),
+                    Z_SERIES,
+                ));
+                elements.push(vir::line_node(
+                    Point::new(pos.x, y),
+                    Point::new(pos.x + sz * 0.5, y - sz),
+                    vir::Stroke::new(theme::state::STROKE, 2.0),
+                    Z_SERIES,
+                ));
+            }
+            StateNode::Join => {
+                // join 节点：粗横线（无三角箭头）+ 标签文本（官方 mermaid 会显示 id 标签）。
+                let w = nl.width / 2.0;
+                let y = pos.y;
+                elements.push(vir::line_node(
+                    Point::new(pos.x - w, y),
+                    Point::new(pos.x + w, y),
+                    vir::Stroke::new(theme::state::STROKE, 6.0),
+                    Z_SERIES,
+                ).with_class("node"));
+                if !nl.label.is_empty() {
+                    let ts = vir::text_style(
+                        theme::state::TEXT,
+                        FONT_SIZE,
+                        theme::FONT_FAMILY.to_string(),
+                        TextAlign::Center,
+                        TextBaseline::Middle,
+                    );
+                    let layout = layout_text(
+                        &[RichSpan::new(nl.label.to_string(), ts.clone())],
+                        None,
+                    );
+                    let (x_off, y_off) =
+                        compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
+                    elements.push(vir::text_node(
+                        nl.label.clone(),
+                        Point::new(pos.x + x_off, y + y_off + 18.0),
+                        ts.with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+                        0.0,
+                        None,
+                        Z_LABEL,
+                    ));
+                }
+            }
+            StateNode::Composite => {
+                // 复合状态：外层容器矩形 + 标题 + 递归放置内部子图。
+                let w = nl.width / 2.0;
+                let h = nl.height / 2.0;
+                let left = pos.x - w;
+                let top = pos.y - h;
+                elements.push(vir::rect_node(
+                    Rect::from_points(
+                        Point::new(left, top),
+                        Point::new(pos.x + w, pos.y + h),
+                    ),
+                    None,
+                    vir::fs_both(theme::state::FILL, theme::state::STROKE, 1.0),
+                    Z_SERIES,
+                ).with_class("node"));
+                // 标题
+                if !nl.label.is_empty() {
+                    let ts = vir::text_style(
+                        theme::state::TEXT,
+                        FONT_SIZE,
+                        theme::FONT_FAMILY.to_string(),
+                        TextAlign::Center,
+                        TextBaseline::Middle,
+                    );
+                    let layout = layout_text(
+                        &[RichSpan::new(nl.label.to_string(), ts.clone())],
+                        None,
+                    );
+                    let (x_off, y_off) =
+                        compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
+                    elements.push(vir::text_node(
+                        nl.label.clone(),
+                        Point::new(pos.x + x_off, top + COMPOSITE_TITLE_H / 2.0 + y_off),
+                        ts.with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+                        0.0,
+                        None,
+                        Z_LABEL,
+                    ));
+                }
+                // 递归渲染内部子图，并平移到容器内
+                if let Some(inner) = composite_inner.get(id) {
+                    let (inner_elems, _iw, _ih) = render_state_diagram(inner, &config);
+                    let dx = left + COMPOSITE_PAD;
+                    let dy = top + COMPOSITE_TITLE_H + COMPOSITE_PAD;
+                    elements.push(vir::group_node(
+                        inner_elems,
+                        Some(Transform::translate(dx, dy)),
+                        Z_INNER,
+                    ));
+                }
+            }
             StateNode::Normal { description, .. } => {
                 let w = nl.width / 2.0;
                 let h = nl.height / 2.0;
@@ -478,7 +687,31 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
         }
     }
 
-    elements
+    // 计算包围盒并把坐标归一化到 (0,0) 起，便于复合状态内部递归放置。
+    let (mut min_x, mut min_y) = (f64::INFINITY, f64::INFINITY);
+    let (mut max_x, mut max_y) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for (id, pos) in &positions {
+        if let Some(nl) = node_layouts.get(id) {
+            min_x = min_x.min(pos.x - nl.width / 2.0);
+            max_x = max_x.max(pos.x + nl.width / 2.0);
+            min_y = min_y.min(pos.y - nl.height / 2.0);
+            max_y = max_y.max(pos.y + nl.height / 2.0);
+        }
+    }
+    if !min_x.is_finite() {
+        min_x = 0.0;
+        min_y = 0.0;
+        max_x = 0.0;
+        max_y = 0.0;
+    }
+    let width = max_x - min_x;
+    let height = max_y - min_y;
+    let norm = if min_x != 0.0 || min_y != 0.0 {
+        vec![vir::group_node(elements, Some(Transform::translate(-min_x, -min_y)), 0)]
+    } else {
+        elements
+    };
+    (norm, width, height)
 }
 
 /// Simple topological sort using Kahn's algorithm

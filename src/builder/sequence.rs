@@ -13,8 +13,7 @@ use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 const BOX_HEIGHT: f64 = 40.0;
 const BOX_MIN_WIDTH: f64 = 80.0;
 const PAD_X: f64 = 16.0;
-const COL_GAP: f64 = 40.0;
-const LIFELINE_DASH: f64 = 6.0;
+const COL_GAP: f64 = 140.0; // 加宽列间距，让消息标签不压到 actor box（对齐官方视觉）
 const MESSAGE_SPACING: f64 = 50.0;
 const NOTE_HEIGHT_BR: f64 = 36.0;
 const NOTE_GAP: f64 = 14.0;
@@ -87,7 +86,12 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         let bw = col_widths[i];
         let display_name = p.alias.as_deref().unwrap_or(&p.name);
 
-        let rect = lievisual::geometry::Rect::new(cx - bw / 2.0, box_top, bw, box_bottom - box_top);
+        let rect = lievisual::geometry::Rect::new(
+            cx - bw / 2.0,
+            box_top,
+            cx + bw / 2.0,
+            box_bottom,
+        );
         elements.push(
             SceneNode::from(Element::RoundedRect {
                 rect,
@@ -102,17 +106,15 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             .with_class("actor"),
         );
 
-        let ts = vir::text_style(
+        // actor 名：先以 Left/Top 排版测量，再计算居中偏移（与 flowchart 一致）
+        let style = vir::text_style(
             theme::sequence::TEXT,
             FONT_SIZE,
             theme::FONT_FAMILY,
             TextAlign::Left,
             TextBaseline::Top,
         );
-        let layout = layout_text(
-            &[RichSpan::new(display_name.to_string(), ts)],
-            Some(bw - 8.0),
-        );
+        let layout = layout_text(&[RichSpan::new(display_name.to_string(), style)], Some(bw - 8.0));
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
         elements.push(vir::text_node(
             display_name.to_string(),
@@ -316,20 +318,19 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         }
     }
 
-    // ---- 生命线（虚线分段绘制） ----
-    let lifeline_bottom = cur_y;
+    // ---- 底部参与者盒子的位置（生命线终点对齐盒子中心） ----
+    let bottom_box_top = cur_y + 30.0;
+    let lifeline_bottom = bottom_box_top + BOX_HEIGHT / 2.0;
+
+    // ---- 生命线（官方 mermaid 使用单条虚线） ----
+    let lifeline_stroke = vir::dashed_stroke(theme::sequence::LIFELINE, 1.0, vec![6.0, 4.0]);
     for cx in &col_centers {
-        let mut y = box_bottom;
-        while y < lifeline_bottom {
-            let end = (y + LIFELINE_DASH).min(lifeline_bottom);
-            elements.push(vir::line_node(
-                Point::new(*cx, y),
-                Point::new(*cx, end),
-                vir::stroke(theme::sequence::LIFELINE, 1.0),
-                Z_AXIS,
-            ));
-            y += LIFELINE_DASH;
-        }
+        elements.push(vir::line_node(
+            Point::new(*cx, box_bottom),
+            Point::new(*cx, lifeline_bottom),
+            lifeline_stroke.clone(),
+            Z_AXIS,
+        ));
     }
 
     // ---- 激活条（activation bars） ----
@@ -356,8 +357,8 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                             let rect = lievisual::geometry::Rect::new(
                                 cx - ACTIVATION_W / 2.0,
                                 start,
-                                ACTIVATION_W,
-                                h,
+                                cx + ACTIVATION_W / 2.0,
+                                start + h,
                             );
                             elements.push(
                                 SceneNode::from(Element::RoundedRect {
@@ -383,8 +384,8 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                 let rect = lievisual::geometry::Rect::new(
                     cx - ACTIVATION_W / 2.0,
                     *start,
-                    ACTIVATION_W,
-                    h,
+                    cx + ACTIVATION_W / 2.0,
+                    *start + h,
                 );
                 elements.push(
                     SceneNode::from(Element::RoundedRect {
@@ -405,7 +406,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             + col_widths.last().unwrap() / 2.0
             + BLOCK_PAD
             + b.depth as f64 * BLOCK_INDENT;
-        let rect = lievisual::geometry::Rect::new(x0, b.y_top, x1 - x0, b.y_bottom - b.y_top);
+        let rect = lievisual::geometry::Rect::new(x0, b.y_top, x1, b.y_bottom);
         elements.push(
             SceneNode::from(Element::RoundedRect {
                 rect,
@@ -463,7 +464,16 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             ).with_class("message"));
         } else {
             let dir = if to_x > from_x { 1.0 } else { -1.0 };
-            let stroke = vir::stroke(theme::sequence::EDGE, 1.5);
+            let stroke = match r.arrow {
+                MessageArrow::Dashed
+                | MessageArrow::DashedTip
+                | MessageArrow::Cross => vir::dashed_stroke(
+                    theme::sequence::EDGE,
+                    1.5,
+                    vec![6.0, 3.0],
+                ),
+                _ => vir::stroke(theme::sequence::EDGE, 1.5),
+            };
 
             elements.push(vir::line_node(
                 Point::new(from_x, arrow_y),
@@ -475,19 +485,10 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             match r.arrow {
                 MessageArrow::Solid | MessageArrow::Dashed => {}
                 MessageArrow::SolidTip | MessageArrow::DashedTip => {
-                    let sz = 8.0;
-                    elements.push(vir::line_node(
-                        Point::new(to_x, arrow_y),
-                        Point::new(to_x - dir * sz, arrow_y - sz * 0.5),
-                        stroke.clone(),
-                        Z_AXIS,
-                    ));
-                    elements.push(vir::line_node(
-                        Point::new(to_x, arrow_y),
-                        Point::new(to_x - dir * sz, arrow_y + sz * 0.5),
-                        stroke,
-                        Z_AXIS,
-                    ));
+                    let tip = Point::new(to_x, arrow_y);
+                    // 箭头指向消息接收方（与行进方向一致）
+                    let head_dir = Point::new(dir, 0.0);
+                    vir::draw_arrow_head(&mut elements, &tip, &head_dir, &stroke);
                 }
                 MessageArrow::Cross => {
                     let sz = 5.0;
@@ -515,59 +516,30 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                     ));
                 }
                 MessageArrow::Both => {
-                    // 终点三角箭头
-                    let sz = 8.0;
-                    elements.push(vir::line_node(
-                        Point::new(to_x, arrow_y),
-                        Point::new(to_x - dir * sz, arrow_y - sz * 0.5),
-                        stroke.clone(),
-                        Z_AXIS,
-                    ));
-                    elements.push(vir::line_node(
-                        Point::new(to_x, arrow_y),
-                        Point::new(to_x - dir * sz, arrow_y + sz * 0.5),
-                        stroke.clone(),
-                        Z_AXIS,
-                    ));
-                    // 起点反向箭头
-                    elements.push(vir::line_node(
-                        Point::new(from_x, arrow_y),
-                        Point::new(from_x + dir * sz, arrow_y - sz * 0.5),
-                        stroke.clone(),
-                        Z_AXIS,
-                    ));
-                    elements.push(vir::line_node(
-                        Point::new(from_x, arrow_y),
-                        Point::new(from_x + dir * sz, arrow_y + sz * 0.5),
-                        stroke,
-                        Z_AXIS,
-                    ));
+                    let end_tip = Point::new(to_x, arrow_y);
+                    // 终点箭头指向接收方
+                    let end_dir = Point::new(dir, 0.0);
+                    vir::draw_arrow_head(&mut elements, &end_tip, &end_dir, &stroke);
+                    let start_tip = Point::new(from_x, arrow_y);
+                    // 起点箭头指向发送方
+                    let start_dir = Point::new(-dir, 0.0);
+                    vir::draw_arrow_head(&mut elements, &start_tip, &start_dir, &stroke);
                 }
             }
         }
 
-        // 消息文本
+        // 消息文本（居中显示在箭头上方，与官方 mermaid 一致）
         if !r.text.is_empty() {
             let mid_x = (from_x + to_x) / 2.0;
-            let ts = vir::text_style(
-                theme::sequence::TEXT,
-                FONT_SIZE,
-                theme::FONT_FAMILY,
-                TextAlign::Left,
-                TextBaseline::Top,
-            );
-            let layout = layout_text(&[RichSpan::new(r.text.clone(), ts.clone())], Some(200.0));
-            let (x_off, y_off) =
-                compute_text_offset(&layout, TextAlign::Center, TextBaseline::Bottom);
             elements.push(vir::text_node(
                 r.text.clone(),
-                Point::new(mid_x + x_off, arrow_y - 4.0 + y_off),
+                Point::new(mid_x, arrow_y - 6.0),
                 vir::text_style(
                     theme::sequence::TEXT,
                     FONT_SIZE,
                     theme::FONT_FAMILY,
-                    TextAlign::Left,
-                    TextBaseline::Top,
+                    TextAlign::Center,
+                    TextBaseline::Bottom,
                 ),
                 0.0,
                 Some(200.0),
@@ -615,7 +587,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             }
         };
 
-        let note_rect = lievisual::geometry::Rect::new(nx, note_y, nw, NOTE_HEIGHT_BR);
+        let note_rect = lievisual::geometry::Rect::new(nx, note_y, nx + nw, note_y + NOTE_HEIGHT_BR);
         elements.push(
             SceneNode::from(Element::RoundedRect {
                 rect: note_rect,
@@ -653,6 +625,59 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             ),
             0.0,
             Some(nw - 10.0),
+            Z_LABEL,
+        ));
+    }
+
+    // ---- 底部参与者盒子（官方 mermaid 在生命线末端也绘制一个相同的 actor box） ----
+    for (i, p) in seq.participants.iter().enumerate() {
+        let cx = col_centers[i];
+        let bw = col_widths[i];
+        let display_name = p.alias.as_deref().unwrap_or(&p.name);
+
+        let rect = lievisual::geometry::Rect::new(
+            cx - bw / 2.0,
+            bottom_box_top,
+            cx + bw / 2.0,
+            bottom_box_top + BOX_HEIGHT,
+        );
+        elements.push(
+            SceneNode::from(Element::RoundedRect {
+                rect,
+                radius: theme::NODE_RADIUS,
+                style: vir::fs_both(
+                    theme::sequence::ACTOR_FILL,
+                    theme::sequence::ACTOR_STROKE,
+                    2.0,
+                ),
+            })
+            .with_z(Z_SERIES)
+            .with_class("actor"),
+        );
+
+        // actor 名：先以 Left/Top 排版测量，再计算居中偏移（与 flowchart 一致）
+        let style = vir::text_style(
+            theme::sequence::TEXT,
+            FONT_SIZE,
+            theme::FONT_FAMILY,
+            TextAlign::Left,
+            TextBaseline::Top,
+        );
+        let layout =
+            layout_text(&[RichSpan::new(display_name.to_string(), style)], Some(bw - 8.0));
+        let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
+        elements.push(vir::text_node(
+            display_name.to_string(),
+            Point::new(cx + x_off, bottom_box_top + BOX_HEIGHT / 2.0 + y_off),
+            vir::text_style(
+                theme::sequence::TEXT,
+                FONT_SIZE,
+                theme::FONT_FAMILY,
+                TextAlign::Center,
+                TextBaseline::Middle,
+            ),
+            0.0,
+            Some(bw - 8.0),
             Z_LABEL,
         ));
     }

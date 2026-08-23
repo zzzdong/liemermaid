@@ -6,7 +6,7 @@
 //!
 //! # 用法
 //! ```
-//! use liemermaid::parser2::WinnowParser;
+//! use liemermaid::parser::WinnowParser;
 //!
 //! let diagram = WinnowParser::parse_mermaid(
 //!     "flowchart TD\nA[Start]\nB{Decision}\nC[End]\nA --> B\nB --> C",
