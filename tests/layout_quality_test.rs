@@ -134,7 +134,10 @@ fn parse_svg(svg: &str) -> (Vec<Rect>, Vec<(f64, f64, f64, f64)>) {
     let canvas = parse_canvas_size(svg);
 
     for line in svg.lines() {
+        // 排除边标签白底框（class="edge-label"）：它是边的一部分，
+        // 边从其上穿过是正常行为，不应判为"边穿过节点"。
         if line.contains("<rect ")
+            && !line.contains("edge-label")
             && let (Some(x), Some(y), Some(w), Some(h)) = (
                 parse_attr(line, " x=\""),
                 parse_attr(line, " y=\""),

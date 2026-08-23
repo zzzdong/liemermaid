@@ -8,6 +8,72 @@ use winnow::{
     token::{one_of, take_until, take_while},
 };
 
+use crate::ast::{Direction, ParticipantKind};
+
+/// 大小写不敏感地匹配给定关键字（仅 ASCII 字母），匹配后消耗输入。
+///
+/// 例如 `keyword("sequenceDiagram")` 能匹配 `sequenceDiagram` / `SequenceDiagram`
+/// / `SEQUENCEDIAGRAM`。
+pub fn keyword<'i>(
+    kw: &'static str,
+) -> impl Parser<&'i str, &'i str, InputError<&'i str>> {
+    move |input: &mut &'i str| {
+        let lower = kw.to_ascii_lowercase();
+        // 使用 `get` 安全切片：当 input 以多字节字符（如 BOM/中文）开头时，
+        // 直接返回 None 而非 panic（字节边界不安全）。
+        if let Some(candidate) = input.get(..lower.len()) {
+            if candidate.to_ascii_lowercase() == lower {
+                // 关键字后必须是空白、行尾或常见分隔符，避免误吞前缀
+                let after = input[lower.len()..].chars().next();
+                if after.map_or(true, |c| {
+                    c.is_whitespace() || c == ':' || c == '\n' || c == '\r' || c == '{'
+                }) {
+                    let matched = &input[..lower.len()];
+                    *input = &input[lower.len()..];
+                    return Ok(matched);
+                }
+            }
+        }
+        Err(InputError::at(*input))
+    }
+}
+
+/// 解析方向关键字（大小写不敏感），返回 [`Direction`]。
+pub fn direction_ci<'i>(input: &mut &'i str) -> PResult<'i, Direction> {
+    alt((
+        keyword("TB").map(|_| Direction::TB),
+        keyword("TD").map(|_| Direction::TD),
+        keyword("BT").map(|_| Direction::BT),
+        keyword("RL").map(|_| Direction::RL),
+        keyword("LR").map(|_| Direction::LR),
+    ))
+    .parse_next(input)
+}
+
+/// 解析 sequence 图的参与者种类（大小写不敏感）。
+pub fn participant_kind<'i>(input: &mut &'i str) -> PResult<'i, ParticipantKind> {
+    use ParticipantKind::*;
+    alt((
+        keyword("actor").map(|_| Actor),
+        keyword("boundary").map(|_| Boundary),
+        keyword("control").map(|_| Control),
+        keyword("entity").map(|_| Entity),
+        keyword("database").map(|_| Database),
+        keyword("collections").map(|_| Collections),
+        keyword("queue").map(|_| Queue),
+    ))
+    .parse_next(input)
+}
+
+/// 解析直到行尾的文本（用于备注、标题等自由文本字段）。
+///
+/// 不含结尾的换行符；行内 `%%` 注释不会在此被截断（调用方按需处理）。
+pub fn rest_of_line<'i>(input: &mut &'i str) -> PResult<'i, String> {
+    take_while(1.., |c: char| c != '\n' && c != '\r')
+        .map(|s: &str| s.trim().to_string())
+        .parse_next(input)
+}
+
 /// 解析结果类型别名
 pub type PResult<'i, O> = Result<O, InputError<&'i str>>;
 
@@ -15,6 +81,11 @@ pub type PResult<'i, O> = Result<O, InputError<&'i str>>;
 
 pub fn ws<'i>(input: &mut &'i str) -> PResult<'i, &'i str> {
     multispace0.parse_next(input)
+}
+
+/// 仅跳过行内空白（空格/Tab），不跨行，用于解析同类声明时避免吞掉换行。
+pub fn inline_ws<'i>(input: &mut &'i str) -> PResult<'i, &'i str> {
+    take_while(0.., |c: char| c == ' ' || c == '\t').parse_next(input)
 }
 
 pub fn ws1<'i>(input: &mut &'i str) -> PResult<'i, &'i str> {
@@ -57,6 +128,30 @@ pub fn skip_ws_and_comments<'i>(input: &mut &'i str) -> PResult<'i, ()> {
 /// 是否还有剩余输入（未到达 EOF）
 pub fn has_input<'i>(input: &mut &'i str) -> bool {
     !input.is_empty()
+}
+
+/// 跳过当前行剩余内容（直到换行或 EOF），用于丢弃无法识别的语句行。
+///
+/// 使用 `take_while(0..,...)` 以保证在空输入/纯空白时不报错；若未产生任何
+/// 进展（输入未前进）则强制消费一个字符，防止主解析循环死锁。
+pub fn skip_line<'i>(input: &mut &'i str) -> PResult<'i, ()> {
+    let before = input.len();
+    let _ = take_while(0.., |c: char| c != '\n' && c != '\r').parse_next(input)?;
+    let _ = opt(("\r\n", "\n")).parse_next(input)?;
+    if input.len() == before {
+        // 无法前进，消耗一个字符避免死循环
+        let _ = take_while(1.., |_c: char| true).parse_next(input)?;
+    }
+    Ok(())
+}
+
+/// 消费当前行剩余内容（直到换行或 EOF），用于语句行解析后的清理。
+///
+/// 使用 `take_while(0..,...)`，因此在文件末尾（EOF）不会因无更多字符而失败。
+pub fn consume_line<'i>(input: &mut &'i str) -> PResult<'i, ()> {
+    let _ = take_while(0.., |c: char| c != '\n' && c != '\r').parse_next(input)?;
+    let _ = opt(alt(("\r\n", "\n"))).parse_next(input)?;
+    Ok(())
 }
 
 /// 前瞻 `end` 关键字（不消耗）

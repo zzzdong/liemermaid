@@ -21,16 +21,22 @@
     { "type": "flowchart", "name": "edge_labels", "rankdir": "LR", "width": 900, "height": 600, "source": "flowchart__edge_labels.mmd" },
     { "type": "flowchart", "name": "self_loop", "rankdir": "TB", "width": 700, "height": 600, "source": "flowchart__self_loop.mmd" },
     { "type": "flowchart", "name": "diamond_3way", "rankdir": "TB", "width": 900, "height": 700, "source": "flowchart__diamond_3way.mmd" },
-    { "type": "flowchart", "name": "long_edge", "rankdir": "TB", "width": 800, "height": 600, "source": "flowchart__long_edge.mmd", "liemermaid": false },
-    { "type": "flowchart", "name": "dense", "rankdir": "TB", "width": 900, "height": 800, "source": "flowchart__dense.mmd", "liemermaid": false },
-    { "type": "flowchart", "name": "cycle2", "rankdir": "TB", "width": 800, "height": 600, "source": "flowchart__cycle2.mmd", "liemermaid": false },
+    { "type": "flowchart", "name": "long_edge", "rankdir": "TB", "width": 800, "height": 600, "source": "flowchart__long_edge.mmd", "liemermaid": true },
+    { "type": "flowchart", "name": "dense", "rankdir": "TB", "width": 900, "height": 800, "source": "flowchart__dense.mmd", "liemermaid": true },
+    { "type": "flowchart", "name": "cycle2", "rankdir": "TB", "width": 800, "height": 600, "source": "flowchart__cycle2.mmd", "liemermaid": true },
     { "type": "flowchart", "name": "subgraph", "rankdir": "TB", "width": 900, "height": 700, "source": "flowchart__subgraph.mmd", "compare": false },
-    { "type": "flowchart", "name": "shapes", "rankdir": "TD", "width": 900, "height": 800, "source": "flowchart__shapes.mmd", "compare": false },
+    { "type": "flowchart", "name": "shapes", "rankdir": "TD", "width": 900, "height": 800, "source": "flowchart__shapes.mmd" },
+
+    { "type": "flowchart", "name": "lc1", "rankdir": "TB", "width": 900, "height": 700, "source": "flowchart__lc1.mmd" },
+    { "type": "flowchart", "name": "lc2", "rankdir": "TB", "width": 900, "height": 700, "source": "flowchart__lc2.mmd" },
+    { "type": "flowchart", "name": "lc3", "rankdir": "TB", "width": 900, "height": 700, "source": "flowchart__lc3.mmd" },
+    { "type": "flowchart", "name": "lc4", "rankdir": "TB", "width": 900, "height": 700, "source": "flowchart__lc4.mmd" },
+    { "type": "flowchart", "name": "lc5", "rankdir": "TB", "width": 900, "height": 700, "source": "flowchart__lc5.mmd" },
 
     { "type": "sequence", "name": "basic", "width": 700, "height": 500, "source": "sequence__basic.mmd" },
     { "type": "sequence", "name": "activation", "width": 700, "height": 500, "source": "sequence__activation.mmd" },
     { "type": "sequence", "name": "three_party", "width": 800, "height": 500, "source": "sequence__three_party.mmd" },
-    { "type": "sequence", "name": "notes", "width": 700, "height": 500, "source": "sequence__notes.mmd", "liemermaid": false },
+    { "type": "sequence", "name": "notes", "width": 700, "height": 500, "source": "sequence__notes.mmd", "liemermaid": true },
     { "type": "sequence", "name": "loops", "width": 700, "height": 500, "source": "sequence__loops.mmd" },
 
     { "type": "class", "name": "basic", "width": 800, "height": 500, "source": "class__basic.mmd" },
@@ -40,12 +46,12 @@
 
     { "type": "state", "name": "basic", "width": 700, "height": 500, "source": "state__basic.mmd" },
     { "type": "state", "name": "with_labels", "width": 700, "height": 500, "source": "state__with_labels.mmd" },
-    { "type": "state", "name": "composite", "width": 700, "height": 500, "source": "state__composite.mmd", "liemermaid": false },
-    { "type": "state", "name": "fork_join", "width": 700, "height": 500, "source": "state__fork_join.mmd", "liemermaid": false },
+    { "type": "state", "name": "composite", "width": 700, "height": 500, "source": "state__composite.mmd", "liemermaid": true },
+    { "type": "state", "name": "fork_join", "width": 700, "height": 500, "source": "state__fork_join.mmd", "liemermaid": true },
 
     { "type": "er", "name": "basic", "width": 900, "height": 400, "source": "er__basic.mmd" },
     { "type": "er", "name": "cardinality", "width": 1000, "height": 500, "source": "er__cardinality.mmd" },
-    { "type": "er", "name": "attributes", "width": 900, "height": 400, "source": "er__attributes.mmd", "liemermaid": false },
+    { "type": "er", "name": "attributes", "width": 900, "height": 400, "source": "er__attributes.mmd", "liemermaid": true },
 
     { "type": "pie", "name": "basic", "width": 600, "height": 500, "source": "pie__basic.mmd" },
     { "type": "pie", "name": "showdata", "width": 600, "height": 500, "source": "pie__showdata.mmd" },
@@ -54,7 +60,7 @@
     { "type": "timeline", "name": "basic", "width": 900, "height": 400, "source": "timeline__basic.mmd" },
     { "type": "timeline", "name": "multi_event", "width": 900, "height": 400, "source": "timeline__multi_event.mmd" },
 
-    { "type": "gitgraph", "name": "basic", "width": 900, "height": 500, "source": "gitgraph__basic.mmd", "liemermaid": false },
-    { "type": "gitgraph", "name": "attributes", "width": 900, "height": 500, "source": "gitgraph__attributes.mmd", "liemermaid": false }
+    { "type": "gitgraph", "name": "basic", "width": 900, "height": 500, "source": "gitgraph__basic.mmd", "liemermaid": true },
+    { "type": "gitgraph", "name": "attributes", "width": 900, "height": 500, "source": "gitgraph__attributes.mmd", "liemermaid": true }
   ]
 }

@@ -58,6 +58,10 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
 
     let mut layouts: HashMap<String, ClassLayout> = HashMap::new();
     for cls in &diagram.classes {
+        let display_name = match &cls.generic {
+            Some(g) => format!("{}<{}>", cls.name, g),
+            None => cls.name.clone(),
+        };
         let ts = TextStyle::new(
             theme::class::TEXT,
             FONT_SIZE,
@@ -65,23 +69,30 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
         )
         .with_align(TextAlign::Left)
         .with_baseline(TextBaseline::Top);
-        let name_layout = layout_text(&[RichSpan::new(cls.name.to_string(), ts.clone())], None);
+        let name_layout = layout_text(
+            &[RichSpan::new(display_name.clone(), ts.clone())],
+            None,
+        );
         let name_w = name_layout.width + CLASS_PAD * 2.0;
 
         let mut attr_lines = Vec::new();
         let mut method_lines = Vec::new();
         for m in &cls.members {
             let prefix = match m.visibility {
-                Some(Visibility::Public) => "+ ",
-                Some(Visibility::Private) => "- ",
-                Some(Visibility::Protected) => "# ",
-                Some(Visibility::Package) => "~ ",
+                Some(Visibility::Public) => "+",
+                Some(Visibility::Private) => "-",
+                Some(Visibility::Protected) => "#",
+                Some(Visibility::Package) => "~",
                 None => "",
             };
             let line = if m.is_method {
-                format!("{}{}()", prefix, m.name)
+                if let Some(ret) = &m.type_ {
+                    format!("{}{}() : {}", prefix, m.name, ret)
+                } else {
+                    format!("{}{}()", prefix, m.name)
+                }
             } else if let Some(t) = &m.type_ {
-                format!("{}{}: {}", prefix, m.name, t)
+                format!("{}{} {}", prefix, t, m.name)
             } else {
                 format!("{}{}", prefix, m.name)
             };
@@ -125,7 +136,7 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
         layouts.insert(
             cls.name.clone(),
             ClassLayout {
-                name: cls.name.clone(),
+                name: display_name.clone(),
                 width: max_w.max(CLASS_MIN_W),
                 height,
                 header_h,
@@ -322,7 +333,7 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
                     if is_dashed {
                         draw_dashed_line(&mut elements, seg_start, seg_end, &stroke);
                     } else {
-                        elements.push(vir::line_node(*seg_start, *seg_end, stroke.clone(), Z_AXIS));
+                        elements.push(vir::line_node(*seg_start, *seg_end, stroke.clone(), Z_AXIS).with_class("edge"));
                     }
                 }
 
@@ -360,7 +371,7 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
                 if is_dashed {
                     draw_dashed_line(&mut elements, &start, &end, &stroke);
                 } else {
-                    elements.push(vir::line_node(start, end, stroke.clone(), Z_AXIS));
+                    elements.push(vir::line_node(start, end, stroke.clone(), Z_AXIS).with_class("edge"));
                 }
 
                 let dir = Point::new(end.x - start.x, end.y - start.y);
@@ -385,6 +396,104 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
                     }
                 }
             }
+
+            // 关系标签（边中点上方）
+            if let Some(lbl) = &rel.label {
+                if !lbl.is_empty() {
+                    let mid = Point::new((start.x + end.x) / 2.0, (start.y + end.y) / 2.0 - 6.0);
+                    let tl = layout_text(
+                        &[RichSpan::new(
+                            lbl.clone(),
+                            TextStyle::new(
+                                theme::class::EDGE,
+                                SMALL_FONT,
+                                theme::FONT_FAMILY.to_string(),
+                            )
+                            .with_align(TextAlign::Center)
+                            .with_baseline(TextBaseline::Middle),
+                        )],
+                        None,
+                    );
+                    let (ox, oy) = compute_text_offset(&tl, TextAlign::Center, TextBaseline::Middle);
+                    elements.push(vir::text_node(
+                        lbl.clone(),
+                        Point::new(mid.x + ox, mid.y + oy),
+                        vir::text_style(
+                            theme::class::EDGE,
+                            SMALL_FONT,
+                            theme::FONT_FAMILY,
+                            TextAlign::Left,
+                            TextBaseline::Top,
+                        ),
+                        0.0,
+                        None,
+                        Z_LABEL,
+                    ));
+                }
+            }
+            // 基数（端点附近）
+            if let Some(cf) = &rel.cardinality_first {
+                let p = Point::new(start.x + 3.0, start.y - 2.0);
+                let tl = layout_text(
+                    &[RichSpan::new(
+                        cf.clone(),
+                        TextStyle::new(
+                            theme::class::EDGE,
+                            SMALL_FONT,
+                            theme::FONT_FAMILY.to_string(),
+                        )
+                        .with_align(TextAlign::Left)
+                        .with_baseline(TextBaseline::Middle),
+                    )],
+                    None,
+                );
+                let (ox, oy) = compute_text_offset(&tl, TextAlign::Left, TextBaseline::Middle);
+                elements.push(vir::text_node(
+                    cf.clone(),
+                    Point::new(p.x + ox, p.y + oy),
+                    vir::text_style(
+                        theme::class::EDGE,
+                        SMALL_FONT,
+                        theme::FONT_FAMILY,
+                        TextAlign::Left,
+                        TextBaseline::Top,
+                    ),
+                    0.0,
+                    None,
+                    Z_LABEL,
+                ));
+            }
+            if let Some(cs) = &rel.cardinality_second {
+                let p = Point::new(end.x - 3.0, end.y - 2.0);
+                let tl = layout_text(
+                    &[RichSpan::new(
+                        cs.clone(),
+                        TextStyle::new(
+                            theme::class::EDGE,
+                            SMALL_FONT,
+                            theme::FONT_FAMILY.to_string(),
+                        )
+                        .with_align(TextAlign::Right)
+                        .with_baseline(TextBaseline::Middle),
+                    )],
+                    None,
+                );
+                let (ox, oy) = compute_text_offset(&tl, TextAlign::Right, TextBaseline::Middle);
+                elements.push(vir::text_node(
+                    cs.clone(),
+                    Point::new(p.x + ox, p.y + oy),
+                    vir::text_style(
+                        theme::class::EDGE,
+                        SMALL_FONT,
+                        theme::FONT_FAMILY,
+                        TextAlign::Left,
+                        TextBaseline::Top,
+                    ),
+                    0.0,
+                    None,
+                    Z_LABEL,
+                ));
+            }
         }
     }
 
@@ -392,6 +501,11 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
     for name in &class_names {
         let layout = &layouts[name];
         let rect = class_rects[name];
+        let ann = diagram
+            .classes
+            .iter()
+            .find(|c| &c.name == name)
+            .and_then(|c| c.annotation.clone());
 
         // Background
         elements.push(vir::rect_node(
@@ -399,7 +513,7 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
             None,
             vir::fs_both(theme::class::FILL, theme::class::STROKE, 2.0),
             Z_SERIES,
-        ));
+        ).with_class("node"));
 
         // Header background
         let header_rect = Rect::new(
@@ -415,7 +529,46 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
             Z_SERIES,
         ));
 
+        // 注解（如 «Interface»）显示在 header 顶部
+        if let Some(ann) = &ann {
+            let ann_text = format!("«{}»", ann);
+            let ts = TextStyle::new(
+                theme::class::TEXT,
+                SMALL_FONT,
+                theme::FONT_FAMILY.to_string(),
+            )
+            .with_align(TextAlign::Center)
+            .with_baseline(TextBaseline::Middle);
+            let al = layout_text(
+                &[RichSpan::new(ann_text.clone(), ts)],
+                Some(layout.width - 8.0),
+            );
+            let (aox, aoy) = compute_text_offset(&al, TextAlign::Center, TextBaseline::Middle);
+            elements.push(vir::text_node(
+                ann_text,
+                Point::new(
+                    rect.min_x() + layout.width / 2.0 + aox,
+                    rect.min_y() + 9.0 + aoy,
+                ),
+                vir::text_style(
+                    theme::class::TEXT,
+                    SMALL_FONT,
+                    theme::FONT_FAMILY,
+                    TextAlign::Left,
+                    TextBaseline::Top,
+                ),
+                0.0,
+                Some(layout.width - 8.0),
+                Z_LABEL,
+            ));
+        }
+
         // Class name text (bold via slightly bigger size)
+        let name_y = if ann.is_some() {
+            rect.min_y() + layout.header_h / 2.0 + 7.0
+        } else {
+            rect.min_y() + layout.header_h / 2.0
+        };
         let ts = TextStyle::new(
             theme::class::TEXT,
             FONT_SIZE,
@@ -431,10 +584,7 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
             compute_text_offset(&name_layout, TextAlign::Center, TextBaseline::Middle);
         elements.push(vir::text_node(
             layout.name.clone(),
-            Point::new(
-                rect.min_x() + layout.width / 2.0 + x_off,
-                rect.min_y() + layout.header_h / 2.0 + y_off,
-            ),
+            Point::new(rect.min_x() + layout.width / 2.0 + x_off, name_y + y_off),
             vir::text_style(
                 theme::class::TEXT,
                 FONT_SIZE,
@@ -562,6 +712,7 @@ fn draw_triangle_head(
             path,
             style: vir::fs_both(fill.unwrap(), style.color, style.width),
             closed: true,
+            marker_end: None,
         })
         .with_z(Z_AXIS),
     );
@@ -599,6 +750,7 @@ fn draw_diamond_head(
             path,
             style: vir::fs_both(fill.unwrap(), style.color, style.width),
             closed: true,
+            marker_end: None,
         })
         .with_z(Z_AXIS),
     );

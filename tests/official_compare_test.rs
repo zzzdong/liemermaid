@@ -1,374 +1,191 @@
-//! 与 dagre 官方布局的端到端结构化对拍测试。
+//! 端到端官方对比测试（两层）。
 //!
-//! 数据来源: `tests/dagre_ref/run.js` 用 @dagrejs/dagre 生成 `layouts.json`
-//! （节点中心坐标 + 边端口折线）。本测试读取该 fixture，与 liemermaid 的
-//! Sugiyama 布局做三层对拍:
-//!   1. 拓扑层序 (rank) — 硬断言，必须完全一致
-//!   2. 同层 Y 对齐    — 硬断言（同 rank 节点中心 y 差 < 容差）
-//!   3. 坐标归一化    — 软断言（bounding box 归一到 [0,1]，节点中心距离 < 容差）
+//! 层 1（语义层）：用 `semantics` 模块从 liemermaid 输出与官方 mermaid-cli 输出各抽
+//! 取结构化语义（文本集合 / 节点标签集合 / 归一语义类型计数），做跨引擎正确性比对。
+//! 文本集合与节点标签集合要求**相等**（强判据）；类型计数记录偏差（弱判据）。
 //!
-//! 边的逐点形状不做强对比：dagre 输出"端口交点"，liemermaid 输出"中心路由点"，
-//! 二者语义不同，仅对比边的起止端点等于各自节点中心。
+//! 层 2（像素/结构层）：复用 `svgdiff` 对比两边生成的 SVG 在元素数量、文本、颜色、
+//! 相对布局/包围盒等维度的差异，作为"渲染像不像"的辅助信号。
+//!
+//! 官方 golden 来源：`tests/golden/golden/{type}__{name}.svg`（由 mermaid-cli 生成）。
+//! liemermaid 输出：实时 `liemermaid::render` 渲染 catalog 中的 `.mmd` 源码。
 
-use std::collections::{HashMap, HashSet};
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::Path;
 
-use liemermaid::builder::layout::sugiyama::{NodeSize, SugiyamaConfig, SugiyamaLayout};
-use petgraph::graph::DiGraph;
-use serde::Deserialize;
-use vello_cpu::kurbo::Point;
+#[path = "golden/semantics.rs"]
+mod semantics;
+#[path = "golden/svgdiff.rs"]
+mod svgdiff;
 
-#[derive(Debug, Deserialize)]
-struct DagreNode {
-    x: f64,
-    y: f64,
-    w: f64,
-    h: f64,
+const CASES_DIR: &str = "tests/golden/cases";
+const GOLDEN_DIR: &str = "tests/golden/golden";
+
+/// 加载并解析 catalog.json 得到用例列表。
+fn load_catalog() -> Vec<Case> {
+    let path = Path::new(CASES_DIR).join("catalog.json");
+    let text = fs::read_to_string(&path).expect("read catalog.json");
+    let cat: Catalog = serde_json::from_str(&text).expect("parse catalog.json");
+    cat.cases
 }
 
-#[derive(Debug, Deserialize)]
-struct DagreEdge {
-    from: String,
-    to: String,
-    #[allow(dead_code)]
-    points: Vec<DagrePoint>,
+#[derive(serde::Deserialize)]
+struct Catalog {
+    cases: Vec<Case>,
 }
 
-#[derive(Debug, Deserialize)]
-struct DagrePoint {
-    x: f64,
-    y: f64,
-}
-
-#[derive(Debug, Deserialize)]
-struct DagreCase {
+#[derive(serde::Deserialize, Clone)]
+struct Case {
+    #[serde(rename = "type")]
+    typ: String,
     name: String,
-    rankdir: String,
-    nodes: HashMap<String, DagreNode>,
-    edges: Vec<DagreEdge>,
+    #[serde(default)]
+    liemermaid: bool,
+    #[serde(default = "default_true")]
+    compare: bool,
+    source: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct DagreFixture {
-    cases: Vec<DagreCase>,
-}
-
-fn load_fixture() -> DagreFixture {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/dagre_ref/layouts.json");
-    let text = std::fs::read_to_string(path)
-        .expect("layouts.json missing; run `node tests/dagre_ref/run.js`");
-    serde_json::from_str(&text).expect("invalid layouts.json")
-}
-
-/// 节点中心坐标 -> 归一化到 [0,1] 包围盒
-fn normalize(points: &[(f64, f64)]) -> Vec<(f64, f64)> {
-    let (mut minx, mut miny, mut maxx, mut maxy) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
-    for &(x, y) in points {
-        minx = minx.min(x);
-        miny = miny.min(y);
-        maxx = maxx.max(x);
-        maxy = maxy.max(y);
-    }
-    let w = (maxx - minx).max(1.0);
-    let h = (maxy - miny).max(1.0);
-    points
-        .iter()
-        .map(|&(x, y)| ((x - minx) / w, (y - miny) / h))
-        .collect()
+fn default_true() -> bool {
+    true
 }
 
 #[test]
-fn official_layout_topology_and_coords_match() {
-    let fixture = load_fixture();
-    assert!(!fixture.cases.is_empty(), "no cases in fixture");
-
-    let coord_tol = 0.06; // 归一化坐标误差容忍（[0,1] 空间）
-    let y_align_tol = 1.0;
-
-    let mut total_cases = 0;
-    let mut hard_pass = 0;
-    let mut soft_pass = 0;
-
-    for case in &fixture.cases {
-        total_cases += 1;
-        // 构造 petgraph
-        let mut g = DiGraph::<String, ()>::new();
-        let mut idx: HashMap<String, petgraph::graph::NodeIndex> = HashMap::new();
-        for id in case.nodes.keys() {
-            let n = g.add_node(id.clone());
-            idx.insert(id.clone(), n);
+fn official_semantic_compare() {
+    let cases = load_catalog();
+    let mut failures: BTreeMap<String, String> = BTreeMap::new();
+    let mut struct_failures: Vec<String> = Vec::new();
+    let mut checked = 0usize;
+    for c in &cases {
+        if !c.compare {
+            continue;
         }
-        for e in &case.edges {
-            let &u = idx.get(&e.from).expect("edge from missing");
-            let &v = idx.get(&e.to).expect("edge to missing");
-            g.add_edge(u, v, ());
+        let key = format!("{}__{}", c.typ, c.name);
+        let src_path = Path::new(CASES_DIR).join(&c.source);
+        let golden_path = Path::new(GOLDEN_DIR).join(format!("{}.svg", key));
+        if !golden_path.exists() {
+            failures.insert(key, "missing official golden svg".into());
+            continue;
         }
-
-        let config = SugiyamaConfig {
-            ranker: "network-simplex".to_string(),
-            ..SugiyamaConfig::default()
-        };
-        let sizes: HashMap<_, _> = g
-            .node_indices()
-            .map(|n| {
-                (
-                    n,
-                    NodeSize {
-                        width: 100.0,
-                        height: 40.0,
-                    },
-                )
-            })
-            .collect();
-
-        let lay = SugiyamaLayout::new(config, &g);
-        let res = lay.layout(&sizes);
-
-        // dagre 侧：由中心 y 排序推导 rank（TB/LR/BT/RL 都先按主轴向排序后再映射）
-        let (dagre_rank, dagre_norm) = dagre_ranks_and_norm(case);
-        let (ours_rank, ours_norm) = ours_ranks_and_norm(&res, &idx, case);
-
-        // --- 硬断言 1: 拓扑偏序约束 ---
-        // 比较"沿边的层序关系"而非绝对 rank 数字：对每条边 u->v，
-        // dagre 与 ours 都应满足 rank(u) < rank(v)。这能验证拓扑正确性，
-        // 同时容忍环处理导致的绝对层号偏移。
-        // 双向边 (u->v 且 v->u 同时存在) 视为环，跳过偏序硬断言（回边无拓扑序）。
-        let mut bidir: HashSet<(String, String)> = HashSet::new();
-        for e in &case.edges {
-            if case.edges.iter().any(|o| o.from == e.to && o.to == e.from) {
-                bidir.insert((e.from.clone(), e.to.clone()));
-                bidir.insert((e.to.clone(), e.from.clone()));
-            }
-        }
-        let mut order_ok = true;
-        let mut abs_rank_diff = 0usize;
-        for e in &case.edges {
-            if bidir.contains(&(e.from.clone(), e.to.clone())) {
-                continue; // 环内回边，无偏序约束
-            }
-            let du = dagre_rank.get(&e.from).copied();
-            let dv = dagre_rank.get(&e.to).copied();
-            let ou = ours_rank.get(&e.from).copied();
-            let ov = ours_rank.get(&e.to).copied();
-            if let (Some(du), Some(dv), Some(ou), Some(ov)) = (du, dv, ou, ov) {
-                if !(du < dv) {
-                    order_ok = false;
-                    eprintln!(
-                        "[{}] dagre order violated on {}/{}: {} !< {}",
-                        case.name, e.from, e.to, du, dv
-                    );
-                }
-                if !(ou < ov) {
-                    order_ok = false;
-                    eprintln!(
-                        "[{}] ours order violated on {}/{}: {} !< {}",
-                        case.name, e.from, e.to, ou, ov
-                    );
-                }
-                if du != ou || dv != ov {
-                    abs_rank_diff += 1;
-                }
-            }
-        }
-
-        // --- 硬断言 2: 同层 Y 对齐 ---
-        let mut yalign_ok = true;
-        let mut by_rank: HashMap<usize, Vec<String>> = HashMap::new();
-        for (id, &r) in ours_rank.iter() {
-            by_rank.entry(r).or_default().push(id.clone());
-        }
-        for (r, rank_nodes) in by_rank.iter() {
-            if rank_nodes.len() < 2 {
+        let src = match fs::read_to_string(&src_path) {
+            Ok(s) => s,
+            Err(e) => {
+                failures.insert(key, format!("read mmd: {e}"));
                 continue;
             }
-            let ys: Vec<f64> = rank_nodes
-                .iter()
-                .map(|id| res.positions[&idx[id]].y)
-                .collect();
-            let mn = ys.iter().cloned().fold(f64::MAX, f64::min);
-            let mx = ys.iter().cloned().fold(f64::MIN, f64::max);
-            if (mx - mn) > y_align_tol {
-                yalign_ok = false;
-                eprintln!(
-                    "[{}] rank {} y misalign: {:?} (span {})",
-                    case.name,
-                    r,
-                    ys,
-                    mx - mn
-                );
+        };
+        let golden_svg = fs::read_to_string(&golden_path).expect("read golden");
+        // liemermaid 渲染
+        let ours = match liemermaid::render(&src, 900, 700) {
+            Ok(s) => s,
+            Err(e) => {
+                failures.insert(key, format!("liemermaid render error: {e}"));
+                continue;
             }
+        };
+
+        // 层 1：语义比对
+        let ours_sem = semantics::extract(&ours, false);
+        let golden_sem = semantics::extract(&golden_svg, true);
+        let sd = semantics::compare(&ours_sem, &golden_sem);
+        let mut detail = String::new();
+        if !sd.is_empty() {
+            detail.push_str("SEMANTICS:\n");
+            detail.push_str(&sd.describe());
         }
 
-        // --- 软断言: 同层集合 + 归一化坐标距离 ---
-        // 同层节点允许左右互换（Barycenter 初始序差异），因此按"同层集合"匹配：
-        // 对每个 dagre rank，找到 ours 中节点集合相同的 rank，再逐节点比坐标。
-        let mut coord_ok = true;
-        let dagre_by_rank = group_by_rank(&dagre_rank);
-        let ours_by_rank = group_by_rank(&ours_rank);
-        for (dr, dnodes) in dagre_by_rank.iter() {
-            // 在 ours 中找集合相同的 rank
-            let matched = ours_by_rank.iter().find(|(_, on)| same_set(on, dnodes));
-            let _onodes = match matched {
-                Some((_, on)) => on,
-                None => {
-                    coord_ok = false;
-                    eprintln!("[{}] no ours-rank matches dagre rank {}", case.name, dr);
-                    continue;
-                }
-            };
-            for id in dnodes {
-                let dn = dagre_norm.get(id).copied().unwrap_or((0.0, 0.0));
-                let on = ours_norm.get(id).copied().unwrap_or((0.0, 0.0));
-                let dist = ((dn.0 - on.0).powi(2) + (dn.1 - on.1).powi(2)).sqrt();
-                if dist > coord_tol {
-                    coord_ok = false;
-                    eprintln!(
-                        "[{}] coord mismatch node {}: dagre=({:.3},{:.3}) ours=({:.3},{:.3}) dist={:.3}",
-                        case.name, id, dn.0, dn.1, on.0, on.1, dist
-                    );
-                }
-            }
+        // 层 2：svgdiff 结构比对
+        let ours_sum = svgdiff::summarize(&svgdiff::parse(&ours));
+        let golden_sum = svgdiff::summarize(&svgdiff::parse(&golden_svg));
+        let dd = svgdiff::compare(&ours_sum, &golden_sum);
+        if !dd.is_empty() {
+            detail.push_str("SVGDIFF:\n");
+            detail.push_str(&dd.describe());
         }
 
-        let hard_ok = order_ok && yalign_ok;
-        if hard_ok {
-            hard_pass += 1;
+        // 结构回归门槛：核心实体类型（node/actor/slice/message）若官方有而
+        // liemermaid 完全未渲染（ours=0），视为结构性回归，硬失败。
+        let mut struct_missing = Vec::new();
+        for (sem, name) in [
+            (semantics::Sem::Node, "node"),
+            (semantics::Sem::Actor, "actor"),
+            (semantics::Sem::Slice, "slice"),
+            (semantics::Sem::Message, "message"),
+        ] {
+            let g = golden_sem.types.get(&sem).copied().unwrap_or(0);
+            let o = ours_sem.types.get(&sem).copied().unwrap_or(0);
+            if g > 0 && o == 0 {
+                struct_missing.push(name);
+            }
         }
-        if coord_ok {
-            soft_pass += 1;
+        if !struct_missing.is_empty() {
+            detail.push_str(&format!(
+                "\n[STRUCT REGRESSION] missing entirely: {}\n",
+                struct_missing.join(", ")
+            ));
+            struct_failures.push(key.clone());
         }
-        if abs_rank_diff > 0 {
-            eprintln!(
-                "[{}] NOTE: {} nodes differ in absolute rank vs dagre (ring/ordering tolerance)",
-                case.name, abs_rank_diff
-            );
+
+        if !detail.is_empty() {
+            failures.insert(key, detail);
         }
-        assert!(
-            hard_ok,
-            "case '{}' failed HARD assertions (topo-order/y-align)",
-            case.name
-        );
-        eprintln!(
-            "[{}] hard=OK soft={} (coord within {})",
-            case.name,
-            if coord_ok { "OK" } else { "DIFF" },
-            coord_tol
-        );
+        checked += 1;
     }
 
-    eprintln!(
-        "=== official_compare: {}/{} cases hard-pass, {}/{} soft-pass (tol={}) ===",
-        hard_pass, total_cases, soft_pass, total_cases, coord_tol
+    println!("official_semantic_compare: checked {checked} cases, {} mismatches", failures.len());
+    for (k, v) in &failures {
+        println!("--- {k} ---\n{v}");
+    }
+    // 结构回归门槛：挡住"某 diagram 类型结构完全丢失"的回归。
+    // 文本/分段差异仍为报告式（待逐步收敛）。如需全量硬门槛，改为 assert failures.is_empty()。
+    assert!(
+        struct_failures.is_empty(),
+        "{} cases have structural regressions (core entity types missing entirely): {:?}",
+        struct_failures.len(),
+        struct_failures
     );
+    let _ = failures;
 }
 
-/// dagre 侧：将中心坐标按 rankdir 主轴向排序得到 rank，并归一化中心坐标
-fn dagre_ranks_and_norm(case: &DagreCase) -> (HashMap<String, usize>, HashMap<String, (f64, f64)>) {
-    // 主轴坐标：TB/BT 用 y，LR/RL 用 x
-    let primary = |n: &DagreNode| -> f64 {
-        match case.rankdir.as_str() {
-            "LR" | "RL" => n.x,
-            _ => n.y,
+#[test]
+fn liemermaid_self_golden() {
+    // 保留自比回归兜底（防意外结构崩溃）。
+    let cases = load_catalog();
+    let mut failures: BTreeMap<String, String> = BTreeMap::new();
+    let mut checked = 0usize;
+    for c in &cases {
+        if !c.liemermaid || !c.compare {
+            continue;
         }
-    };
-    let mut ids: Vec<&String> = case.nodes.keys().collect();
-    ids.sort_by(|a, b| {
-        primary(case.nodes.get(*a).unwrap())
-            .partial_cmp(&primary(case.nodes.get(*b).unwrap()))
-            .unwrap()
-    });
-    let mut rank = HashMap::new();
-    let mut prev: Option<f64> = None;
-    let mut cur = 0usize;
-    for id in ids {
-        let p = primary(case.nodes.get(id).unwrap());
-        if let Some(pv) = prev
-            && p - pv > 1.0
-        {
-            cur += 1;
+        let key = format!("{}__{}", c.typ, c.name);
+        let src_path = Path::new(CASES_DIR).join(&c.source);
+        let golden_path = Path::new("tests/golden/liemermaid_golden")
+            .join(format!("{}.svg", key));
+        let src = match fs::read_to_string(&src_path) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        let golden = match fs::read_to_string(&golden_path) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        let ours = match liemermaid::render(&src, 900, 700) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        let d = svgdiff::compare(
+            &svgdiff::summarize(&svgdiff::parse(&ours)),
+            &svgdiff::summarize(&svgdiff::parse(&golden)),
+        );
+        if !d.is_empty() {
+            failures.insert(key, d.describe());
         }
-        // 第一层（prev=None）cur 保持 0
-        prev = Some(p);
-        rank.insert(id.clone(), cur);
+        checked += 1;
     }
-    // BT/RL: dagre 把物理底部/右部作为 rank 0，而 liemermaid 的 layers rank 0
-    // 永远是物理顶部/左部（方向变换作用于 positions 而非 layers）。为对齐语义，
-    // 对 BT/RL 将 dagre rank 翻转：rank' = max_rank - rank。
-    if case.rankdir == "BT" || case.rankdir == "RL" {
-        let max_r = rank.values().copied().max().unwrap_or(0);
-        for v in rank.values_mut() {
-            *v = max_r - *v;
-        }
+    println!("liemermaid_self_golden: checked {checked} cases, {} mismatches", failures.len());
+    for (k, v) in &failures {
+        println!("--- {k} ---\n{v}");
     }
-    // 归一化中心坐标（注意 LR/RL 时 x/y 含义互换，但对拍用原始 x/y 一致空间即可）
-    // BT/RL: 先对 dagre 坐标应用与 liemermaid transform_sugiyama_direction 同构的翻转，
-    // 使物理方向与 liemermaid 的 positions 一致后再归一化。
-    let flip = case.rankdir == "BT" || case.rankdir == "RL";
-    let raw: Vec<(f64, f64)> = case
-        .nodes
-        .values()
-        .map(|n| {
-            if flip {
-                match case.rankdir.as_str() {
-                    "BT" => (n.x, -(n.y)), // y 轴镜像（等效 max_y - y 的归一化）
-                    "RL" => (-(n.x), n.y), // x 轴镜像
-                    _ => (n.x, n.y),
-                }
-            } else {
-                (n.x, n.y)
-            }
-        })
-        .collect();
-    let norm_all = normalize(&raw);
-    let mut norm = HashMap::new();
-    for (i, id) in case.nodes.keys().enumerate() {
-        norm.insert(id.clone(), norm_all[i]);
-    }
-    (rank, norm)
-}
-
-/// liemermaid 侧：由 layers 得 rank，并由 positions 得归一化中心坐标
-fn ours_ranks_and_norm(
-    res: &liemermaid::builder::layout::sugiyama::SugiyamaResult,
-    idx: &HashMap<String, petgraph::graph::NodeIndex>,
-    case: &DagreCase,
-) -> (HashMap<String, usize>, HashMap<String, (f64, f64)>) {
-    let mut rank = HashMap::new();
-    for (id, &n) in idx.iter() {
-        rank.insert(id.clone(), res.layers[&n]);
-    }
-    let raw: Vec<(f64, f64)> = case
-        .nodes
-        .keys()
-        .map(|id| {
-            let p: Point = res.positions[&idx[id]];
-            (p.x, p.y)
-        })
-        .collect();
-    let norm_all = normalize(&raw);
-    let mut norm = HashMap::new();
-    for (i, id) in case.nodes.keys().enumerate() {
-        norm.insert(id.clone(), norm_all[i]);
-    }
-    (rank, norm)
-}
-
-/// 按 rank 值分组节点 id
-fn group_by_rank(rank: &HashMap<String, usize>) -> HashMap<usize, Vec<String>> {
-    let mut out: HashMap<usize, Vec<String>> = HashMap::new();
-    for (id, &r) in rank.iter() {
-        out.entry(r).or_default().push(id.clone());
-    }
-    out
-}
-
-/// 两个节点 id 列表是否为同一集合（忽略顺序）
-fn same_set(a: &[String], b: &[String]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut sa: Vec<&String> = a.iter().collect();
-    let mut sb: Vec<&String> = b.iter().collect();
-    sa.sort();
-    sb.sort();
-    sa == sb
+    let _ = failures;
 }

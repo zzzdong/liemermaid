@@ -110,6 +110,53 @@ pub fn path_node(path: BezPath, style: FillStrokeStyle, z: i32) -> SceneNode {
         path,
         style,
         closed: false,
+        marker_end: None,
+    })
+    .with_z(z)
+}
+
+/// Catmull-Rom 转贝塞尔的平滑曲线：把折线点序列平滑为开放路径，
+/// 视觉上贴近官方 mermaid 的曲线连线（而非正交折角）。
+fn smooth_curve(pts: &[Point]) -> BezPath {
+    let mut p = BezPath::new();
+    if pts.len() < 2 {
+        return p;
+    }
+    p.move_to((pts[0].x, pts[0].y));
+    if pts.len() == 2 {
+        p.line_to((pts[1].x, pts[1].y));
+        return p;
+    }
+    for i in 0..pts.len() - 1 {
+        let p0 = if i == 0 { pts[0] } else { pts[i - 1] };
+        let p1 = pts[i];
+        let p2 = pts[i + 1];
+        let p3 = if i + 2 < pts.len() { pts[i + 2] } else { pts[i + 1] };
+        let c1 = Point::new(p1.x + (p2.x - p0.x) / 6.0, p1.y + (p2.y - p0.y) / 6.0);
+        let c2 = Point::new(p2.x - (p3.x - p1.x) / 6.0, p2.y - (p3.y - p1.y) / 6.0);
+        p.curve_to((c1.x, c1.y), (c2.x, c2.y), (p2.x, p2.y));
+    }
+    p
+}
+
+/// 平滑曲线边：把路由点平滑为贝塞尔路径，可选末端箭头 marker（如 `arrow`）。
+/// 用于取代正交 `polyline_node` + 独立 `draw_arrow_head`，缩小与官方曲线连线的差异。
+pub fn curved_edge_node(
+    points: Vec<Point>,
+    style: Stroke,
+    marker: Option<String>,
+    z: i32,
+) -> SceneNode {
+    let path = smooth_curve(&points);
+    let fs = FillStrokeStyle {
+        fill: None,
+        stroke: Some(style),
+    };
+    SceneNode::from(Element::Path {
+        path,
+        style: fs,
+        closed: false,
+        marker_end: marker,
     })
     .with_z(z)
 }

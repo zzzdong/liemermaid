@@ -15,21 +15,17 @@ use liemermaid::{render, MermaidParser};
 use std::fs;
 
 fn main() {
-    let input = r#"flowchart LR
-    A["Start"]
-    B{"Decision"}
-    C["Continue"]
-    D["End"]
-    E["Hidden link"]
-    A --> B
-    B -->|Yes| C
-    B -->|No| D
-    A ~~~ E
-    F o--o G
-    H x--x I
-    J --o K
-    L --x M
-    N <--> O
+    let input = r#"flowchart TB
+    A[Rectangle]
+    B(Rounded)
+    C([Stadium])
+    D[[Subroutine]]
+    E[(Database)]
+    F((Circle))
+    G{Diamond}
+    H>Flag]
+    I[/Sloped/]
+    J((DoubleCircle))
 "#;
 
     let _diagram = MermaidParser::parse_mermaid(input).expect("parse failed");

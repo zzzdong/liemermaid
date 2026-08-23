@@ -1,0 +1,15 @@
+warning: function `transform_sugiyama_direction` is never used
+   --> src\builder\flowchart.rs:159:4
+    |
+159 | fn transform_sugiyama_direction(result: &mut SugiyamaResult, direction: Direction) {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `liemermaid` (lib) generated 1 warning
+   Compiling liemermaid v0.1.0-alpha.2 (D:\code\rust\liemermaid)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.78s
+     Running `target\debug\examples\dbg_measure.exe`
+circles=2
+  circle[0] diameter=121.0
+  circle[1] diameter=90.7

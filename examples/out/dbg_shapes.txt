@@ -1,0 +1,13 @@
+   Compiling liemermaid v0.1.0-alpha.2 (D:\code\rust\liemermaid)
+warning: function `transform_sugiyama_direction` is never used
+   --> src\builder\flowchart.rs:159:4
+    |
+159 | fn transform_sugiyama_direction(result: &mut SugiyamaResult, direction: Direction) {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `liemermaid` (lib) generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.36s
+     Running `target\debug\examples\dbg_shapes.exe`
+rendered OK, svg len = 7413

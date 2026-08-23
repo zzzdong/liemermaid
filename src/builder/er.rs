@@ -48,7 +48,7 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
         name: String,
         width: f64,
         height: f64,
-        attr_lines: Vec<String>,
+        attrs: Vec<(String, String)>,
     }
 
     let mut entity_layouts: HashMap<String, EntityLayout> = HashMap::new();
@@ -63,14 +63,13 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
         let name_layout = layout_text(&[RichSpan::new(ent.name.to_string(), ts.clone())], None);
         let name_w = name_layout.width + ENTITY_PAD * 2.0;
 
-        let mut attr_lines = Vec::new();
+        let mut attrs: Vec<(String, String)> = Vec::new();
         for attr in &ent.attributes {
-            let line = format!("{} : {}", attr.type_, attr.name);
-            attr_lines.push(line);
+            attrs.push((attr.type_.clone(), attr.name.clone()));
         }
 
         let mut max_w = name_w;
-        for line in &attr_lines {
+        for (ty, nm) in &attrs {
             let small_ts = vir::text_style(
                 Color::BLACK,
                 SMALL_FONT,
@@ -78,15 +77,20 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
                 TextAlign::Left,
                 TextBaseline::Top,
             );
-            let l = layout_text(&[RichSpan::new(line.to_string(), small_ts.clone())], None);
-            max_w = max_w.max(l.width + ENTITY_PAD * 2.0);
+            for part in [ty.as_str(), nm.as_str()] {
+                let l = layout_text(
+                    &[RichSpan::new(part.to_string(), small_ts.clone())],
+                    None,
+                );
+                max_w = max_w.max(l.width + ENTITY_PAD * 2.0);
+            }
         }
 
         let header_h = name_layout.height + 12.0;
-        let attr_h = if attr_lines.is_empty() {
+        let attr_h = if attrs.is_empty() {
             0.0
         } else {
-            attr_lines.len() as f64 * 18.0 + 8.0
+            attrs.len() as f64 * 2.0 * 18.0 + 8.0
         };
         let height = header_h + attr_h;
 
@@ -96,7 +100,7 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
                 name: ent.name.clone(),
                 width: max_w.max(ENTITY_MIN_W),
                 height,
-                attr_lines,
+                attrs,
             },
         );
     }
@@ -131,7 +135,7 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
                     name: name.clone(),
                     width: name_layout.width + ENTITY_PAD * 2.0 + ENTITY_MIN_W,
                     height: h,
-                    attr_lines: vec![],
+                    attrs: vec![],
                 },
             );
         }
@@ -263,7 +267,7 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
             let stroke = vir::stroke(theme::er::EDGE, 1.5);
 
             // Main line
-            elements.push(vir::line_node(start, end, stroke.clone(), Z_AXIS));
+            elements.push(vir::line_node(start, end, stroke.clone(), Z_AXIS).with_class("edge"));
 
             // Cardinality markers
             let sz = 8.0;
@@ -326,14 +330,14 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
             Some(theme::NODE_RADIUS),
             vir::fs_both(theme::er::FILL, theme::er::STROKE, 2.0),
             Z_SERIES,
-        ));
+        ).with_class("node"));
 
         // Header background
         let header_h = layout.height
-            - if layout.attr_lines.is_empty() {
+            - if layout.attrs.is_empty() {
                 0.0
             } else {
-                layout.attr_lines.len() as f64 * 18.0 + 8.0
+                layout.attrs.len() as f64 * 2.0 * 18.0 + 8.0
             };
         let header_rect = Rect::new(
             rect.min_x(),
@@ -388,36 +392,39 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
             Z_AXIS,
         ));
 
-        // Attributes
+        // Attributes (官方格式：类型一行、名称一行)
         let mut line_y = rect.min_y() + header_h + 4.0;
-        for attr_line in &layout.attr_lines {
-            let ts = vir::text_style(
-                theme::er::TEXT,
-                SMALL_FONT,
-                theme::FONT_FAMILY.to_string(),
-                TextAlign::Left,
-                TextBaseline::Top,
-            );
-            let l = layout_text(
-                &[RichSpan::new(attr_line.to_string(), ts.clone())],
-                Some(layout.width - ENTITY_PAD),
-            );
-            let (x_off, y_off) = compute_text_offset(&l, TextAlign::Left, TextBaseline::Top);
-            elements.push(vir::text_node(
-                attr_line.clone(),
-                Point::new(rect.min_x() + ENTITY_PAD + x_off, line_y + y_off),
-                vir::text_style(
+        for (ty, nm) in &layout.attrs {
+            for part in [ty.as_str(), nm.as_str()] {
+                let ts = vir::text_style(
                     theme::er::TEXT,
                     SMALL_FONT,
                     theme::FONT_FAMILY.to_string(),
                     TextAlign::Left,
                     TextBaseline::Top,
-                ),
-                0.0,
-                Some(layout.width - ENTITY_PAD),
-                Z_LABEL,
-            ));
-            line_y += 18.0;
+                );
+                let l = layout_text(
+                    &[RichSpan::new(part.to_string(), ts.clone())],
+                    Some(layout.width - ENTITY_PAD),
+                );
+                let (x_off, y_off) =
+                    compute_text_offset(&l, TextAlign::Left, TextBaseline::Top);
+                elements.push(vir::text_node(
+                    part.to_string(),
+                    Point::new(rect.min_x() + ENTITY_PAD + x_off, line_y + y_off),
+                    vir::text_style(
+                        theme::er::TEXT,
+                        SMALL_FONT,
+                        theme::FONT_FAMILY.to_string(),
+                        TextAlign::Left,
+                        TextBaseline::Top,
+                    ),
+                    0.0,
+                    Some(layout.width - ENTITY_PAD),
+                    Z_LABEL,
+                ));
+                line_y += 18.0;
+            }
         }
     }
 

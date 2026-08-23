@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700.00" height="500.00" viewBox="0 0 700.00 500.00">
+<rect x="0" y="0" width="700.00" height="500.00" fill="#ffffff"/>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs><g transform="matrix(1.000000 0.000000 0.000000 1.000000 182.112671 91.000000)"><g class="actor"><rect x="20.00" y="20.00" width="60.00" height="20.00" rx="6.00"  fill="#f0f9ff" stroke="#0ea5e9" stroke-width="2.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g><g class="actor"><rect x="80.00" y="20.00" width="60.00" height="20.00" rx="6.00"  fill="#f0f9ff" stroke="#0ea5e9" stroke-width="2.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g><rect x="-20.00" y="36.00" width="180.00" height="59.00" rx="6.00"  fill="#fefce8" stroke="#eab308" stroke-width="1.50" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<rect x="200.00" y="36.00" width="30.00" height="145.00" rx="6.00"  fill="#fefce8" stroke="#eab308" stroke-width="1.50" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<rect x="5.00" y="36.00" width="225.00" height="231.00" rx="6.00"  fill="#fefce8" stroke="#eab308" stroke-width="1.50" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="60.00" x2="60.00" y2="66.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="66.00" x2="60.00" y2="72.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="72.00" x2="60.00" y2="78.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="78.00" x2="60.00" y2="84.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="84.00" x2="60.00" y2="90.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="90.00" x2="60.00" y2="96.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="96.00" x2="60.00" y2="102.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="102.00" x2="60.00" y2="108.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="108.00" x2="60.00" y2="114.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="114.00" x2="60.00" y2="120.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="120.00" x2="60.00" y2="126.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="126.00" x2="60.00" y2="132.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="132.00" x2="60.00" y2="138.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="138.00" x2="60.00" y2="144.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="144.00" x2="60.00" y2="150.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="150.00" x2="60.00" y2="156.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="156.00" x2="60.00" y2="162.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="162.00" x2="60.00" y2="168.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="168.00" x2="60.00" y2="174.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="174.00" x2="60.00" y2="180.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="180.00" x2="60.00" y2="186.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="186.00" x2="60.00" y2="192.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="192.00" x2="60.00" y2="198.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="198.00" x2="60.00" y2="204.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="204.00" x2="60.00" y2="210.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="210.00" x2="60.00" y2="216.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="216.00" x2="60.00" y2="222.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="222.00" x2="60.00" y2="228.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="228.00" x2="60.00" y2="234.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="234.00" x2="60.00" y2="240.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="240.00" x2="60.00" y2="246.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="246.00" x2="60.00" y2="252.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="252.00" x2="60.00" y2="258.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="258.00" x2="60.00" y2="264.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="264.00" x2="60.00" y2="270.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="270.00" x2="60.00" y2="276.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="276.00" x2="60.00" y2="282.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="282.00" x2="60.00" y2="288.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="288.00" x2="60.00" y2="294.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="294.00" x2="60.00" y2="298.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="60.00" x2="180.00" y2="66.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="66.00" x2="180.00" y2="72.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="72.00" x2="180.00" y2="78.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="78.00" x2="180.00" y2="84.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="84.00" x2="180.00" y2="90.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="90.00" x2="180.00" y2="96.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="96.00" x2="180.00" y2="102.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="102.00" x2="180.00" y2="108.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="108.00" x2="180.00" y2="114.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="114.00" x2="180.00" y2="120.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="120.00" x2="180.00" y2="126.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="126.00" x2="180.00" y2="132.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="132.00" x2="180.00" y2="138.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="138.00" x2="180.00" y2="144.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="144.00" x2="180.00" y2="150.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="150.00" x2="180.00" y2="156.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="156.00" x2="180.00" y2="162.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="162.00" x2="180.00" y2="168.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="168.00" x2="180.00" y2="174.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="174.00" x2="180.00" y2="180.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="180.00" x2="180.00" y2="186.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="186.00" x2="180.00" y2="192.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="192.00" x2="180.00" y2="198.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="198.00" x2="180.00" y2="204.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="204.00" x2="180.00" y2="210.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="210.00" x2="180.00" y2="216.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="216.00" x2="180.00" y2="222.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="222.00" x2="180.00" y2="228.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="228.00" x2="180.00" y2="234.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="234.00" x2="180.00" y2="240.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="240.00" x2="180.00" y2="246.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="246.00" x2="180.00" y2="252.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="252.00" x2="180.00" y2="258.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="258.00" x2="180.00" y2="264.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="264.00" x2="180.00" y2="270.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="270.00" x2="180.00" y2="276.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="276.00" x2="180.00" y2="282.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="282.00" x2="180.00" y2="288.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="288.00" x2="180.00" y2="294.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="294.00" x2="180.00" y2="298.00"  fill="none" stroke="#cbd5e1" stroke-width="1.00" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<g class="message"><line x1="60.00" y1="141.00" x2="180.00" y2="141.00"  fill="none" stroke="#94a3b8" stroke-width="1.50" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g><line x1="180.00" y1="141.00" x2="172.00" y2="137.00"  fill="none" stroke="#94a3b8" stroke-width="1.50" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="180.00" y1="141.00" x2="172.00" y2="145.00"  fill="none" stroke="#94a3b8" stroke-width="1.50" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<g class="message"><line x1="180.00" y1="227.00" x2="60.00" y2="227.00"  fill="none" stroke="#94a3b8" stroke-width="1.50" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g><line x1="60.00" y1="227.00" x2="68.00" y2="223.00"  fill="none" stroke="#94a3b8" stroke-width="1.50" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<line x1="60.00" y1="227.00" x2="68.00" y2="231.00"  fill="none" stroke="#94a3b8" stroke-width="1.50" stroke-miterlimit="10.00" stroke-linecap="butt" stroke-linejoin="miter"/>
+<text x="46.26" y="35.90" text-anchor="middle" dominant-baseline="alphabetic" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="13.00" font-style="normal" font-weight="400" fill="#1e293b">Alice</text>
+<text x="168.64" y="35.90" text-anchor="middle" dominant-baseline="alphabetic" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="13.00" font-style="normal" font-weight="400" fill="#1e293b">Bob</text>
+<text x="110.54" y="130.76" text-anchor="start" dominant-baseline="alphabetic" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="13.00" font-style="normal" font-weight="400" fill="#1e293b">call</text>
+<text x="104.13" y="216.76" text-anchor="start" dominant-baseline="alphabetic" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="13.00" font-style="normal" font-weight="400" fill="#1e293b">result</text>
+<text x="31.39" y="115.40" text-anchor="start" dominant-baseline="alphabetic" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="13.00" font-style="normal" font-weight="400" fill="#1e293b">Alice note</text>
+<text x="303.77" y="201.40" text-anchor="start" dominant-baseline="alphabetic" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="13.00" font-style="normal" font-weight="400" fill="#1e293b">Bob note</text>
+<text x="85.90" y="287.40" text-anchor="start" dominant-baseline="alphabetic" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="13.00" font-style="normal" font-weight="400" fill="#1e293b">shared note</text>
+</g></svg>

@@ -99,15 +99,43 @@ fn measure_node(node: &Node, _config: &OutputConfig) -> NodeMetrics {
     let text_w = layout.width;
     let text_h = layout.height;
 
-    let (min_w, min_h, pad_x, pad_y) = shape_multiplier(&node.shape);
+    // 节点尺寸由文字排版结果决定；不同形状有各自几何约束，
+    // 必须在测量阶段落实（而非绘制阶段补救），以保证布局锚点正确。
+    let size = match &node.shape {
+        Some(NodeShape::Circle) | Some(NodeShape::DoubleCircle) => {
+            // 圆/双圆：强制正方形，直径 = 文字最大维度 + 左右留白
+            let pad = NODE_PAD_X;
+            let d = (text_w.max(text_h) + 2.0 * pad).max(MIN_NODE_HEIGHT);
+            Size::new(d, d)
+        }
+        Some(NodeShape::Stadium) => {
+            // Stadium（跑道形）：两端半圆直径 = 高，故宽 = 文字宽 + 高（两端半圆各占半高），
+            // 横向仅留极小内边距，避免文字短时节点过宽。
+            let h = (text_h + 2.0 * NODE_PAD_Y).max(MIN_NODE_HEIGHT);
+            let r = h / 2.0;
+            let w = (text_w + 2.0 * r + 8.0).max(MIN_NODE_WIDTH);
+            Size::new(w, h)
+        }
+        Some(NodeShape::Cylinder) => {
+            // 圆柱：顶部椭圆额外占用一段高度
+            let ellipse = NODE_PAD_Y * 2.0;
+            let h = (text_h + 2.0 * NODE_PAD_Y + ellipse).max(MIN_NODE_HEIGHT);
+            let w = (text_w + 2.0 * NODE_PAD_X).max(MIN_NODE_WIDTH);
+            Size::new(w, h)
+        }
+        _ => {
+            let (min_w, min_h, pad_x, pad_y) = shape_multiplier(&node.shape);
+            Size::new(
+                min_w.max(text_w + 2.0 * pad_x),
+                min_h.max(text_h + 2.0 * pad_y),
+            )
+        }
+    };
 
-    let width = min_w.max(text_w + 2.0 * pad_x);
-    let height = min_h.max(text_h + 2.0 * pad_y);
-
-    let anchors = NodeAnchors::new((width, height));
+    let anchors = NodeAnchors::new((size.width, size.height));
 
     NodeMetrics {
-        size: Size::new(width, height),
+        size,
         anchors,
     }
 }

@@ -1,4 +1,4 @@
-use liemermaid::parser::MermaidParser;
+use liemermaid::MermaidParser;
 fn main() {
     for inp in [
         "flowchart TD\nsubgraph One\nA\nB\nend\nA --> B",

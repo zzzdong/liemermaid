@@ -196,7 +196,7 @@ pub fn build_gitgraph_elements(graph: &GitGraphDiagram, _config: &OutputConfig) 
                     branch_commits[i + 1].position,
                     vir::stroke(color, 2.5),
                     Z_AXIS,
-                ));
+                ).with_class("edge"));
             }
         }
 
@@ -219,7 +219,7 @@ pub fn build_gitgraph_elements(graph: &GitGraphDiagram, _config: &OutputConfig) 
                 first,
                 vir::stroke(color, 2.5),
                 Z_AXIS,
-            ));
+            ).with_class("edge"));
         }
     }
 
@@ -250,7 +250,7 @@ pub fn build_gitgraph_elements(graph: &GitGraphDiagram, _config: &OutputConfig) 
                     ],
                     vir::stroke(color, 1.5),
                     Z_AXIS,
-                ));
+                ).with_class("edge"));
             }
         }
     }
@@ -264,14 +264,14 @@ pub fn build_gitgraph_elements(graph: &GitGraphDiagram, _config: &OutputConfig) 
             COMMIT_RADIUS,
             vir::fs_both(Color::rgb(255, 255, 255), color, 2.5),
             Z_SERIES,
-        ));
+        ).with_class("node"));
 
         elements.push(vir::circle_node(
             cp.position,
             3.0,
             vir::fs_fill(color),
             Z_SERIES,
-        ));
+        ).with_class("node"));
 
         if let Some(tag) = &cp.tag {
             let ts = TextStyle::new(color, FONT_SIZE, theme::FONT_FAMILY.to_string())

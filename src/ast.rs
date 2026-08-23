@@ -198,6 +198,8 @@ pub struct ClassDiagram {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Class {
     pub name: String,
+    /// 泛型参数（mermaid `~T~` 语法），如 `T`
+    pub generic: Option<String>,
     /// 注解/构造型，如 `<<Interface>>`
     pub annotation: Option<String>,
     pub members: Vec<ClassMember>,
@@ -255,6 +257,12 @@ pub enum State {
     Composite {
         id: String,
         inner: Box<StateDiagram>,
+    },
+    Fork {
+        id: String,
+    },
+    Join {
+        id: String,
     },
     Start,
     End,

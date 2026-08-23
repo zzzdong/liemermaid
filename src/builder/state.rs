@@ -4,7 +4,7 @@ use lievisual::geometry::{Point, Rect};
 use petgraph::graph::{DiGraph, NodeIndex};
 
 use crate::{
-    ast::StateDiagram,
+    ast::{State, StateDiagram},
     builder::{
         layout::sugiyama::{NodeSize, SugiyamaConfig, SugiyamaLayout},
         layout::types::LayoutEngine,
@@ -28,8 +28,8 @@ enum StateNode {
     Start,
     End,
     Normal {
-        id: String,
         description: Option<String>,
+        label: Option<String>,
     },
 }
 
@@ -61,6 +61,18 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
     let mut out_edges: HashMap<String, Vec<(String, Option<String>)>> = HashMap::new();
     let mut in_degree: HashMap<String, usize> = HashMap::new();
 
+    // 显示名：state "label" as id 中的 label（存于 State::Simple.description）
+    let state_labels: HashMap<String, String> = diagram
+        .states
+        .iter()
+        .filter_map(|s| match s {
+            State::Simple { id, description } => {
+                description.clone().map(|d| (id.clone(), d))
+            }
+            _ => None,
+        })
+        .collect();
+
     // Internal keys to distinguish start [*] from end [*]
     const START_KEY: &str = "__start__";
     const END_KEY: &str = "__end__";
@@ -84,11 +96,12 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                 .entry(START_KEY.to_string())
                 .or_insert(StateNode::Start);
         } else {
+            let lbl = state_labels.get(&t.from).cloned();
             state_map
                 .entry(t.from.clone())
                 .or_insert_with(|| StateNode::Normal {
-                    id: t.from.clone(),
                     description: None,
+                    label: lbl,
                 });
         }
 
@@ -97,11 +110,12 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                 .entry(END_KEY.to_string())
                 .or_insert(StateNode::End);
         } else {
+            let lbl = state_labels.get(&t.to).cloned();
             state_map
                 .entry(t.to.clone())
                 .or_insert_with(|| StateNode::Normal {
-                    id: t.to.clone(),
                     description: None,
+                    label: lbl,
                 });
         }
 
@@ -136,7 +150,9 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
         let (label, desc) = match node {
             StateNode::Start => ("Start".to_string(), None),
             StateNode::End => ("End".to_string(), None),
-            StateNode::Normal { id, description } => (id.clone(), description.clone()),
+            StateNode::Normal { label, description, .. } => {
+                (label.clone().unwrap_or_else(|| id.clone()), description.clone())
+            }
         };
 
         // Measure text
@@ -251,8 +267,11 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
     // Convert petgraph NodeIndex positions back to string-keyed positions
     let mut positions: HashMap<String, Point> = HashMap::new();
     for (idx, pos) in &result.positions {
-        let id = &graph[*idx];
-        positions.insert(id.clone(), *pos);
+        // Sugiyama 布局可能在内部插入虚拟节点，其索引可能超出 graph 节点范围；
+        // 仅保留真实存在的节点位置，跳过越界/虚拟索引。
+        if let Some(id) = graph.node_weight(*idx) {
+            positions.insert(id.clone(), *pos);
+        }
     }
 
     // ---- Draw transitions with orthogonal routing ----
@@ -301,7 +320,7 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                 ]
             };
 
-            elements.push(vir::polyline_node(points, stroke.clone(), Z_AXIS));
+            elements.push(vir::polyline_node(points, stroke.clone(), Z_AXIS).with_class("edge"));
 
             // Arrow head at target
             let sz = 7.0;
@@ -368,7 +387,7 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                     r - 2.0,
                     vir::fs_fill(theme::state::START_FILL),
                     Z_SERIES,
-                ));
+                ).with_class("node"));
             }
             StateNode::End => {
                 let r = 16.0;
@@ -378,14 +397,14 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                     r + 3.0,
                     vir::fs_both(Color::rgb(255, 255, 255), theme::state::END_STROKE, 2.5),
                     Z_SERIES,
-                ));
+                ).with_class("node"));
                 // Inner ring
                 elements.push(vir::circle_node(
                     *pos,
                     r - 4.0,
                     vir::fs_both(Color::rgb(255, 255, 255), theme::state::END_STROKE, 2.5),
                     Z_SERIES,
-                ));
+                ).with_class("node"));
             }
             StateNode::Normal { description, .. } => {
                 let w = nl.width / 2.0;
@@ -398,7 +417,7 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
                     Some(r),
                     vir::fs_both(theme::state::FILL, theme::state::STROKE, 2.0),
                     Z_SERIES,
-                ));
+                ).with_class("node"));
 
                 // State label
                 let ts = vir::text_style(

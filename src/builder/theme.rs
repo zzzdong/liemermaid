@@ -10,6 +10,8 @@ pub const BACKGROUND: Color = Color::new(255.0 / 255.0, 255.0 / 255.0, 255.0 / 2
 pub const FONT_FAMILY: &str = "Segoe UI, system-ui, -apple-system, sans-serif";
 pub const FONT_SIZE: f64 = 13.0;
 pub const NODE_RADIUS: f64 = 6.0;
+// Stadium 为跑道形：两端半圆直径 = 节点高度（半圆半径 = 半高），故不再用固定小圆角
+pub const STADIUM_RADIUS: f64 = 8.0;
 
 // ---- 连线通用 ----
 pub const EDGE_COLOR: Color = Color::new(148.0 / 255.0, 163.0 / 255.0, 184.0 / 255.0, 1.0); // slate-400

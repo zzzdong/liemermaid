@@ -1,4 +1,5 @@
 pub mod class;
+pub mod dagre_layout;
 pub mod er;
 pub mod flowchart;
 pub mod gitgraph;

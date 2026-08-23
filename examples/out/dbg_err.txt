@@ -1,0 +1,6 @@
+[DBG layout] edges=4 nodes=4 has_sub=false
+[DBG] ENTER render_sugiyama_flowchart, edges=4, routes=4
+[DBG edge] A->B route_len=3
+[DBG edge] B->C route_len=3
+[DBG edge] C->B route_len=3
+[DBG edge] C->D route_len=3

@@ -323,6 +323,10 @@ impl<'a> SugiyamaLayout<'a> {
     // 不将跨边（cross edge）错误标记，避免在 DAG 中误报。
     // ================================================================
     fn detect_feedback_arcs(&self) -> HashSet<(NodeIndex, NodeIndex)> {
+        // 单源 DFS（从每个未访问节点出发），on_stack 追踪当前 DFS 路径。
+        // 出边按目标节点 index 升序排序，使遍历顺序确定：优先走向低序号节点
+        // （如 A→B 先于 A→C），从而正确捕获真正的环回边（如 A→B→…→H→B 中的 H→B），
+        // 而非误将非环边（如 B→C）标为反馈弧。反转真正的回边才能正确打破环、保持分层。
         let mut fas = HashSet::new();
         let mut visited = HashSet::new();
         let mut on_stack = HashSet::new();
@@ -337,14 +341,15 @@ impl<'a> SugiyamaLayout<'a> {
             visited.insert(u);
             on_stack.insert(u);
 
-            let outgoing: Vec<NodeIndex> = g
+            let mut outgoing: Vec<NodeIndex> = g
                 .edges_directed(u, petgraph::Direction::Outgoing)
                 .map(|e| e.target())
                 .collect();
+            outgoing.sort();
 
             for &v in &outgoing {
                 if on_stack.contains(&v) {
-                    // 回边: u → v 构成环（v 在当前 DFS 栈中）
+                    // 回边: u → v 构成环（v 在当前 DFS 路径上）
                     fas.insert((u, v));
                 } else if !visited.contains(&v) {
                     dfs(g, v, visited, on_stack, fas);
@@ -1028,10 +1033,22 @@ impl<'a> SugiyamaLayout<'a> {
         }
 
         // ---- Pass 2b: SCC 水平排布 ----
-        // 对多节点 SCC，让入口节点保持在中线，其它节点水平排列到右侧
+        // 对多节点 SCC，让入口节点保持在中线，其它节点水平排列到右侧。
+        // 注意：network-simplex 模式已对 SCC 内节点按拓扑分层（不同层），
+        // 此时不应强制横向排布，否则会破坏分层（如 B<->C 被并排）。
+        // 仅当 SCC 内节点确实同层（遗留凝结情况）才执行横向对齐。
+        let node_layer: HashMap<NodeIndex, usize> = ordered
+            .iter()
+            .flat_map(|(&l, ns)| ns.iter().map(move |n| (*n, l)))
+            .collect();
         for scc in sccs {
             if scc.len() <= 1 {
                 continue;
+            }
+            let ranks: Vec<usize> = scc.iter().map(|n| *node_layer.get(n).unwrap()).collect();
+            let same_layer = ranks.iter().all(|&r| r == ranks[0]);
+            if !same_layer {
+                continue; // 已分层：保持层对齐，跳过横向排布
             }
 
             // 找到入口节点（有外部入边的节点）和出口节点（有外部出边的节点）

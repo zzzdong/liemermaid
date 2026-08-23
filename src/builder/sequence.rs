@@ -16,7 +16,6 @@ const PAD_X: f64 = 16.0;
 const COL_GAP: f64 = 40.0;
 const LIFELINE_DASH: f64 = 6.0;
 const MESSAGE_SPACING: f64 = 50.0;
-const NOTE_HEIGHT: f64 = 36.0;
 const NOTE_HEIGHT_BR: f64 = 36.0;
 const NOTE_GAP: f64 = 14.0;
 const FONT_SIZE: f64 = theme::FONT_SIZE;
@@ -99,7 +98,8 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                     2.0,
                 ),
             })
-            .with_z(Z_SERIES),
+            .with_z(Z_SERIES)
+            .with_class("actor"),
         );
 
         let ts = vir::text_style(
@@ -152,7 +152,6 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         y_bottom: f64,
         depth: usize,
         label: String,
-        kind: SequenceBlockKind,
     }
 
     let mut rows: Vec<SeqRow> = Vec::new();
@@ -232,7 +231,6 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                         y_bottom: *cur_y,
                         depth,
                         label,
-                        kind: block.kind.clone(),
                     });
                 }
             }
@@ -313,7 +311,6 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                     y_bottom: cur_y,
                     depth: 0,
                     label,
-                    kind: block.kind.clone(),
                 });
             }
         }
@@ -463,7 +460,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                 vec![Point::new(from_x, arrow_y)],
                 vir::stroke(theme::sequence::EDGE, 1.5),
                 Z_AXIS,
-            ));
+            ).with_class("message"));
         } else {
             let dir = if to_x > from_x { 1.0 } else { -1.0 };
             let stroke = vir::stroke(theme::sequence::EDGE, 1.5);
@@ -473,7 +470,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                 Point::new(to_x, arrow_y),
                 stroke.clone(),
                 Z_AXIS,
-            ));
+            ).with_class("message"));
 
             match r.arrow {
                 MessageArrow::Solid | MessageArrow::Dashed => {}

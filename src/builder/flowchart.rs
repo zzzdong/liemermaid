@@ -5,29 +5,23 @@ use petgraph::graph::{DiGraph, NodeIndex};
 use vello_cpu::kurbo::BezPath;
 
 use crate::{
-    ast::{ArrowType, Direction, Flowchart, NodeShape},
-    builder::types::OutputConfig,
-    error::DiagramResult,
-    vir::{
-        self, Stroke, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, Z_SUBGRAPH,
-        Z_SUBGRAPH_LABEL, draw_arrow_circle, draw_arrow_cross, draw_arrow_head, theme,
+    ast::{ArrowType, Direction, Flowchart, NodeShape}, builder::types::OutputConfig, error::DiagramResult,     vir::{
+        self, Color, Stroke, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, Z_SUBGRAPH, Z_SUBGRAPH_LABEL, draw_arrow_circle, draw_arrow_cross, draw_arrow_head, theme,
     },
 };
 use lievisual::scene::SceneNode;
 use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
 use super::layout::{
-    edges::route_edges,
-    layers::assign_layers,
-    measure::{measure_groups, measure_nodes},
-    position::compute_positions,
-    recognize::{all_flowchart_nodes, compute_flowchart_back_edges, recognize_structure},
-    sugiyama::{NodeSize, SugiyamaConfig, SugiyamaLayout, SugiyamaResult},
+    measure::measure_nodes,
+    recognize::all_flowchart_nodes,
+    sugiyama::{NodeSize, SugiyamaResult},
     types::{
         Layout, LayoutEdge, LayoutEngine, LayoutMetadata, LayoutNode, LayoutSubgraph, NodeMetrics,
-        NodePosition, NodeStyle, RoutedEdge, Size,
+        NodeStyle, Size,
     },
 };
+use crate::builder::dagre_layout;
 
 const NODE_FONT_SIZE: f64 = theme::FONT_SIZE;
 
@@ -41,28 +35,85 @@ fn edge_stroke() -> Stroke {
     vir::stroke(theme::flowchart::EDGE, theme::EDGE_WIDTH)
 }
 
-/// 计算内容的包围盒尺寸（不包含画布边距）
-fn compute_content_bounds(
-    positions: &HashMap<String, NodePosition>,
-    metrics: &HashMap<String, NodeMetrics>,
-) -> (f64, f64, f64, f64) {
-    let mut min_x = f64::MAX;
-    let mut min_y = f64::MAX;
-    let mut max_x = f64::MIN;
-    let mut max_y = f64::MIN;
-
-    for (node_id, pos) in positions {
-        let size = metrics
-            .get(node_id)
-            .map(|m| m.size)
-            .unwrap_or(Size::new(140.0, 50.0));
-        min_x = min_x.min(pos.center.x - size.width / 2.0);
-        min_y = min_y.min(pos.center.y - size.height / 2.0);
-        max_x = max_x.max(pos.center.x + size.width / 2.0);
-        max_y = max_y.max(pos.center.y + size.height / 2.0);
+/// 根据箭头类型返回对应的描边样式：
+/// - `==>`(Thick) 加粗；其余保持默认线宽。
+fn edge_stroke_for(arrow: &ArrowType) -> Stroke {
+    match arrow {
+        ArrowType::Thick => vir::stroke(theme::flowchart::EDGE, theme::EDGE_WIDTH * 1.6),
+        _ => vir::stroke(theme::flowchart::EDGE, theme::EDGE_WIDTH),
     }
+}
 
-    (min_x, min_y, max_x, max_y)
+/// 把折线按固定步长离散成密集点序列（用于虚线采样）
+fn sample_polyline(route: &[Point], step: f64) -> Vec<Point> {
+    if route.len() < 2 {
+        return route.to_vec();
+    }
+    let mut pts = vec![route[0]];
+    for i in 1..route.len() {
+        let a = route[i - 1];
+        let b = route[i];
+        let len = a.distance(b);
+        if len <= 1e-6 {
+            continue;
+        }
+        let n = (len / step).ceil() as usize;
+        for k in 1..=n {
+            let t = k as f64 / n as f64;
+            pts.push(Point::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t));
+        }
+    }
+    pts
+}
+
+/// 绘制虚线边：沿 route 折线按 dash/gap 周期切分出短直线段。
+/// 仅在最后一个采样点所在的绘制段上附加箭头 marker。
+fn draw_dashed_edge(elements: &mut Vec<SceneNode>, route: &[Point], marker_id: &Option<String>) {
+    const DASH: f64 = 6.0;
+    const GAP: f64 = 4.0;
+    const STEP: f64 = 2.0;
+    let dense = sample_polyline(route, STEP);
+    if dense.len() < 2 {
+        return;
+    }
+    let stroke = edge_stroke_for(&ArrowType::Dotted);
+    let mut drawing = true; // 当前处于 dash 段还是 gap 段
+    let mut phase: f64 = 0.0; // 当前段内已走过的距离（用于判断是否跨越边界）
+    let mut cur = dense[0];
+    for i in 1..dense.len() {
+        let p = dense[i];
+        let seg = cur.distance(p.clone());
+        if seg <= 1e-6 {
+            cur = p;
+            continue;
+        }
+        let is_last = i == dense.len() - 1;
+        let mut pos = 0.0;
+        while pos < seg {
+            let remain = if drawing { DASH - phase } else { GAP - phase };
+            let take = remain.min(seg - pos);
+            let next = Point::new(
+                cur.x + (p.x - cur.x) * (pos + take) / seg,
+                cur.y + (p.y - cur.y) * (pos + take) / seg,
+            );
+            if drawing {
+                let seg_marker = if is_last { marker_id.clone() } else { None };
+                elements.push(
+                    vir::curved_edge_node(vec![cur, next], stroke.clone(), seg_marker, Z_AXIS)
+                        .with_class("edge"),
+                );
+            }
+            pos += take;
+            phase += take;
+            let limit = if drawing { DASH } else { GAP };
+            if phase >= limit - 1e-9 {
+                phase = 0.0;
+                drawing = !drawing;
+            }
+            cur = next;
+        }
+        cur = p;
+    }
 }
 
 /// 从 Flowchart 构建 petgraph 有向图（用于 Sugiyama 布局）
@@ -97,6 +148,7 @@ fn has_subgraphs(fc: &Flowchart) -> bool {
 ///   - RL: 转置+镜像 (x, y) -> (-y, x)
 /// 变换后整体平移使坐标非负（与 dagre 的 bounding box 一致）。
 /// LR/RL 同时互换节点矩形宽高，使旋转后矩形方向与坐标排列匹配。
+#[cfg(test)]
 fn transform_sugiyama_direction(result: &mut SugiyamaResult, direction: Direction) {
     use lievisual::geometry::Point;
 
@@ -169,63 +221,155 @@ fn render_sugiyama_flowchart(
     // 构建 node_id → center 映射
     let mut node_centers: HashMap<String, Point> = HashMap::new();
     for (idx, pos) in &result.positions {
-        let id = &graph[*idx];
-        node_centers.insert(id.clone(), *pos);
+        // Sugiyama 可能在内部插入虚拟节点，其索引可能超出 graph 节点范围；
+        // 仅保留真实存在的节点位置。
+        if let Some(id) = graph.node_weight(*idx) {
+            node_centers.insert(id.clone(), *pos);
+        }
     }
 
     let mut elements = Vec::new();
 
-    // 绘制边（使用 Sugiyama 路由结果）
+    // 沿折线按比例 t∈[0,1] 取坐标
+    fn polyline_point_at(pts: &[Point], t: f64) -> Point {
+        if pts.len() < 2 {
+            return pts.first().copied().unwrap_or_default();
+        }
+        let mut seg_lens = Vec::new();
+        let mut total = 0.0;
+        for w in pts.windows(2) {
+            let d = (w[1].x - w[0].x).hypot(w[1].y - w[0].y);
+            seg_lens.push(d);
+            total += d;
+        }
+        if total == 0.0 {
+            return pts[pts.len() / 2];
+        }
+        let target = t.clamp(0.0, 1.0) * total;
+        let mut acc = 0.0;
+        for (i, &d) in seg_lens.iter().enumerate() {
+            if acc + d >= target {
+                let r = if d > 0.0 { (target - acc) / d } else { 0.0 };
+                return Point::new(
+                    pts[i].x + (pts[i + 1].x - pts[i].x) * r,
+                    pts[i].y + (pts[i + 1].y - pts[i].y) * r,
+                );
+            }
+            acc += d;
+        }
+        *pts.last().unwrap()
+    }
+
+    // 边标签：白底框 + 文本（对齐官方 edgeLabel）
+    fn draw_edge_label(elements: &mut Vec<SceneNode>, pos: Point, text: &str) {
+        let style = vir::text_style(
+            theme::flowchart::TEXT,
+            NODE_FONT_SIZE,
+            theme::FONT_FAMILY,
+            TextAlign::Center,
+            TextBaseline::Middle,
+        );
+        let layout = layout_text(&[RichSpan::new(text.to_string(), style.clone())], None);
+        let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
+        let w = layout.width + 8.0;
+        let h = layout.height + 4.0;
+        elements.push(
+            vir::rect_node(
+                Rect::new(
+                    pos.x - w / 2.0,
+                    pos.y - h / 2.0,
+                    pos.x + w / 2.0,
+                    pos.y + h / 2.0,
+                ),
+                Some(2.0),
+                vir::fs_both(Color::rgb(255, 255, 255), Color::rgb(255, 255, 255), 1.0),
+                Z_LABEL,
+            )
+            .with_class("edge-label"),
+        );
+        elements.push(vir::text_node(
+            text.to_string(),
+            Point::new(pos.x + x_off, pos.y + y_off),
+            style
+                .with_align(TextAlign::Left)
+                .with_baseline(TextBaseline::Top),
+            0.0,
+            None,
+            Z_LABEL,
+        ));
+    }
+
     for edge in fc.edges.iter() {
         if let (Some(&from_idx), Some(&to_idx)) =
             (indices.get(&edge.source), indices.get(&edge.target))
             && let Some(route) = result.edge_routes.get(&(from_idx, to_idx))
-            && route.len() >= 2
         {
-            elements.push(vir::polyline_node(route.clone(), edge_stroke(), Z_AXIS));
-            let last = route.last().unwrap();
-            let first = route.first().unwrap();
-            // 终点标记（NoArrow 不画）
-            let arrow = &edge.arrow_type;
-            match arrow {
-                ArrowType::NoArrow | ArrowType::Invisible => {}
-                ArrowType::Circle | ArrowType::MultiCircle => {
-                    draw_arrow_circle(&mut elements, last, &edge_stroke());
+            if route.len() >= 2 {
+                let arrow = &edge.arrow_type;
+                // 终点箭头：普通箭头（Normal/Open/Tailed）用共享 marker 复用，
+                // 避免每条边独立绘制箭头（缩小与官方的边数差异）。特殊形状保留独立绘制。
+                let marker_id: Option<&str> = match arrow {
+                    ArrowType::NoArrow | ArrowType::Invisible => None,
+                    ArrowType::Circle
+                    | ArrowType::MultiCircle
+                    | ArrowType::Cross
+                    | ArrowType::MultiCross => None,
+                    _ => Some("arrow"),
+                };
+                let marker = marker_id.map(str::to_string);
+                if let ArrowType::Dotted = arrow {
+                    // 虚线：沿折线切分短直线段（官方 -.-> 样式）
+                    draw_dashed_edge(&mut elements, &route, &marker);
+                } else {
+                    elements.push(
+                        vir::curved_edge_node(
+                            route.clone(),
+                            edge_stroke_for(arrow),
+                            marker.clone(),
+                            Z_AXIS,
+                        )
+                        .with_class("edge"),
+                    );
                 }
-                ArrowType::Cross | ArrowType::MultiCross => {
-                    draw_arrow_cross(&mut elements, last, &edge_stroke());
+                // 边标签（官方 edgeLabel）
+                if let Some(label_text) = &edge.label {
+                    let mid = polyline_point_at(route, 0.5);
+                    draw_edge_label(&mut elements, mid, label_text);
                 }
-                _ => {
-                    let prev = route[route.len() - 2];
-                    let dx = last.x - prev.x;
-                    let dy = last.y - prev.y;
+                let last = route.last().unwrap();
+                let first = route.first().unwrap();
+                // 特殊终点标记（Circle/Cross 形状）
+                match arrow {
+                    ArrowType::NoArrow | ArrowType::Invisible => {}
+                    ArrowType::Circle | ArrowType::MultiCircle => {
+                        draw_arrow_circle(&mut elements, last, &edge_stroke());
+                    }
+                    ArrowType::Cross | ArrowType::MultiCross => {
+                        draw_arrow_cross(&mut elements, last, &edge_stroke());
+                    }
+                    _ => {} // Normal/Open/Tailed 已由 marker 绘制终点箭头
+                }
+                // 双向箭头：起点也画一个反向标记
+                if arrow == &ArrowType::Both
+                    || arrow == &ArrowType::MultiCircle
+                    || arrow == &ArrowType::MultiCross
+                {
+                    let next = route[1];
+                    let dx = first.x - next.x;
+                    let dy = first.y - next.y;
                     let len = (dx * dx + dy * dy).sqrt();
                     if len > 0.0 {
                         let ud = Point::new(dx / len, dy / len);
-                        draw_arrow_head(&mut elements, last, &ud, &edge_stroke());
-                    }
-                }
-            }
-            // 双向箭头：起点也画一个反向标记
-            if arrow == &ArrowType::Both
-                || arrow == &ArrowType::MultiCircle
-                || arrow == &ArrowType::MultiCross
-            {
-                let next = route[1];
-                let dx = first.x - next.x;
-                let dy = first.y - next.y;
-                let len = (dx * dx + dy * dy).sqrt();
-                if len > 0.0 {
-                    let ud = Point::new(dx / len, dy / len);
-                    match arrow {
-                        ArrowType::MultiCircle => {
-                            draw_arrow_circle(&mut elements, first, &edge_stroke());
-                        }
-                        ArrowType::MultiCross => {
-                            draw_arrow_cross(&mut elements, first, &edge_stroke());
-                        }
-                        _ => {
-                            draw_arrow_head(&mut elements, first, &ud, &edge_stroke());
+                        match arrow {
+                            ArrowType::MultiCircle => {
+                                draw_arrow_circle(&mut elements, first, &edge_stroke());
+                            }
+                            ArrowType::MultiCross => {
+                                draw_arrow_cross(&mut elements, first, &edge_stroke());
+                            }
+                            _ => {
+                                draw_arrow_head(&mut elements, first, &ud, &edge_stroke());
+                            }
                         }
                     }
                 }
@@ -258,120 +402,6 @@ fn render_sugiyama_flowchart(
     }
 
     elements
-}
-
-/// 将布局管道内部数据转换为统一 Layout IR
-fn build_layout(
-    fc: &Flowchart,
-    node_positions: &HashMap<String, NodePosition>,
-    node_metrics: &HashMap<String, NodeMetrics>,
-    routed_edges: &[RoutedEdge],
-    direction: Direction,
-) -> Layout {
-    let (min_x, min_y, max_x, max_y) = compute_content_bounds(node_positions, node_metrics);
-
-    let content_size = if min_x == f64::MAX {
-        Size::new(0.0, 0.0)
-    } else {
-        Size::new(max_x - min_x, max_y - min_y)
-    };
-
-    let all_nodes = all_flowchart_nodes(fc);
-    let nodes: Vec<LayoutNode> = all_nodes
-        .iter()
-        .map(|node| {
-            let nm = node_metrics.get(&node.id);
-            let pos = node_positions.get(&node.id);
-            let size = nm.map(|m| m.size).unwrap_or(Size::new(140.0, 50.0));
-            let center = pos.map(|p| p.center).unwrap_or(Point::new(0.0, 0.0));
-
-            let bounds = Rect::new(
-                center.x - size.width / 2.0,
-                center.y - size.height / 2.0,
-                center.x + size.width / 2.0,
-                center.y + size.height / 2.0,
-            );
-
-            let ports = nm
-                .map(|m| {
-                    vec![
-                        Point::new(center.x + m.anchors.top.x, center.y + m.anchors.top.y),
-                        Point::new(center.x + m.anchors.bottom.x, center.y + m.anchors.bottom.y),
-                        Point::new(center.x + m.anchors.left.x, center.y + m.anchors.left.y),
-                        Point::new(center.x + m.anchors.right.x, center.y + m.anchors.right.y),
-                    ]
-                })
-                .unwrap_or_default();
-
-            LayoutNode {
-                id: node.id.clone(),
-                bounds,
-                ports,
-                label: node.text.clone(),
-                shape: node.shape.clone(),
-                style: NodeStyle::default(),
-            }
-        })
-        .collect();
-
-    // 子图容器：由成员节点包围盒外扩 padding 得到
-    let subgraph_padding = 24.0;
-    let subgraphs: Vec<LayoutSubgraph> = fc
-        .subgraphs
-        .iter()
-        .map(|sg| {
-            let mut sg_min_x = f64::MAX;
-            let mut sg_min_y = f64::MAX;
-            let mut sg_max_x = f64::MIN;
-            let mut sg_max_y = f64::MIN;
-            for member in &sg.nodes {
-                if let Some(ln) = nodes.iter().find(|n| n.id == member.id) {
-                    sg_min_x = sg_min_x.min(ln.bounds.min_x());
-                    sg_min_y = sg_min_y.min(ln.bounds.min_y());
-                    sg_max_x = sg_max_x.max(ln.bounds.max_x());
-                    sg_max_y = sg_max_y.max(ln.bounds.max_y());
-                }
-            }
-            if sg_min_x == f64::MAX {
-                sg_min_x = 0.0;
-                sg_min_y = 0.0;
-                sg_max_x = 0.0;
-                sg_max_y = 0.0;
-            }
-            let bounds = Rect::new(
-                sg_min_x - subgraph_padding,
-                sg_min_y - subgraph_padding - SUBGRAPH_TITLE_H,
-                sg_max_x + subgraph_padding,
-                sg_max_y + subgraph_padding,
-            );
-            LayoutSubgraph {
-                title: sg.title.clone(),
-                member_ids: sg.nodes.iter().map(|n| n.id.clone()).collect(),
-                bounds,
-            }
-        })
-        .collect();
-
-    let edges: Vec<LayoutEdge> = routed_edges
-        .iter()
-        .map(|re| LayoutEdge {
-            from: re.edge.source.clone(),
-            to: re.edge.target.clone(),
-            path: re.route.clone(),
-            arrow_at_end: true,
-            label: re.edge.label.clone(),
-            label_position: re.label_position.map(|(p, _)| p),
-            curved: false,
-        })
-        .collect();
-
-    Layout {
-        nodes,
-        edges,
-        size: content_size,
-        metadata: LayoutMetadata { direction },
-        subgraphs,
-    }
 }
 
 /// 将 Layout IR 渲染为 VisualElement
@@ -415,7 +445,7 @@ fn render_layout(layout: &Layout) -> Vec<SceneNode> {
             sg.bounds.max_y() + offset_y,
         );
         let style = vir::fs_stroke(theme::flowchart::SUBGRAPH_STROKE, theme::EDGE_WIDTH);
-        elements.push(vir::rect_node(rect, Some(8.0), style, Z_SUBGRAPH));
+        elements.push(vir::rect_node(rect, Some(8.0), style, Z_SUBGRAPH).with_class("subgraph"));
 
         if let Some(title) = &sg.title {
             let title_style = vir::text_style(
@@ -426,20 +456,23 @@ fn render_layout(layout: &Layout) -> Vec<SceneNode> {
                 TextBaseline::Top,
             );
             let title_position = Point::new(rect.min_x() + 10.0, rect.min_y() + 6.0);
-            elements.push(vir::text_node(
-                title.clone(),
-                title_position,
-                title_style
-                    .with_align(TextAlign::Left)
-                    .with_baseline(TextBaseline::Top),
-                0.0,
-                None,
-                Z_SUBGRAPH_LABEL,
-            ));
+            elements.push(
+                vir::text_node(
+                    title.clone(),
+                    title_position,
+                    title_style
+                        .with_align(TextAlign::Left)
+                        .with_baseline(TextBaseline::Top),
+                    0.0,
+                    None,
+                    Z_SUBGRAPH_LABEL,
+                )
+                .with_class("subgraph-label"),
+            );
         }
     }
 
-    // 绘制边
+    // 绘制边：曲线 + 共享 marker 复用箭头（与默认路径一致）
     for edge in &layout.edges {
         if edge.path.len() >= 2 {
             let pts: Vec<Point> = edge
@@ -447,36 +480,10 @@ fn render_layout(layout: &Layout) -> Vec<SceneNode> {
                 .iter()
                 .map(|p| Point::new(p.x + offset_x, p.y + offset_y))
                 .collect();
-            if edge.curved && pts.len() >= 2 {
-                // 贝塞尔曲线：用首尾与中点控制
-                let mut path = BezPath::new();
-                path.move_to(pts[0]);
-                if pts.len() == 2 {
-                    path.line_to(pts[1]);
-                } else {
-                    let first = pts[0];
-                    let last = pts[pts.len() - 1];
-                    let mid = Point::new((first.x + last.x) / 2.0, (first.y + last.y) / 2.0);
-                    path.curve_to(Point::new(mid.x, first.y), Point::new(mid.x, last.y), last);
-                }
-                elements.push(vir::path_node(
-                    path,
-                    vir::fs_stroke(theme::flowchart::EDGE, theme::EDGE_WIDTH),
-                    Z_AXIS,
-                ));
-            } else {
-                elements.push(vir::polyline_node(pts.clone(), edge_stroke(), Z_AXIS));
-            }
-            // 箭头：最后一段方向
-            let last = pts.last().unwrap();
-            let prev = pts[pts.len() - 2];
-            let dx = last.x - prev.x;
-            let dy = last.y - prev.y;
-            let len = (dx * dx + dy * dy).sqrt();
-            if len > 0.0 {
-                let ud = Point::new(dx / len, dy / len);
-                draw_arrow_head(&mut elements, last, &ud, &edge_stroke());
-            }
+            elements.push(
+                vir::curved_edge_node(pts, edge_stroke(), Some("arrow".to_string()), Z_AXIS)
+                    .with_class("edge"),
+            );
         }
     }
 
@@ -512,79 +519,220 @@ impl<'a> LayoutEngine for FlowchartEngine<'a> {
         let fc = self.flowchart;
         let direction = fc.direction.clone().unwrap_or(Direction::TD);
 
-        // Pass 1: 结构识别
-        let tree = recognize_structure(fc);
+        // Pass 1: 结构识别（dagre 内部完成，这里不再需要单独调用）
 
         // Pass 2: 尺寸测量（两种路径都需要，含 subgraph 内部节点）
         let all_nodes = all_flowchart_nodes(fc);
         let node_metrics = measure_nodes(&all_nodes, config);
 
-        // 检测是否可用 Sugiyama：无子图的流程图统一使用 Sugiyama 优化布局，
-        // 覆盖所有方向（TD/DT/LR/RL）；方向差异在布局后做坐标变换对齐 dagre。
+        // 统一用 dagre（dagrejs/dagre 的 Rust 移植）做分层布局，与 mermaid 官方
+        // 布局引擎一致；dagre 原生支持所有方向，并内建 compound 模式处理 subgraph。
+        let dagre_result = run_dagre_layout(fc, &node_metrics, &direction);
+
         if !has_subgraphs(fc) {
-            let (graph, _indices) = build_flowchart_graph(fc);
-
-            // LR/RL 下节点矩形在视觉上"横放"，等价于把宽高互换后按 TB 布局再转置
-            let swap = matches!(direction, Direction::LR | Direction::RL);
-
-            // 构建节点尺寸映射
-            let mut sugiyama_sizes: HashMap<NodeIndex, NodeSize> = HashMap::new();
-            for node in &fc.nodes {
-                if let Some(&idx) = _indices.get(&node.id) {
-                    let nm = &node_metrics[&node.id];
-                    let (width, height) = if swap {
-                        (nm.size.height, nm.size.width)
-                    } else {
-                        (nm.size.width, nm.size.height)
-                    };
-                    sugiyama_sizes.insert(idx, NodeSize { width, height });
-                }
-            }
-
-            // 运行 Sugiyama 4 阶段布局（内部统一 TB 坐标系）
-            let sconfig = SugiyamaConfig::default();
-            let sugiyama = SugiyamaLayout::new(sconfig, &graph);
-            let mut result = sugiyama.layout(&sugiyama_sizes);
-
-            // 按方向旋转/镜像坐标与边路径，对齐 dagre 的 rankdir 语义
-            transform_sugiyama_direction(&mut result, direction);
-
-            let elements = render_sugiyama_flowchart(fc, &result, &graph, &_indices, &node_metrics);
+            // 无子图：构造 SugiyamaResult 复用现有渲染（保留特殊箭头等细节）
+            let (graph, indices) = build_flowchart_graph(fc);
+            let result = sugiyama_result_from_dagre(fc, &dagre_result, &indices, &node_metrics);
+            let elements = render_sugiyama_flowchart(fc, &result, &graph, &indices, &node_metrics);
             return Ok(elements);
         }
 
-        // ---- 原有管线（有子图或非 TD 方向时使用） ----
-        let group_metrics = measure_groups(&tree, &node_metrics);
-
-        // Pass 3: 层级分配
-        let layers = assign_layers(&tree);
-
-        // Pass 5: 几何定位
-        let node_positions = compute_positions(
-            &tree,
-            &node_metrics,
-            &group_metrics,
-            config,
-            direction.clone(),
-        );
-
-        // 计算回边对（传递给边路由）
-        let back_edge_pairs = compute_flowchart_back_edges(fc);
-
-        // Pass 7: 边路由
-        let routed_edges = route_edges(
-            &fc.edges,
-            &node_positions,
-            &layers,
-            &back_edge_pairs,
-            direction.clone(),
-        );
-
-        // 构建统一 Layout IR
-        let layout = build_layout(fc, &node_positions, &node_metrics, &routed_edges, direction);
-
-        // 渲染为 VisualElement
+        // 有子图：构造统一 Layout IR（含子图容器框）并渲染
+        let layout = layout_from_dagre(fc, &dagre_result, &node_metrics, direction);
         Ok(render_layout(&layout))
+    }
+}
+
+/// 构建 dagre 所需的节点尺寸映射（按 id，含 subgraph 内部节点）
+fn run_dagre_layout(
+    fc: &Flowchart,
+    node_metrics: &HashMap<String, NodeMetrics>,
+    direction: &Direction,
+) -> dagre_layout::DagreLayout {
+    let swap = matches!(direction, Direction::LR | Direction::RL);
+    let mut sizes: HashMap<String, dagre_layout::NodeSize> = HashMap::new();
+    for id in node_metrics.keys() {
+        let nm = &node_metrics[id];
+        let (width, height) = if swap {
+            (nm.size.height, nm.size.width)
+        } else {
+            (nm.size.width, nm.size.height)
+        };
+        sizes.insert(id.clone(), dagre_layout::NodeSize { width, height });
+    }
+    dagre_layout::run_dagre(fc, &sizes, direction)
+}
+
+/// 把 dagre 布局结果转换为 `SugiyamaResult`（无子图路径复用现有渲染）
+fn sugiyama_result_from_dagre(
+    fc: &Flowchart,
+    dagre_result: &dagre_layout::DagreLayout,
+    indices: &HashMap<String, NodeIndex>,
+    node_metrics: &HashMap<String, NodeMetrics>,
+) -> SugiyamaResult {
+    use lievisual::geometry::Point;
+    use std::collections::HashSet;
+
+    let mut positions = HashMap::new();
+    let mut sizes = HashMap::new();
+    for (id, &idx) in indices {
+        if let Some(c) = dagre_result.centers.get(id) {
+            positions.insert(idx, Point { x: c.x, y: c.y });
+        }
+        if let Some(nm) = node_metrics.get(id) {
+            sizes.insert(
+                idx,
+                NodeSize {
+                    width: nm.size.width,
+                    height: nm.size.height,
+                },
+            );
+        }
+    }
+
+    let mut edge_routes = HashMap::new();
+    for edge in &fc.edges {
+        if let (Some(&s), Some(&t)) = (indices.get(&edge.source), indices.get(&edge.target)) {
+            if let Some(route) = dagre_result
+                .edge_routes
+                .get(&(edge.source.clone(), edge.target.clone()))
+            {
+                edge_routes.insert(
+                    (s, t),
+                    route.iter().map(|p| Point { x: p.x, y: p.y }).collect(),
+                );
+            }
+        }
+    }
+
+    SugiyamaResult {
+        positions,
+        sizes,
+        layers: HashMap::new(),
+        layer_nodes: HashMap::new(),
+        edge_routes,
+        feedback_arcs: HashSet::new(),
+        sccs: Vec::new(),
+        scc_id: HashMap::new(),
+    }
+}
+
+/// 把 dagre 布局结果转换为统一 `Layout` IR（有子图路径，含子图容器框）
+fn layout_from_dagre(
+    fc: &Flowchart,
+    dagre_result: &dagre_layout::DagreLayout,
+    node_metrics: &HashMap<String, NodeMetrics>,
+    direction: Direction,
+) -> Layout {
+    // 节点
+    let mut nodes: Vec<LayoutNode> = Vec::new();
+    let mut node_bounds: HashMap<String, Rect> = HashMap::new();
+    for node in all_flowchart_nodes(fc) {
+        let Some(c) = dagre_result.centers.get(&node.id) else {
+            continue;
+        };
+        let nm = node_metrics
+            .get(&node.id)
+            .map(|m| m.size)
+            .unwrap_or(Size::new(60.0, 30.0));
+        let bounds = Rect::new(
+            c.x - nm.width / 2.0,
+            c.y - nm.height / 2.0,
+            c.x + nm.width / 2.0,
+            c.y + nm.height / 2.0,
+        );
+        node_bounds.insert(node.id.clone(), bounds);
+        let ports = vec![
+            Point::new(bounds.min_x(), c.y),
+            Point::new(bounds.max_x(), c.y),
+            Point::new(c.x, bounds.min_y()),
+            Point::new(c.x, bounds.max_y()),
+        ];
+        nodes.push(LayoutNode {
+            id: node.id.clone(),
+            bounds,
+            ports,
+            label: node.text.clone(),
+            shape: node.shape.clone(),
+            style: NodeStyle::default(),
+        });
+    }
+
+    // 边
+    let edges: Vec<LayoutEdge> = fc
+        .edges
+        .iter()
+        .chain(fc.subgraphs.iter().flat_map(|sg| sg.edges.iter()))
+        .map(|edge| {
+            let path = dagre_result
+                .edge_routes
+                .get(&(edge.source.clone(), edge.target.clone()))
+                .cloned()
+                .unwrap_or_else(|| {
+                    // 退化：直线连接两端中心
+                    let s = dagre_result.centers.get(&edge.source);
+                    let t = dagre_result.centers.get(&edge.target);
+                    match (s, t) {
+                        (Some(a), Some(b)) => vec![*a, *b],
+                        _ => vec![],
+                    }
+                });
+            LayoutEdge {
+                from: edge.source.clone(),
+                to: edge.target.clone(),
+                path,
+                arrow_at_end: true,
+                label: edge.label.clone(),
+                label_position: None,
+                curved: true,
+            }
+        })
+        .collect();
+
+    // 子图容器：成员节点包围盒外扩 padding
+    let subgraph_padding = 24.0;
+    let subgraphs: Vec<LayoutSubgraph> = fc
+        .subgraphs
+        .iter()
+        .map(|sg| {
+            let mut min_x = f64::MAX;
+            let mut min_y = f64::MAX;
+            let mut max_x = f64::MIN;
+            let mut max_y = f64::MIN;
+            for member in &sg.nodes {
+                if let Some(b) = node_bounds.get(&member.id) {
+                    min_x = min_x.min(b.min_x());
+                    min_y = min_y.min(b.min_y());
+                    max_x = max_x.max(b.max_x());
+                    max_y = max_y.max(b.max_y());
+                }
+            }
+            if min_x == f64::MAX {
+                min_x = 0.0;
+                min_y = 0.0;
+                max_x = 0.0;
+                max_y = 0.0;
+            }
+            let bounds = Rect::new(
+                min_x - subgraph_padding,
+                min_y - subgraph_padding - SUBGRAPH_TITLE_H,
+                max_x + subgraph_padding,
+                max_y + subgraph_padding,
+            );
+            LayoutSubgraph {
+                title: sg.title.clone(),
+                member_ids: sg.nodes.iter().map(|n| n.id.clone()).collect(),
+                bounds,
+            }
+        })
+        .collect();
+
+    Layout {
+        nodes,
+        edges,
+        size: Size::new(0.0, 0.0),
+        metadata: LayoutMetadata { direction },
+        subgraphs,
     }
 }
 
@@ -622,11 +770,12 @@ fn draw_layout_node(
 
     match node.shape {
         Some(NodeShape::Circle) => {
-            let radius = size.width.min(size.height) / 2.0;
+            // measure 阶段已保证 size 为正方形且含留白，半径直接取半宽
+            let radius = size.width / 2.0;
             elements.push(vir::circle_node(center, radius, style, Z_SERIES));
         }
         Some(NodeShape::DoubleCircle) => {
-            let outer_r = size.width.min(size.height) / 2.0;
+            let outer_r = size.width / 2.0;
             let inner_r = outer_r * 0.75;
             elements.push(vir::circle_node(center, outer_r, style.clone(), Z_SERIES));
             elements.push(vir::circle_node(
@@ -637,6 +786,7 @@ fn draw_layout_node(
             ));
         }
         Some(NodeShape::Stadium) => {
+            // Stadium（跑道形）：上下直线 + 左右半圆，半圆半径 = 半高
             let w = size.width / 2.0;
             let h = size.height / 2.0;
             let r = h;
@@ -645,8 +795,8 @@ fn draw_layout_node(
             path.move_to(Point::new(center.x - w + r, center.y - h));
             path.line_to(Point::new(center.x + w - r, center.y - h));
             for i in 0..=segments {
-                let a = std::f64::consts::FRAC_PI_2 * i as f64 / segments as f64
-                    - std::f64::consts::FRAC_PI_2;
+                let a = -std::f64::consts::FRAC_PI_2
+                    + std::f64::consts::FRAC_PI_2 * 2.0 * i as f64 / segments as f64;
                 path.line_to(Point::new(
                     center.x + w - r + r * a.cos(),
                     center.y + r * a.sin(),
@@ -654,60 +804,93 @@ fn draw_layout_node(
             }
             path.line_to(Point::new(center.x - w + r, center.y + h));
             for i in 0..=segments {
-                let a = std::f64::consts::FRAC_PI_2 * i as f64 / segments as f64
-                    + std::f64::consts::FRAC_PI_2;
+                let a = std::f64::consts::FRAC_PI_2
+                    + std::f64::consts::FRAC_PI_2 * 2.0 * i as f64 / segments as f64;
                 path.line_to(Point::new(
                     center.x - w + r + r * a.cos(),
                     center.y + r * a.sin(),
                 ));
             }
             path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES));
+            elements.push(vir::path_node(path, style, Z_SERIES).with_class("node"));
         }
         Some(NodeShape::Cylinder) => {
+            // 数据库/圆柱：矩形主体 + 顶部椭圆盖 + 底部下凸弧
             let w = size.width / 2.0;
             let h = size.height / 2.0;
-            let ellipse_segments = 16;
+            let ry = (2.0 * h) * 0.13;
+            let segments = 16;
+            let left = center.x - w;
+            let right = center.x + w;
+            let top_y = center.y - h;
+            let bot_y = center.y + h;
+            // 主体（填充 + 描边）
             let mut body = BezPath::new();
-            body.move_to(Point::new(center.x - w, center.y - h * 0.7));
-            body.line_to(Point::new(center.x + w, center.y - h * 0.7));
-            body.line_to(Point::new(center.x + w, center.y + h));
-            body.line_to(Point::new(center.x - w, center.y + h));
+            body.move_to(Point::new(left, top_y + ry));
+            body.line_to(Point::new(left, bot_y - ry));
+            for i in 0..=segments {
+                let a = std::f64::consts::PI * i as f64 / segments as f64;
+                body.line_to(Point::new(
+                    center.x - w * a.cos(),
+                    bot_y - ry + ry * a.sin(),
+                ));
+            }
+            body.line_to(Point::new(right, top_y + ry));
             body.close_path();
             elements.push(vir::path_node(
                 body,
-                vir::fs_both(fill, stroke, 2.0),
+                vir::fs_both(fill, stroke, node.style.stroke_width),
                 Z_SERIES,
             ));
+            // 顶部椭圆盖（盖在主体上方，仅描边即可，但填充以覆盖接缝）
             let mut top = BezPath::new();
-            top.move_to(Point::new(center.x - w, center.y - h * 0.7));
-            for i in 0..=ellipse_segments {
-                let a = std::f64::consts::PI * i as f64 / ellipse_segments as f64;
+            top.move_to(Point::new(left, top_y + ry));
+            for i in 0..=segments {
+                let a = 2.0 * std::f64::consts::PI * i as f64 / segments as f64;
                 top.line_to(Point::new(
-                    center.x - w + w * (1.0 + a.cos()),
-                    center.y - h * 0.7 + (h * 0.3) * a.sin(),
+                    center.x - w * a.cos(),
+                    top_y + ry + ry * a.sin(),
                 ));
             }
             top.close_path();
-            elements.push(vir::path_node(
-                top,
-                vir::fs_both(fill, stroke, 2.0),
-                Z_SERIES,
-            ));
+            elements.push(
+                vir::path_node(
+                    top,
+                    vir::fs_both(fill, stroke, node.style.stroke_width),
+                    Z_SERIES,
+                )
+                .with_class("node"),
+            );
         }
         Some(NodeShape::Subroutine) => {
+            // 子程序：矩形 + 左右两侧内嵌竖条
             let w = size.width / 2.0;
             let h = size.height / 2.0;
-            let notch = 10.0;
-            let mut path = BezPath::new();
-            path.move_to(Point::new(center.x - w + notch, center.y - h));
-            path.line_to(Point::new(center.x + w - notch, center.y - h));
-            path.line_to(Point::new(center.x + w, center.y));
-            path.line_to(Point::new(center.x + w - notch, center.y + h));
-            path.line_to(Point::new(center.x - w + notch, center.y + h));
-            path.line_to(Point::new(center.x - w, center.y));
-            path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES));
+            let left = center.x - w;
+            let right = center.x + w;
+            let top = center.y - h;
+            let bot = center.y + h;
+            let mut outer = BezPath::new();
+            outer.move_to(Point::new(left, top));
+            outer.line_to(Point::new(right, top));
+            outer.line_to(Point::new(right, bot));
+            outer.line_to(Point::new(left, bot));
+            outer.close_path();
+            elements.push(vir::path_node(outer, style.clone(), Z_SERIES).with_class("node"));
+            let notch = 8.0;
+            let inner = vir::stroke(stroke, node.style.stroke_width);
+            elements.push(vir::line_node(
+                Point::new(left + notch, top),
+                Point::new(left + notch, bot),
+                inner.clone(),
+                Z_SERIES,
+            ));
+            elements.push(vir::line_node(
+                Point::new(right - notch, top),
+                Point::new(right - notch, bot),
+                inner,
+                Z_SERIES,
+            ));
         }
         Some(NodeShape::Diamond) => {
             let w = size.width / 2.0;
@@ -718,7 +901,7 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x, center.y + h));
             path.line_to(Point::new(center.x - w, center.y));
             path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES));
+            elements.push(vir::path_node(path, style, Z_SERIES).with_class("node"));
         }
         Some(NodeShape::Hexagon) => {
             let w = size.width / 2.0;
@@ -732,7 +915,7 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x - w + inset, center.y + h));
             path.line_to(Point::new(center.x - w, center.y));
             path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES));
+            elements.push(vir::path_node(path, style, Z_SERIES).with_class("node"));
         }
         Some(NodeShape::Asymmetric) => {
             let w = size.width / 2.0;
@@ -746,7 +929,7 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x - w + q, center.y + h));
             path.line_to(Point::new(center.x - w, center.y));
             path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES));
+            elements.push(vir::path_node(path, style, Z_SERIES).with_class("node"));
         }
         Some(NodeShape::Parallelogram) => {
             let w = size.width / 2.0;
@@ -758,7 +941,7 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x + w - skew, center.y + h));
             path.line_to(Point::new(center.x - w, center.y + h));
             path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES));
+            elements.push(vir::path_node(path, style, Z_SERIES).with_class("node"));
         }
         Some(NodeShape::ParallelogramAlt) => {
             let w = size.width / 2.0;
@@ -770,7 +953,7 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x + w, center.y + h));
             path.line_to(Point::new(center.x - w + skew, center.y + h));
             path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES));
+            elements.push(vir::path_node(path, style, Z_SERIES).with_class("node"));
         }
         Some(NodeShape::Trapezoid) => {
             let w = size.width / 2.0;
@@ -782,7 +965,7 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x + w, center.y + h));
             path.line_to(Point::new(center.x - w, center.y + h));
             path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES));
+            elements.push(vir::path_node(path, style, Z_SERIES).with_class("node"));
         }
         Some(NodeShape::TrapezoidAlt) => {
             let w = size.width / 2.0;
@@ -794,15 +977,11 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x + w - inset, center.y + h));
             path.line_to(Point::new(center.x - w + inset, center.y + h));
             path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES));
+            elements.push(vir::path_node(path, style, Z_SERIES).with_class("node"));
         }
         _ => {
-            elements.push(vir::rect_node(
-                rect,
-                Some(theme::NODE_RADIUS),
-                style,
-                Z_SERIES,
-            ));
+            // 默认矩形：[text] 为直角矩形（无圆角）
+            elements.push(vir::rect_node(rect, None, style, Z_SERIES).with_class("node"));
         }
     }
 
@@ -828,16 +1007,19 @@ fn draw_layout_node(
     let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
     let text_position = Point::new(center.x + x_off, center.y + y_off);
 
-    elements.push(vir::text_node(
-        text.to_string(),
-        text_position,
-        text_style
-            .with_align(TextAlign::Left)
-            .with_baseline(TextBaseline::Top),
-        0.0,
-        max_w,
-        Z_LABEL,
-    ));
+    elements.push(
+        vir::text_node(
+            text.to_string(),
+            text_position,
+            text_style
+                .with_align(TextAlign::Left)
+                .with_baseline(TextBaseline::Top),
+            0.0,
+            max_w,
+            Z_LABEL,
+        )
+        .with_class("label"),
+    );
 }
 
 #[cfg(test)]

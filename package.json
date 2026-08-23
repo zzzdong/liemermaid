@@ -1,0 +1,29 @@
+{
+  "name": "liemermaid",
+  "version": "1.0.0",
+  "description": "Mermaid 图表的 Rust 解析与渲染库，输出统一走 [lievisual](https://crates.io/crates/lievisual) 的声明式场景 IR（`Scene`）与多后端（SVG / vello_cpu PNG）。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "example": "examples",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zzzdong/liemermaid.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/zzzdong/liemermaid/issues"
+  },
+  "homepage": "https://github.com/zzzdong/liemermaid#readme",
+  "dependencies": {
+    "@mermaid-js/mermaid-cli": "^11.16.0"
+  }
+}
