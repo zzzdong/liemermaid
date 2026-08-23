@@ -6,7 +6,7 @@
 //! - 数据：`"label" : value` 或 `label : value`
 
 use crate::ast::{PieData, PieDiagram};
-use crate::parser2::common::{
+use crate::parser::common::{
     consume_line, has_input, identifier, keyword, quoted_string, rest_of_line, skip_line,
     skip_ws_and_comments, PResult,
 };

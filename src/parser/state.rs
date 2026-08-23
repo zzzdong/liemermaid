@@ -6,7 +6,7 @@
 //! - 转移：`A --> B : label`，from/to 可为 `[*]`
 
 use crate::ast::{State, StateDiagram, Transition};
-use crate::parser2::common::{
+use crate::parser::common::{
     consume_line, has_input, identifier, keyword, quoted_string, rest_of_line, skip_line,
     skip_ws_and_comments, inline_ws, PResult,
 };

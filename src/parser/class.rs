@@ -8,7 +8,7 @@
 use crate::ast::{
     Class, ClassDiagram, ClassMember, Relation, RelationKind, Visibility,
 };
-use crate::parser2::common::{
+use crate::parser::common::{
     consume_line, has_input, identifier, inline_ws, quoted_string, rest_of_line, skip_line,
     skip_ws_and_comments, PResult,
 };
@@ -20,7 +20,7 @@ use winnow::{
 
 /// 顶层入口：`classDiagram` 图表。
 pub fn class_diagram<'i>(input: &mut &'i str) -> PResult<'i, ClassDiagram> {
-    crate::parser2::common::keyword("classDiagram").parse_next(input)?;
+    crate::parser::common::keyword("classDiagram").parse_next(input)?;
     skip_ws_and_comments(input)?;
 
     let mut classes = Vec::new();
@@ -48,7 +48,7 @@ pub fn class_diagram<'i>(input: &mut &'i str) -> PResult<'i, ClassDiagram> {
 
 /// `class Name` 或 `class Name <<Annotation>> { ... }`
 fn class_decl<'i>(input: &mut &'i str) -> PResult<'i, Class> {
-    crate::parser2::common::keyword("class").parse_next(input)?;
+    crate::parser::common::keyword("class").parse_next(input)?;
     skip_ws_and_comments(input)?;
     // 类名保持原始形式（如 `Animal`），泛型参数单独存储。
     // 这样关系行里引用的 `Animal` 能与类声明匹配（mermaid 中 `~T~` 是类型参数，非名字一部分）。

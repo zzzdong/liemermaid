@@ -1,12 +1,12 @@
 pub mod ast;
 pub mod builder;
 pub mod error;
-pub mod parser2;
+pub mod parser;
 pub mod scene_ext;
 pub mod vir;
 pub use ast::Diagram;
 /// 默认解析器入口（基于 winnow 手写组合式解析器，覆盖全部 8 种图表）。
-pub use parser2::WinnowParser as MermaidParser;
+pub use parser::WinnowParser as MermaidParser;
 
 use builder::{build_diagram_with_config, types::OutputConfig};
 

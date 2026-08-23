@@ -6,7 +6,7 @@
 //!   其中 `commit`/`merge`/`cherry-pick` 通过 `id:`/`type:`/`tag:`/`parent:` 携带属性
 
 use crate::ast::{GitGraphDiagram, GitGraphStatement};
-use crate::parser2::common::{
+use crate::parser::common::{
     consume_line, has_input, identifier, keyword, quoted_string, skip_line, skip_ws_and_comments,
     inline_ws, PResult,
 };

@@ -11,7 +11,7 @@ use crate::ast::{
     Message, MessageActivation, MessageArrow, Note, NotePlacement, Participant, ParticipantKind,
     SequenceBlock, SequenceBlockKind, SequenceDiagram, SequenceItem, SequenceStatement,
 };
-use crate::parser2::common::{
+use crate::parser::common::{
     PResult, consume_line, has_input, inline_ws, keyword, participant_kind, quoted_string, rest_of_line, skip_line, skip_ws_and_comments,
 };
 use winnow::{

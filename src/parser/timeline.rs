@@ -7,7 +7,7 @@
 //! - 事件行：`1950 : Event A : Event B`
 
 use crate::ast::{TimelineDiagram, TimelineDirection, TimelineSection};
-use crate::parser2::common::{
+use crate::parser::common::{
     consume_line, has_input, keyword, rest_of_line, skip_ws_and_comments, PResult,
 };
 use winnow::{Parser, combinator::alt};

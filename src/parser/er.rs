@@ -7,7 +7,7 @@
 use crate::ast::{
     Cardinality, ErAttribute, ErDiagram, ErEntity, ErRelationship,
 };
-use crate::parser2::common::{
+use crate::parser::common::{
     consume_line, has_input, identifier, quoted_string, rest_of_line, skip_line,
     skip_ws_and_comments, ws, PResult,
 };
@@ -19,7 +19,7 @@ use winnow::{
 
 /// 顶层入口：`erDiagram` 图表。
 pub fn er_diagram<'i>(input: &mut &'i str) -> PResult<'i, ErDiagram> {
-    crate::parser2::common::keyword("erDiagram").parse_next(input)?;
+    crate::parser::common::keyword("erDiagram").parse_next(input)?;
     skip_ws_and_comments(input)?;
 
     let mut entities = Vec::new();

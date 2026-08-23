@@ -5,7 +5,7 @@
 //! - 重复声明覆盖、引号 id、行内注释
 
 use crate::ast::{ArrowType, Edge, Flowchart, Node, NodeShape, Subgraph};
-use crate::parser2::common::{
+use crate::parser::common::{
     direction, has_input, identifier, peek_end, rest_of_line, skip_ws_and_comments, text, ws1,
     PResult,
 };
