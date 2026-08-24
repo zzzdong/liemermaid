@@ -149,7 +149,51 @@ pub fn run_dagre(
     let mut edge_routes = HashMap::new();
     let all_edges: Vec<&crate::ast::Edge> =
         fc.edges.iter().chain(fc.subgraphs.iter().flat_map(|sg| sg.edges.iter())).collect();
+    // 自环边（源 == 目标）：dagre 不支持自环，会给一条从中心绕图右侧回到中心的怪异曲线。
+    // 这里跳过 dagre 的 route，改为在节点右侧（LR/RL 则下侧）画紧凑小环。
+    let mut self_loop_routes: HashMap<(String, String), Vec<Point>> = HashMap::new();
+    for edge in all_edges.iter() {
+        if edge.source == edge.target {
+            if let (Some(&c), Some(&s)) = (centers.get(&edge.source), sizes.get(&edge.source)) {
+                let (hw, hh) = if swap { (s.height / 2.0, s.width / 2.0) } else { (s.width / 2.0, s.height / 2.0) };
+                let route = if swap {
+                    // LR/RL：节点竖放，自环从节点底部画出 U 形（起止于底边左右，向下凸出），
+                    // 避开向右走的出边，避免重叠。起止点在底边界而非中心。
+                    let bottom = c.y + hh;
+                    let dx = hw * 0.28;
+                    let loop_h = (hw * 1.4).max(18.0);
+                    vec![
+                        Point::new(c.x - dx, bottom),
+                        Point::new(c.x - dx, bottom + loop_h * 0.5),
+                        Point::new(c.x, bottom + loop_h),
+                        Point::new(c.x + dx, bottom + loop_h * 0.5),
+                        Point::new(c.x + dx, bottom),
+                    ]
+                } else {
+                    // TB/BT：节点横放，自环从节点右侧画出 U 形（起止于右边缘上下，向右凸出），
+                    // 避开向下走的出边（如 B->C），避免重叠。起止点在右边界而非中心。
+                    let right = c.x + hw;
+                    let dy = hh * 0.28;
+                    let loop_w = (hw * 0.9).max(16.0);
+                    vec![
+                        Point::new(right, c.y - dy),
+                        Point::new(right + loop_w, c.y - dy),
+                        Point::new(right + loop_w, c.y + dy),
+                        Point::new(right, c.y + dy),
+                    ]
+                };
+                self_loop_routes.insert((edge.source.clone(), edge.target.clone()), route);
+            }
+        }
+    }
+
     for edge in all_edges {
+        // 自环边：直接用预生成的小环 route，跳过 dagre 查找
+        if let Some(route) = self_loop_routes.get(&(edge.source.clone(), edge.target.clone())) {
+            edge_routes.insert((edge.source.clone(), edge.target.clone()), route.clone());
+            continue;
+        }
+
         // dagre 内部对平行反向边（如 B->C 与 C->B）会按无向键去重，只保留一个方向。
         // 因此精确方向查找可能失败；此时反向查找并反转点序，复用同一条折线。
         let mut found = dg.edge(&edge.source, &edge.target, None);
@@ -215,6 +259,12 @@ fn separate_parallel_edges(
     for e in &edges {
         let key = (e.source.clone(), e.target.clone());
         if done.contains(&key) {
+            continue;
+        }
+        // 自环边（源 == 目标）由 run_dagre 预生成小环，且 separate_one 的端点吸附
+        // 会把首尾吸到节点中心（toward 取自身中心），故这里跳过，保留预生成的小环。
+        if e.source == e.target {
+            done.insert(key);
             continue;
         }
         let Some(rev_e) = edges

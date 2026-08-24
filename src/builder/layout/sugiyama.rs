@@ -266,6 +266,32 @@ impl<'a> SugiyamaLayout<'a> {
         for edge in self.graph.edge_references() {
             let u = edge.source();
             let v = edge.target();
+
+            // 自环边：工作图会丢弃 a==b 的边，这里单独生成节点右侧的小环
+            if u == v {
+                // res 的 positions/sizes 以工作图节点为 key，需用 real_to_work 转换
+                if let (Some(&wu), Some(&fp), Some(&fs)) = (
+                    real_to_work.get(&u),
+                    res.positions.get(real_to_work.get(&u).unwrap_or(&u)),
+                    res.sizes.get(real_to_work.get(&u).unwrap_or(&u)),
+                ) {
+                    let _ = wu;
+                    let right = fp.x + fs.width / 2.0;
+                    let cy = fp.y;
+                    let loop_w = self.config.node_gap * 0.7;
+                    let loop_h = fs.height * 0.55;
+                    let route = vec![
+                        Point::new(right, cy - 3.0),
+                        Point::new(right + loop_w, cy - 3.0),
+                        Point::new(right + loop_w, cy - loop_h),
+                        Point::new(right, cy - loop_h),
+                        Point::new(right, cy + 3.0),
+                    ];
+                    out.insert((u, v), route);
+                }
+                continue;
+            }
+
             let chain = edge_dummies.get(&(u, v)).unwrap_or(&empty_chain);
             // 原始边无 dummy（span<=1）：直接用工作图边 route
             if chain.is_empty() {

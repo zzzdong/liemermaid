@@ -123,8 +123,8 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                 theme::sequence::TEXT,
                 FONT_SIZE,
                 theme::FONT_FAMILY,
-                TextAlign::Center,
-                TextBaseline::Middle,
+                TextAlign::Left,
+                TextBaseline::Top,
             ),
             0.0,
             Some(bw - 8.0),
@@ -318,9 +318,9 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         }
     }
 
-    // ---- 底部参与者盒子的位置（生命线终点对齐盒子中心） ----
+    // ---- 底部参与者盒子的位置（生命线终点对齐盒子顶边） ----
     let bottom_box_top = cur_y + 30.0;
-    let lifeline_bottom = bottom_box_top + BOX_HEIGHT / 2.0;
+    let lifeline_bottom = bottom_box_top;
 
     // ---- 生命线（官方 mermaid 使用单条虚线） ----
     let lifeline_stroke = vir::dashed_stroke(theme::sequence::LIFELINE, 1.0, vec![6.0, 4.0]);
@@ -346,14 +346,16 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         let y = r.y + MESSAGE_SPACING * 0.3;
         match r.activation {
             Some(MessageActivation::Activate) => {
+                // + 激活接收方（to），与 mermaid 语义一致
                 act_stack.entry(r.ti).or_default().push(y);
             }
             Some(MessageActivation::Deactivate) => {
-                if let Some(stack) = act_stack.get_mut(&r.ti) {
+                // - 反激活发送方（from），与 mermaid 语义一致
+                if let Some(stack) = act_stack.get_mut(&r.fi) {
                     if let Some(start) = stack.pop() {
                         let h = y - start;
                         if h > 0.0 {
-                            let cx = col_centers[r.ti] + r.depth as f64 * BLOCK_INDENT;
+                            let cx = col_centers[r.fi] + r.depth as f64 * BLOCK_INDENT;
                             let rect = lievisual::geometry::Rect::new(
                                 cx - ACTIVATION_W / 2.0,
                                 start,
@@ -673,8 +675,8 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                 theme::sequence::TEXT,
                 FONT_SIZE,
                 theme::FONT_FAMILY,
-                TextAlign::Center,
-                TextBaseline::Middle,
+                TextAlign::Left,
+                TextBaseline::Top,
             ),
             0.0,
             Some(bw - 8.0),

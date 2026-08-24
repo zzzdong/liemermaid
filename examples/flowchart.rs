@@ -16,16 +16,12 @@ use std::fs;
 
 fn main() {
     let input = r#"flowchart TB
-    A[Rectangle]
-    B(Rounded)
-    C([Stadium])
-    D[[Subroutine]]
-    E[(Database)]
-    F((Circle))
-    G{Diamond}
-    H>Flag]
-    I[/Sloped/]
-    J((DoubleCircle))
+    A[A]
+    B[B]
+    C[C]
+    A --> B
+    B --> B
+    B --> C
 "#;
 
     let _diagram = MermaidParser::parse_mermaid(input).expect("parse failed");
