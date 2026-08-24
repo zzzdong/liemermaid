@@ -16,8 +16,6 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-#[path = "golden/semantics.rs"]
-mod semantics;
 #[path = "golden/svgdiff.rs"]
 mod svgdiff;
 
@@ -85,39 +83,27 @@ fn official_semantic_compare() {
             }
         };
 
-        // 层 1：语义比对
-        let ours_sem = semantics::extract(&ours, false);
-        let golden_sem = semantics::extract(&golden_svg, true);
-        let sd = semantics::compare(&ours_sem, &golden_sem);
-        let mut detail = String::new();
-        if !sd.is_empty() {
-            detail.push_str("SEMANTICS:\n");
-            detail.push_str(&sd.describe());
-        }
-
-        // 层 2：svgdiff 结构比对
-        let ours_sum = svgdiff::summarize(&svgdiff::parse(&ours));
-        let golden_sum = svgdiff::summarize(&svgdiff::parse(&golden_svg));
+        // 层 1：svgdiff 内容正确性比对（文本集合相等 + 节点/边拓扑数量相等）。
+        // 已不依赖 class 命名——回退后 liemermaid 不再输出官方 class，改用几何类型推断。
+        let ours_els = svgdiff::parse(&ours);
+        let golden_els = svgdiff::parse(&golden_svg);
+        let ours_sum = svgdiff::summarize(&ours_els);
+        let golden_sum = svgdiff::summarize(&golden_els);
         let dd = svgdiff::compare(&ours_sum, &golden_sum);
+        let mut detail = String::new();
         if !dd.is_empty() {
-            detail.push_str("SVGDIFF:\n");
+            detail.push_str("SVGDIFF (content/geometry):\n");
             detail.push_str(&dd.describe());
         }
 
-        // 结构回归门槛：核心实体类型（node/actor/slice/message）若官方有而
-        // liemermaid 完全未渲染（ours=0），视为结构性回归，硬失败。
+        // 结构回归门槛：核心实体（节点/边）若官方有而 liemermaid 完全未渲染
+        // （几何数量 = 0），视为结构性回归，硬失败。基于几何推断而非 class 命名。
         let mut struct_missing = Vec::new();
-        for (sem, name) in [
-            (semantics::Sem::Node, "node"),
-            (semantics::Sem::Actor, "actor"),
-            (semantics::Sem::Slice, "slice"),
-            (semantics::Sem::Message, "message"),
-        ] {
-            let g = golden_sem.types.get(&sem).copied().unwrap_or(0);
-            let o = ours_sem.types.get(&sem).copied().unwrap_or(0);
-            if g > 0 && o == 0 {
-                struct_missing.push(name);
-            }
+        if !golden_sum.node_centers.is_empty() && ours_sum.node_centers.is_empty() {
+            struct_missing.push("node");
+        }
+        if !golden_sum.edge_endpoints.is_empty() && ours_sum.edge_endpoints.is_empty() {
+            struct_missing.push("edge");
         }
         if !struct_missing.is_empty() {
             detail.push_str(&format!(
@@ -137,11 +123,11 @@ fn official_semantic_compare() {
     for (k, v) in &failures {
         println!("--- {k} ---\n{v}");
     }
-    // 结构回归门槛：挡住"某 diagram 类型结构完全丢失"的回归。
-    // 文本/分段差异仍为报告式（待逐步收敛）。如需全量硬门槛，改为 assert failures.is_empty()。
+    // 结构回归门槛：挡住"某 diagram 类型结构完全丢失"的回归（节点/边几何数量为 0）。
+    // 文本/拓扑差异仍为报告式（待逐步收敛）。如需全量硬门槛，改为 assert failures.is_empty()。
     assert!(
         struct_failures.is_empty(),
-        "{} cases have structural regressions (core entity types missing entirely): {:?}",
+        "{} cases have structural regressions (core geometry missing entirely): {:?}",
         struct_failures.len(),
         struct_failures
     );

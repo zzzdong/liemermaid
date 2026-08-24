@@ -374,7 +374,7 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
         }
     }
 
-    // ---- Draw transitions with orthogonal routing ----
+    // ---- Draw transitions with routing ----
     for t in &diagram.transitions {
         let from_key = if t.from == "[*]" {
             START_KEY.to_string()
@@ -391,76 +391,145 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
         if let (Some(fp), Some(tp)) = (from_pos, to_pos) {
             let from_nl = &node_layouts[&from_key];
             let to_nl = &node_layouts[&to_key];
-            // Start/End 是圆形，实际边界 = 中心 + 圆半径 (r=16 + 3=19)，不是 height/2
-            let from_bottom = if from_key == START_KEY {
-                fp.y + 19.0
-            } else {
-                fp.y + from_nl.height / 2.0
+            // 节点边界偏移（Start 实心圆 r=10, End 双环 r=12, Fork/Join 横线, Normal 矩形半高）
+            let from_node = &state_map[&from_key];
+            let to_node = &state_map[&to_key];
+            let from_bottom = match from_node {
+                StateNode::Start => fp.y + 10.0,
+                StateNode::End => fp.y + 12.0,
+                StateNode::Fork | StateNode::Join => fp.y + 3.0, // 横线半宽
+                _ => fp.y + from_nl.height / 2.0,
             };
-            let to_top = if to_key == END_KEY {
-                tp.y - 19.0
-            } else {
-                tp.y - to_nl.height / 2.0
+            let to_top = match to_node {
+                StateNode::Start => tp.y - 10.0,
+                StateNode::End => tp.y - 12.0,
+                StateNode::Fork | StateNode::Join => tp.y - 3.0,
+                _ => tp.y - to_nl.height / 2.0,
             };
             let mid_y = (from_bottom + to_top) / 2.0;
 
             let stroke = vir::stroke(theme::state::EDGE, 1.5);
 
-            // Orthogonal routing:
-            // - Same X: straight vertical line (2 points)
-            // - Different X: vertical → horizontal → vertical (4 points)
-            let points = if (fp.x - tp.x).abs() < 0.001 {
-                vec![Point::new(fp.x, from_bottom), Point::new(fp.x, to_top)]
-            } else {
-                vec![
-                    Point::new(fp.x, from_bottom),
-                    Point::new(fp.x, mid_y),
-                    Point::new(tp.x, mid_y),
-                    Point::new(tp.x, to_top),
-                ]
-            };
+            // 检测回环边：目标节点在源节点上方
+            let is_back_edge = to_top < from_bottom - 1.0;
 
-            elements.push(vir::polyline_node(points, stroke.clone(), Z_AXIS).with_class("edge"));
+            if is_back_edge {
+                // 回环边：使用二次贝塞尔曲线绕行右侧，避免与正向边重叠
+                // 控制点向右偏移，偏移量与垂直距离成正比
+                let dx = (tp.x - fp.x).abs().max(40.0);
+                let _dy = (from_bottom - to_top).max(20.0);
+                let ctrl_x = fp.x.max(tp.x) + dx * 0.6;
+                let ctrl_y = mid_y;
 
-            // Arrow head at target
-            let sz = 7.0;
-            elements.push(vir::line_node(
-                Point::new(tp.x, to_top),
-                Point::new(tp.x - sz * 0.4, to_top - sz),
-                stroke.clone(),
-                Z_AXIS,
-            ));
-            elements.push(vir::line_node(
-                Point::new(tp.x, to_top),
-                Point::new(tp.x + sz * 0.4, to_top - sz),
-                stroke,
-                Z_AXIS,
-            ));
-
-            // Transition label centered at the horizontal segment mid-point
-            if let Some(label) = &t.label {
-                let ts = vir::text_style(
-                    theme::state::TEXT,
-                    12.0,
-                    String::new(),
-                    TextAlign::Center,
-                    TextBaseline::Bottom,
+                use vello_cpu::kurbo::BezPath;
+                let mut path = BezPath::new();
+                path.move_to(lievisual::geometry::Point::new(fp.x, from_bottom));
+                path.quad_to(
+                    lievisual::geometry::Point::new(ctrl_x, ctrl_y),
+                    lievisual::geometry::Point::new(tp.x, to_top),
                 );
-                let layout =
-                    layout_text(&[RichSpan::new(label.to_string(), ts.clone())], Some(200.0));
-                let (x_off, y_off) =
-                    compute_text_offset(&layout, TextAlign::Center, TextBaseline::Bottom);
-                let label_cx = (fp.x + tp.x) / 2.0;
-                elements.push(vir::text_node(
-                    label.clone(),
-                    Point::new(label_cx + x_off, mid_y - 4.0 + y_off),
-                    ts.clone()
-                        .with_align(TextAlign::Left)
-                        .with_baseline(TextBaseline::Top),
-                    0.0,
-                    Some(200.0),
-                    Z_LABEL,
+                elements.push(vir::path_node(path, vir::fs_stroke(stroke.color, stroke.width), Z_AXIS));
+
+                // 箭头：沿曲线末端切线方向
+                let sz = 7.0;
+                // 切线方向近似：终点 → 控制点的反方向
+                let end_dx = tp.x - ctrl_x;
+                let end_dy = to_top - ctrl_y;
+                let end_l = (end_dx * end_dx + end_dy * end_dy).sqrt().max(1e-6);
+                let ux = end_dx / end_l;
+                let uy = end_dy / end_l;
+                elements.push(vir::line_node(
+                    lievisual::geometry::Point::new(tp.x, to_top),
+                    lievisual::geometry::Point::new(tp.x - sz * (ux * 0.4 + uy * 0.5), to_top - sz * (uy * 0.4 - ux * 0.5)),
+                    stroke.clone(),
+                    Z_AXIS,
                 ));
+                elements.push(vir::line_node(
+                    lievisual::geometry::Point::new(tp.x, to_top),
+                    lievisual::geometry::Point::new(tp.x + sz * (ux * 0.4 - uy * 0.5), to_top - sz * (uy * 0.4 + ux * 0.5)),
+                    stroke,
+                    Z_AXIS,
+                ));
+
+                // 标签放在控制点附近
+                if let Some(label) = &t.label {
+                    let ts = vir::text_style(
+                        theme::state::TEXT,
+                        12.0,
+                        String::new(),
+                        TextAlign::Center,
+                        TextBaseline::Bottom,
+                    );
+                    let layout =
+                        layout_text(&[RichSpan::new(label.to_string(), ts.clone())], Some(200.0));
+                    let (x_off, y_off) =
+                        compute_text_offset(&layout, TextAlign::Center, TextBaseline::Bottom);
+                    elements.push(vir::text_node(
+                        label.clone(),
+                        lievisual::geometry::Point::new(ctrl_x + x_off, ctrl_y - 4.0 + y_off),
+                        ts.clone()
+                            .with_align(TextAlign::Left)
+                            .with_baseline(TextBaseline::Top),
+                        0.0,
+                        Some(200.0),
+                        Z_LABEL,
+                    ));
+                }
+            } else {
+                // 普通正向边：直角折线路由
+                let points = if (fp.x - tp.x).abs() < 0.001 {
+                    vec![lievisual::geometry::Point::new(fp.x, from_bottom), lievisual::geometry::Point::new(fp.x, to_top)]
+                } else {
+                    vec![
+                        lievisual::geometry::Point::new(fp.x, from_bottom),
+                        lievisual::geometry::Point::new(fp.x, mid_y),
+                        lievisual::geometry::Point::new(tp.x, mid_y),
+                        lievisual::geometry::Point::new(tp.x, to_top),
+                    ]
+                };
+
+                elements.push(vir::polyline_node(points, stroke.clone(), Z_AXIS));
+
+                // Arrow head at target
+                let sz = 7.0;
+                elements.push(vir::line_node(
+                    lievisual::geometry::Point::new(tp.x, to_top),
+                    lievisual::geometry::Point::new(tp.x - sz * 0.4, to_top - sz),
+                    stroke.clone(),
+                    Z_AXIS,
+                ));
+                elements.push(vir::line_node(
+                    lievisual::geometry::Point::new(tp.x, to_top),
+                    lievisual::geometry::Point::new(tp.x + sz * 0.4, to_top - sz),
+                    stroke,
+                    Z_AXIS,
+                ));
+
+                // Transition label centered at the horizontal segment mid-point
+                if let Some(label) = &t.label {
+                    let ts = vir::text_style(
+                        theme::state::TEXT,
+                        12.0,
+                        String::new(),
+                        TextAlign::Center,
+                        TextBaseline::Bottom,
+                    );
+                    let layout =
+                        layout_text(&[RichSpan::new(label.to_string(), ts.clone())], Some(200.0));
+                    let (x_off, y_off) =
+                        compute_text_offset(&layout, TextAlign::Center, TextBaseline::Bottom);
+                    let label_cx = (fp.x + tp.x) / 2.0;
+                    elements.push(vir::text_node(
+                        label.clone(),
+                        lievisual::geometry::Point::new(label_cx + x_off, mid_y - 4.0 + y_off),
+                        ts.clone()
+                            .with_align(TextAlign::Left)
+                            .with_baseline(TextBaseline::Top),
+                        0.0,
+                        Some(200.0),
+                        Z_LABEL,
+                    ));
+                }
             }
         }
     }
@@ -473,65 +542,46 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
 
         match node {
             StateNode::Start => {
-                let r = 16.0;
-                // Outer circle (white fill, dark stroke)
+                // 官方 mermaid: 实心黑圆 (filled circle, #333)
+                let r = 10.0;
                 elements.push(vir::circle_node(
                     *pos,
-                    r + 3.0,
-                    vir::fs_both(Color::rgb(255, 255, 255), theme::state::START_FILL, 2.0),
+                    r,
+                    vir::fs_fill(Color::new(51.0 / 255.0, 51.0 / 255.0, 51.0 / 255.0, 1.0)),
                     Z_SERIES,
                 ));
-                // Inner filled circle
-                elements.push(vir::circle_node(
-                    *pos,
-                    r - 2.0,
-                    vir::fs_fill(theme::state::START_FILL),
-                    Z_SERIES,
-                ).with_class("node"));
             }
             StateNode::End => {
-                let r = 16.0;
-                // Outer circle
+                // 官方 mermaid: 双圆环 (double circle, 同心圆描边)
+                let r_outer = 12.0;
+                let r_inner = 8.0;
+                let stroke_color = theme::state::END_STROKE;
                 elements.push(vir::circle_node(
                     *pos,
-                    r + 3.0,
-                    vir::fs_both(Color::rgb(255, 255, 255), theme::state::END_STROKE, 2.5),
+                    r_outer,
+                    vir::fs_stroke(stroke_color, 2.0),
                     Z_SERIES,
-                ).with_class("node"));
-                // Inner ring
+                ));
                 elements.push(vir::circle_node(
                     *pos,
-                    r - 4.0,
-                    vir::fs_both(Color::rgb(255, 255, 255), theme::state::END_STROKE, 2.5),
+                    r_inner,
+                    vir::fs_stroke(stroke_color, 2.0),
                     Z_SERIES,
-                ).with_class("node"));
+                ));
             }
             StateNode::Fork => {
-                // fork 节点：粗横线 + 向下小三角（官方 mermaid 表现）。
+                // 官方 mermaid fork: 粗横线（同步条），无三角箭头
                 let w = nl.width / 2.0;
                 let y = pos.y;
                 elements.push(vir::line_node(
                     Point::new(pos.x - w, y),
                     Point::new(pos.x + w, y),
                     vir::Stroke::new(theme::state::STROKE, 6.0),
-                    Z_SERIES,
-                ).with_class("node"));
-                let sz = 7.0;
-                elements.push(vir::line_node(
-                    Point::new(pos.x, y),
-                    Point::new(pos.x - sz * 0.5, y - sz),
-                    vir::Stroke::new(theme::state::STROKE, 2.0),
-                    Z_SERIES,
-                ));
-                elements.push(vir::line_node(
-                    Point::new(pos.x, y),
-                    Point::new(pos.x + sz * 0.5, y - sz),
-                    vir::Stroke::new(theme::state::STROKE, 2.0),
                     Z_SERIES,
                 ));
             }
             StateNode::Join => {
-                // join 节点：粗横线（无三角箭头）+ 标签文本（官方 mermaid 会显示 id 标签）。
+                // 官方 mermaid join: 粗横线（同步条），标签在下方
                 let w = nl.width / 2.0;
                 let y = pos.y;
                 elements.push(vir::line_node(
@@ -539,24 +589,24 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
                     Point::new(pos.x + w, y),
                     vir::Stroke::new(theme::state::STROKE, 6.0),
                     Z_SERIES,
-                ).with_class("node"));
+                ));
                 if !nl.label.is_empty() {
                     let ts = vir::text_style(
                         theme::state::TEXT,
                         FONT_SIZE,
                         theme::FONT_FAMILY.to_string(),
                         TextAlign::Center,
-                        TextBaseline::Middle,
+                        TextBaseline::Top,
                     );
                     let layout = layout_text(
                         &[RichSpan::new(nl.label.to_string(), ts.clone())],
                         None,
                     );
                     let (x_off, y_off) =
-                        compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
+                        compute_text_offset(&layout, TextAlign::Center, TextBaseline::Top);
                     elements.push(vir::text_node(
                         nl.label.clone(),
-                        Point::new(pos.x + x_off, y + y_off + 18.0),
+                        Point::new(pos.x + x_off, y + 6.0 + y_off),
                         ts.with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
                         0.0,
                         None,
@@ -578,7 +628,7 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
                     None,
                     vir::fs_both(theme::state::FILL, theme::state::STROKE, 1.0),
                     Z_SERIES,
-                ).with_class("node"));
+                ));
                 // 标题
                 if !nl.label.is_empty() {
                     let ts = vir::text_style(
@@ -626,7 +676,7 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
                     Some(r),
                     vir::fs_both(theme::state::FILL, theme::state::STROKE, 2.0),
                     Z_SERIES,
-                ).with_class("node"));
+                ));
 
                 // State label
                 let ts = vir::text_style(

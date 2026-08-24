@@ -66,9 +66,8 @@ fn sample_polyline(route: &[Point], step: f64) -> Vec<Point> {
     pts
 }
 
-/// 绘制虚线边：沿 route 折线按 dash/gap 周期切分出短直线段。
-/// 仅在最后一个采样点所在的绘制段上附加箭头 marker。
-fn draw_dashed_edge(elements: &mut Vec<SceneNode>, route: &[Point], marker_id: &Option<String>) {
+/// 绘制虚线边：沿 route 折线按 dash/gap 周期切分出短直线段，终点自绘箭头。
+fn draw_dashed_edge(elements: &mut Vec<SceneNode>, route: &[Point]) {
     const DASH: f64 = 6.0;
     const GAP: f64 = 4.0;
     const STEP: f64 = 2.0;
@@ -80,6 +79,8 @@ fn draw_dashed_edge(elements: &mut Vec<SceneNode>, route: &[Point], marker_id: &
     let mut drawing = true; // 当前处于 dash 段还是 gap 段
     let mut phase: f64 = 0.0; // 当前段内已走过的距离（用于判断是否跨越边界）
     let mut cur = dense[0];
+    let mut last_dir = Point::new(0.0, 0.0);
+    let mut last_point = dense[dense.len() - 1];
     for i in 1..dense.len() {
         let p = dense[i];
         let seg = cur.distance(p.clone());
@@ -87,7 +88,6 @@ fn draw_dashed_edge(elements: &mut Vec<SceneNode>, route: &[Point], marker_id: &
             cur = p;
             continue;
         }
-        let is_last = i == dense.len() - 1;
         let mut pos = 0.0;
         while pos < seg {
             let remain = if drawing { DASH - phase } else { GAP - phase };
@@ -97,11 +97,9 @@ fn draw_dashed_edge(elements: &mut Vec<SceneNode>, route: &[Point], marker_id: &
                 cur.y + (p.y - cur.y) * (pos + take) / seg,
             );
             if drawing {
-                let seg_marker = if is_last { marker_id.clone() } else { None };
-                elements.push(
-                    vir::curved_edge_node(vec![cur, next], stroke.clone(), seg_marker, Z_AXIS)
-                        .with_class("edge"),
-                );
+                elements.push(vir::polyline_node(vec![cur, next], stroke.clone(), Z_AXIS));
+                last_dir = Point::new(next.x - cur.x, next.y - cur.y);
+                last_point = next;
             }
             pos += take;
             phase += take;
@@ -113,6 +111,11 @@ fn draw_dashed_edge(elements: &mut Vec<SceneNode>, route: &[Point], marker_id: &
             cur = next;
         }
         cur = p;
+    }
+    let len = (last_dir.x * last_dir.x + last_dir.y * last_dir.y).sqrt();
+    if len > 0.0 {
+        let ud = Point::new(last_dir.x / len, last_dir.y / len);
+        draw_arrow_head(elements, &last_point, &ud, &edge_stroke(), false);
     }
 }
 
@@ -260,8 +263,11 @@ fn render_sugiyama_flowchart(
         *pts.last().unwrap()
     }
 
-    // 边标签：白底框 + 文本（对齐官方 edgeLabel）
+    // 边标签：半透明灰底 + 文本（对齐官方 edgeLabelBackground=rgba(232,232,232,0.8)）
     fn draw_edge_label(elements: &mut Vec<SceneNode>, pos: Point, text: &str) {
+        // 官方默认 edgeLabelBackground = rgba(232,232,232,0.8)
+        let label_bg = Color::new(232.0 / 255.0, 232.0 / 255.0, 232.0 / 255.0, 0.8);
+        let label_bg_stroke = Color::new(200.0 / 255.0, 200.0 / 255.0, 200.0 / 255.0, 1.0);
         let style = vir::text_style(
             theme::flowchart::TEXT,
             NODE_FONT_SIZE,
@@ -282,10 +288,10 @@ fn render_sugiyama_flowchart(
                     pos.y + h / 2.0,
                 ),
                 Some(2.0),
-                vir::fs_both(Color::rgb(255, 255, 255), Color::rgb(255, 255, 255), 1.0),
+                vir::fs_both(label_bg, label_bg_stroke, 1.0),
                 Z_LABEL,
             )
-            .with_class("edge-label"),
+            ,
         );
         elements.push(vir::text_node(
             text.to_string(),
@@ -306,39 +312,30 @@ fn render_sugiyama_flowchart(
         {
             if route.len() >= 2 {
                 let arrow = &edge.arrow_type;
-                // 终点箭头：普通箭头（Normal/Open/Tailed）用共享 marker 复用，
-                // 避免每条边独立绘制箭头（缩小与官方的边数差异）。特殊形状保留独立绘制。
-                let marker_id: Option<&str> = match arrow {
-                    ArrowType::NoArrow | ArrowType::Invisible => None,
-                    ArrowType::Circle
-                    | ArrowType::MultiCircle
-                    | ArrowType::Cross
-                    | ArrowType::MultiCross => None,
-                    _ => Some("arrow"),
-                };
-                let marker = marker_id.map(str::to_string);
                 if let ArrowType::Dotted = arrow {
-                    // 虚线：沿折线切分短直线段（官方 -.-> 样式）
-                    draw_dashed_edge(&mut elements, &route, &marker);
+                    // 虚线：沿折线切分短直线段
+                    draw_dashed_edge(&mut elements, &route);
                 } else {
-                    elements.push(
-                        vir::curved_edge_node(
-                            route.clone(),
-                            edge_stroke_for(arrow),
-                            marker.clone(),
-                            Z_AXIS,
-                        )
-                        .with_class("edge"),
-                    );
+                    elements.push(vir::curved_edge_node(route.clone(), edge_stroke_for(arrow), Z_AXIS));
                 }
-                // 边标签（官方 edgeLabel）
+                // 边标签
                 if let Some(label_text) = &edge.label {
                     let mid = polyline_point_at(route, 0.5);
                     draw_edge_label(&mut elements, mid, label_text);
                 }
                 let last = route.last().unwrap();
                 let first = route.first().unwrap();
-                // 特殊终点标记（Circle/Cross 形状）
+                let n = route.len();
+                let prev = &route[n - 2];
+                let dx = last.x - prev.x;
+                let dy = last.y - prev.y;
+                let len = (dx * dx + dy * dy).sqrt();
+                let tip_dir = if len > 0.0 {
+                    Point::new(dx / len, dy / len)
+                } else {
+                    Point::new(0.0, 0.0)
+                };
+                // 终点标记：特殊形状自绘，普通箭头用 draw_arrow_head 自绘（IR 不含箭头概念）
                 match arrow {
                     ArrowType::NoArrow | ArrowType::Invisible => {}
                     ArrowType::Circle | ArrowType::MultiCircle => {
@@ -347,7 +344,11 @@ fn render_sugiyama_flowchart(
                     ArrowType::Cross | ArrowType::MultiCross => {
                         draw_arrow_cross(&mut elements, last, &edge_stroke());
                     }
-                    _ => {} // Normal/Open/Tailed 已由 marker 绘制终点箭头
+                    _ => {
+                        if len > 0.0 {
+                            draw_arrow_head(&mut elements, last, &tip_dir, &edge_stroke(), false);
+                        }
+                    }
                 }
                 // 双向箭头：起点也画一个反向标记
                 if arrow == &ArrowType::Both
@@ -368,7 +369,7 @@ fn render_sugiyama_flowchart(
                                 draw_arrow_cross(&mut elements, first, &edge_stroke());
                             }
                             _ => {
-                                draw_arrow_head(&mut elements, first, &ud, &edge_stroke());
+                                draw_arrow_head(&mut elements, first, &ud, &edge_stroke(), false);
                             }
                         }
                     }
@@ -444,8 +445,10 @@ fn render_layout(layout: &Layout) -> Vec<SceneNode> {
             sg.bounds.max_x() + offset_x,
             sg.bounds.max_y() + offset_y,
         );
-        let style = vir::fs_stroke(theme::flowchart::SUBGRAPH_STROKE, theme::EDGE_WIDTH);
-        elements.push(vir::rect_node(rect, Some(8.0), style, Z_SUBGRAPH).with_class("subgraph"));
+        // 官方 default 主题：subgraph 容器 clusterBkg=#FFFFDE（浅黄）+ 描边 #9370DB
+        let subgraph_fill = Color::new(255.0 / 255.0, 255.0 / 255.0, 222.0 / 255.0, 1.0); // #FFFFDE
+        let style = vir::fs_both(subgraph_fill, theme::flowchart::SUBGRAPH_STROKE, theme::EDGE_WIDTH);
+        elements.push(vir::rect_node(rect, Some(theme::NODE_RADIUS), style, Z_SUBGRAPH));
 
         if let Some(title) = &sg.title {
             let title_style = vir::text_style(
@@ -467,12 +470,12 @@ fn render_layout(layout: &Layout) -> Vec<SceneNode> {
                     None,
                     Z_SUBGRAPH_LABEL,
                 )
-                .with_class("subgraph-label"),
+                ,
             );
         }
     }
 
-    // 绘制边：曲线 + 共享 marker 复用箭头（与默认路径一致）
+    // 绘制边：曲线 + 自绘箭头
     for edge in &layout.edges {
         if edge.path.len() >= 2 {
             let pts: Vec<Point> = edge
@@ -480,10 +483,19 @@ fn render_layout(layout: &Layout) -> Vec<SceneNode> {
                 .iter()
                 .map(|p| Point::new(p.x + offset_x, p.y + offset_y))
                 .collect();
-            elements.push(
-                vir::curved_edge_node(pts, edge_stroke(), Some("arrow".to_string()), Z_AXIS)
-                    .with_class("edge"),
-            );
+            elements.push(vir::curved_edge_node(pts.clone(), edge_stroke(), Z_AXIS));
+            let n = pts.len();
+            if n >= 2 {
+                let last = &pts[n - 1];
+                let prev = &pts[n - 2];
+                let dx = last.x - prev.x;
+                let dy = last.y - prev.y;
+                let len = (dx * dx + dy * dy).sqrt();
+                if len > 0.0 {
+                    let ud = Point::new(dx / len, dy / len);
+                    draw_arrow_head(&mut elements, last, &ud, &edge_stroke(), false);
+                }
+            }
         }
     }
 
@@ -497,13 +509,8 @@ fn render_layout(layout: &Layout) -> Vec<SceneNode> {
 
 /// FlowchartEngine：流程图布局引擎，实现 LayoutEngine trait
 ///
-/// 封装 7-Pass 布局管线：
-///   Pass 1: 结构识别 (recognize_structure)
-///   Pass 2: 尺寸测量 (measure_nodes + measure_groups)
-///   Pass 3: 层级分配 (assign_layers)
-///   Pass 5: 几何定位 (compute_positions)
-///   Pass 7: 边路由 (route_edges)
-///   Pass 6: 画布适配
+/// 布局由 dagre 求解（节点尺寸经 measure_nodes 预测量后传入），
+/// 不再走旧的自研 7-Pass 管线。
 pub struct FlowchartEngine<'a> {
     flowchart: &'a Flowchart,
 }
@@ -812,7 +819,7 @@ fn draw_layout_node(
                 ));
             }
             path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES).with_class("node"));
+            elements.push(vir::path_node(path, style, Z_SERIES));
         }
         Some(NodeShape::Cylinder) => {
             // 数据库/圆柱：矩形主体 + 顶部椭圆盖 + 底部下凸弧
@@ -859,7 +866,7 @@ fn draw_layout_node(
                     vir::fs_both(fill, stroke, node.style.stroke_width),
                     Z_SERIES,
                 )
-                .with_class("node"),
+                ,
             );
         }
         Some(NodeShape::Subroutine) => {
@@ -876,7 +883,7 @@ fn draw_layout_node(
             outer.line_to(Point::new(right, bot));
             outer.line_to(Point::new(left, bot));
             outer.close_path();
-            elements.push(vir::path_node(outer, style.clone(), Z_SERIES).with_class("node"));
+            elements.push(vir::path_node(outer, style.clone(), Z_SERIES));
             let notch = 8.0;
             let inner = vir::stroke(stroke, node.style.stroke_width);
             elements.push(vir::line_node(
@@ -901,7 +908,7 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x, center.y + h));
             path.line_to(Point::new(center.x - w, center.y));
             path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES).with_class("node"));
+            elements.push(vir::path_node(path, style, Z_SERIES));
         }
         Some(NodeShape::Hexagon) => {
             let w = size.width / 2.0;
@@ -915,7 +922,7 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x - w + inset, center.y + h));
             path.line_to(Point::new(center.x - w, center.y));
             path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES).with_class("node"));
+            elements.push(vir::path_node(path, style, Z_SERIES));
         }
         Some(NodeShape::Asymmetric) => {
             let w = size.width / 2.0;
@@ -929,7 +936,7 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x - w + q, center.y + h));
             path.line_to(Point::new(center.x - w, center.y));
             path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES).with_class("node"));
+            elements.push(vir::path_node(path, style, Z_SERIES));
         }
         Some(NodeShape::Parallelogram) => {
             let w = size.width / 2.0;
@@ -941,7 +948,7 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x + w - skew, center.y + h));
             path.line_to(Point::new(center.x - w, center.y + h));
             path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES).with_class("node"));
+            elements.push(vir::path_node(path, style, Z_SERIES));
         }
         Some(NodeShape::ParallelogramAlt) => {
             let w = size.width / 2.0;
@@ -953,7 +960,7 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x + w, center.y + h));
             path.line_to(Point::new(center.x - w + skew, center.y + h));
             path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES).with_class("node"));
+            elements.push(vir::path_node(path, style, Z_SERIES));
         }
         Some(NodeShape::Trapezoid) => {
             let w = size.width / 2.0;
@@ -965,7 +972,7 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x + w, center.y + h));
             path.line_to(Point::new(center.x - w, center.y + h));
             path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES).with_class("node"));
+            elements.push(vir::path_node(path, style, Z_SERIES));
         }
         Some(NodeShape::TrapezoidAlt) => {
             let w = size.width / 2.0;
@@ -977,11 +984,15 @@ fn draw_layout_node(
             path.line_to(Point::new(center.x + w - inset, center.y + h));
             path.line_to(Point::new(center.x - w + inset, center.y + h));
             path.close_path();
-            elements.push(vir::path_node(path, style, Z_SERIES).with_class("node"));
+            elements.push(vir::path_node(path, style, Z_SERIES));
         }
-        _ => {
-            // 默认矩形：[text] 为直角矩形（无圆角）
-            elements.push(vir::rect_node(rect, None, style, Z_SERIES).with_class("node"));
+        Some(NodeShape::Rounded) => {
+            // 圆角矩形：([]) 语法，对齐官方 rx=5
+            elements.push(vir::rect_node(rect, Some(theme::NODE_RADIUS), style, Z_SERIES));
+        }
+        Some(NodeShape::Rectangle) | _ => {
+            // 默认矩形（[]）：官方基本矩形为直角（rx=0）
+            elements.push(vir::rect_node(rect, None, style, Z_SERIES));
         }
     }
 
@@ -1018,7 +1029,7 @@ fn draw_layout_node(
             max_w,
             Z_LABEL,
         )
-        .with_class("label"),
+        ,
     );
 }
 

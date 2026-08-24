@@ -113,8 +113,17 @@ pub fn run_dagre(
         );
     }
 
+    // 与 mermaid 官方 run.js 对齐：nodesep=50, ranksep=60, ranker=network-simplex
+    // （dagre crate 默认值虽也是 nodesep=50/ranksep=50，这里显式声明以消除歧义，
+    // 并让 flowchart 的节点间隔明确可控）。
     let opts = LayoutOptions {
         rankdir,
+        nodesep: 50.0,
+        edgesep: 20.0,
+        ranksep: 60.0,
+        marginx: 8.0,
+        marginy: 8.0,
+        ranker: dagre::layout::types::Ranker::NetworkSimplex,
         ..Default::default()
     };
     dagre_layout_fn::layout(&mut dg, Some(opts));
@@ -218,6 +227,10 @@ pub fn run_dagre(
     // 中间点偏移，使两条线从同一对节点边界出发、中段平行分离，
     // 贴近 mermaid 官方对双向边的渲染。
     separate_parallel_edges(fc, &mut edge_routes, &centers, &sizes);
+
+    // 菱形节点的边端点需要从矩形边界裁剪到菱形实际边缘，
+    // 否则连线会"悬空"在菱形外部（dagre 按矩形包围盒算端点）。
+    clip_diamond_endpoints(fc, &mut edge_routes, &centers, &sizes);
 
     DagreLayout {
         centers,
@@ -395,6 +408,73 @@ fn boundary_point(c: &Point, half_w: f64, half_h: f64, toward: Option<&Point>) -
     };
     let s = sx.min(sy);
     Point::new(c.x + dx * s, c.y + dy * s)
+}
+
+/// 从菱形中心沿 `toward` 方向射线与菱形边缘的交点。
+///
+/// 菱形方程：|x - cx| / w + |y - cy| / h = 1（w=半宽, h=半高）。
+/// 给定方向 d = normalize(toward - center)，交点 = center - d * t，
+/// 其中 t = 1 / (|d.x|/w + |d.y|/h)。
+fn diamond_boundary_point(c: &Point, half_w: f64, half_h: f64, toward: &Point) -> Point {
+    let dx = toward.x - c.x;
+    let dy = toward.y - c.y;
+    let l = (dx * dx + dy * dy).sqrt();
+    if l < 1e-9 {
+        // toward 与中心重合，返回菱形顶点（上方）
+        return Point::new(c.x, c.y - half_h);
+    }
+    let ux = dx / l; // 单位方向向量
+    let uy = dy / l;
+    let denom = ux.abs() / half_w + uy.abs() / half_h;
+    if denom < 1e-9 {
+        return *c;
+    }
+    let t = 1.0 / denom;
+    Point::new(c.x + ux * t, c.y + uy * t)
+}
+
+/// 遍历所有边，对源或目标为 Diamond 形状的节点，
+/// 将边端点从矩形边界裁剪到菱形实际边缘。
+fn clip_diamond_endpoints(
+    fc: &Flowchart,
+    routes: &mut HashMap<(String, String), Vec<Point>>,
+    centers: &HashMap<String, Point>,
+    sizes: &HashMap<String, NodeSize>,
+) {
+    use crate::ast::NodeShape;
+
+    // 构建 id → shape 映射
+    let mut shape_map: HashMap<String, NodeShape> = HashMap::new();
+    for n in &fc.nodes {
+        shape_map.insert(n.id.clone(), n.shape.clone().unwrap_or(NodeShape::Rectangle));
+    }
+    for sg in &fc.subgraphs {
+        for n in &sg.nodes {
+            shape_map.insert(n.id.clone(), n.shape.clone().unwrap_or(NodeShape::Rectangle));
+        }
+    }
+
+    for (key, pts) in routes.iter_mut() {
+        if pts.len() < 2 {
+            continue;
+        }
+        // 裁剪起点（源节点为 Diamond）
+        if shape_map.get(&key.0) == Some(&NodeShape::Diamond) {
+            if let (Some(c), Some(s)) = (centers.get(&key.0), sizes.get(&key.0)) {
+                let target = if pts.len() == 2 { &pts[1] } else { &pts[1] };
+                pts[0] = diamond_boundary_point(c, s.width / 2.0, s.height / 2.0, target);
+            }
+        }
+        // 裁剪终点（目标节点为 Diamond）
+        if shape_map.get(&key.1) == Some(&NodeShape::Diamond) {
+            if let (Some(c), Some(s)) = (centers.get(&key.1), sizes.get(&key.1)) {
+                let last = pts.len() - 1;
+                let src_idx = last.saturating_sub(1);
+                let src_pt = pts[src_idx];
+                pts[last] = diamond_boundary_point(c, s.width / 2.0, s.height / 2.0, &src_pt);
+            }
+        }
+    }
 }
 
 /// 节点尺寸（dagre 用）

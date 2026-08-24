@@ -10,17 +10,18 @@ use crate::{
 
 use super::{
     coord::NodeAnchors,
-    types::{GroupId, GroupMetrics, InternalLayout, NodeId, NodeMetrics, Size},
+    types::{NodeId, NodeMetrics, Size},
 };
+use crate::builder::theme;
 
-const MIN_NODE_WIDTH: f64 = 80.0;
-const MIN_NODE_HEIGHT: f64 = 36.0;
-const NODE_PAD_X: f64 = 14.0;
-const NODE_PAD_Y: f64 = 8.0;
-const FONT_SIZE: f64 = 13.0;
-
-const H_GAP: f64 = 60.0;
-const V_GAP: f64 = 60.0;
+// 测量与绘制共用 theme.rs 的同一套配置（字体、节点尺寸、padding），
+// 保证 dagre 分配的节点包围盒与实际绘制矩形完全一致。
+const MIN_NODE_WIDTH: f64 = theme::NODE_MIN_W;
+const MIN_NODE_HEIGHT: f64 = theme::NODE_MIN_H;
+const NODE_PAD_X: f64 = theme::NODE_PAD_X;
+const NODE_PAD_Y: f64 = theme::NODE_PAD_Y;
+const FONT_SIZE: f64 = theme::FONT_SIZE;
+const FONT_FAMILY: &str = theme::FONT_FAMILY;
 
 fn shape_multiplier(shape: &Option<NodeShape>) -> (f64, f64, f64, f64) {
     match shape {
@@ -91,7 +92,7 @@ pub fn measure_nodes(nodes: &[Node], config: &OutputConfig) -> HashMap<NodeId, N
 fn measure_node(node: &Node, _config: &OutputConfig) -> NodeMetrics {
     let text = node.text.as_deref().unwrap_or(&node.id);
 
-    let text_style = TextStyle::new(Color::BLACK, FONT_SIZE, "sans-serif")
+    let text_style = TextStyle::new(Color::BLACK, FONT_SIZE, FONT_FAMILY)
         .with_align(TextAlign::Center)
         .with_baseline(TextBaseline::Middle);
 
@@ -138,137 +139,4 @@ fn measure_node(node: &Node, _config: &OutputConfig) -> NodeMetrics {
         size,
         anchors,
     }
-}
-
-/// 计算 Group 的边界尺寸
-pub fn measure_groups(
-    tree: &super::types::LayoutTree,
-    node_metrics: &HashMap<NodeId, NodeMetrics>,
-) -> HashMap<GroupId, GroupMetrics> {
-    let mut group_metrics = HashMap::new();
-    let mut next_id = 0;
-    measure_group_recursive(&tree.root, node_metrics, &mut group_metrics, &mut next_id);
-    group_metrics
-}
-
-fn measure_group_recursive(
-    group: &super::types::LogicalGroup,
-    node_metrics: &HashMap<NodeId, NodeMetrics>,
-    group_metrics: &mut HashMap<GroupId, GroupMetrics>,
-    next_id: &mut GroupId,
-) -> (GroupId, Size) {
-    let id = *next_id;
-    *next_id += 1;
-
-    let (internal, size) = match group {
-        super::types::LogicalGroup::Chain { items } => {
-            let item_sizes: Vec<Size> = items
-                .iter()
-                .filter_map(|item| {
-                    item.node_id
-                        .as_ref()
-                        .and_then(|id| node_metrics.get(id).map(|m| m.size))
-                })
-                .collect();
-
-            let total_main: f64 = item_sizes.iter().map(|s| s.height).sum::<f64>()
-                + (item_sizes.len().saturating_sub(1)) as f64 * V_GAP;
-            let max_cross = item_sizes.iter().map(|s| s.width).fold(0.0f64, f64::max);
-
-            let internal = InternalLayout::Chain {
-                item_sizes: item_sizes.clone(),
-                total_main,
-                max_cross,
-            };
-            let size = Size::new(max_cross, total_main);
-            (internal, size)
-        }
-        super::types::LogicalGroup::Branch { source, arms, sink } => {
-            let source_size = node_metrics
-                .get(source)
-                .map(|m| m.size)
-                .unwrap_or(Size::new(MIN_NODE_WIDTH, MIN_NODE_HEIGHT));
-
-            let mut branch_sizes = Vec::new();
-            for arm in arms {
-                let (_, arm_size) =
-                    measure_group_recursive(&arm.body, node_metrics, group_metrics, next_id);
-                branch_sizes.push(arm_size);
-            }
-
-            let sink_size = sink
-                .as_ref()
-                .and_then(|s| node_metrics.get(s).map(|m| m.size));
-
-            let branch_total_w: f64 = branch_sizes.iter().map(|s| s.width).sum::<f64>()
-                + (branch_sizes.len().saturating_sub(1)) as f64 * H_GAP;
-            let cross = source_size
-                .width
-                .max(branch_total_w)
-                .max(sink_size.map(|s| s.width).unwrap_or(0.0));
-
-            let branch_max_h = branch_sizes.iter().map(|s| s.height).fold(0.0f64, f64::max);
-
-            let total_h = source_size.height
-                + V_GAP
-                + branch_max_h
-                + sink_size.map_or(0.0, |s| V_GAP + s.height);
-
-            let internal = InternalLayout::Branch {
-                source_size,
-                branch_sizes,
-                sink_size,
-            };
-            let size = Size::new(cross, total_h);
-            (internal, size)
-        }
-        super::types::LogicalGroup::Cycle {
-            condition,
-            body,
-            exit,
-        } => {
-            let condition_size = node_metrics
-                .get(condition)
-                .map(|m| m.size)
-                .unwrap_or(Size::new(MIN_NODE_WIDTH, MIN_NODE_HEIGHT));
-
-            let (_, body_size) =
-                measure_group_recursive(body, node_metrics, group_metrics, next_id);
-
-            let exit_size = exit
-                .as_ref()
-                .and_then(|s| node_metrics.get(s).map(|m| m.size));
-
-            let cross = condition_size
-                .width
-                .max(body_size.width + H_GAP + body_size.width);
-
-            let cycle_h = condition_size.height.max(body_size.height);
-            let total_h = cycle_h + exit_size.map_or(0.0, |s| V_GAP + s.height);
-
-            let internal = InternalLayout::Cycle {
-                condition_size,
-                body_size,
-                exit_size,
-            };
-            let size = Size::new(cross, total_h);
-            (internal, size)
-        }
-        super::types::LogicalGroup::Leaf { node_id } => {
-            let size = node_metrics
-                .get(node_id)
-                .map(|m| m.size)
-                .unwrap_or(Size::new(MIN_NODE_WIDTH, MIN_NODE_HEIGHT));
-
-            let internal = InternalLayout::Chain {
-                item_sizes: vec![size],
-                total_main: size.height,
-                max_cross: size.width,
-            };
-            (internal, size)
-        }
-    };
-
-    group_metrics.insert(id, GroupMetrics { size, internal });
-    (id, size)
 }

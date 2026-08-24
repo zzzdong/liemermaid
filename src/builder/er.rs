@@ -267,7 +267,7 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
             let stroke = vir::stroke(theme::er::EDGE, 1.5);
 
             // Main line
-            elements.push(vir::line_node(start, end, stroke.clone(), Z_AXIS).with_class("edge"));
+            elements.push(vir::line_node(start, end, stroke.clone(), Z_AXIS));
 
             // Cardinality markers
             let sz = 8.0;
@@ -330,7 +330,7 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
             Some(theme::NODE_RADIUS),
             vir::fs_both(theme::er::FILL, theme::er::STROKE, 2.0),
             Z_SERIES,
-        ).with_class("node"));
+        ));
 
         // Header background
         let header_h = layout.height

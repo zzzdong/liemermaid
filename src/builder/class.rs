@@ -121,13 +121,16 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
         }
 
         let header_h = name_layout.height + 12.0;
+        // 官方 mermaid 的 class 默认显示 3 格（类名 / 属性区 / 方法区），
+        // 即使无成员也保留空区域 + 分隔线。
+        const SECTION_MIN_H: f64 = 16.0; // 空区域最小高度
         let attr_h = if attr_lines.is_empty() {
-            0.0
+            SECTION_MIN_H
         } else {
             attr_lines.len() as f64 * 18.0 + 8.0
         };
         let method_h = if method_lines.is_empty() {
-            0.0
+            SECTION_MIN_H
         } else {
             method_lines.len() as f64 * 18.0 + 8.0
         };
@@ -333,7 +336,7 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
                     if is_dashed {
                         draw_dashed_line(&mut elements, seg_start, seg_end, &stroke);
                     } else {
-                        elements.push(vir::line_node(*seg_start, *seg_end, stroke.clone(), Z_AXIS).with_class("edge"));
+                        elements.push(vir::line_node(*seg_start, *seg_end, stroke.clone(), Z_AXIS));
                     }
                 }
 
@@ -371,7 +374,7 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
                 if is_dashed {
                     draw_dashed_line(&mut elements, &start, &end, &stroke);
                 } else {
-                    elements.push(vir::line_node(start, end, stroke.clone(), Z_AXIS).with_class("edge"));
+                    elements.push(vir::line_node(start, end, stroke.clone(), Z_AXIS));
                 }
 
                 let dir = Point::new(end.x - start.x, end.y - start.y);
@@ -513,7 +516,7 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
             None,
             vir::fs_both(theme::class::FILL, theme::class::STROKE, 2.0),
             Z_SERIES,
-        ).with_class("node"));
+        ));
 
         // Header background
         let header_rect = Rect::new(
@@ -637,15 +640,13 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
             line_y += 18.0;
         }
 
-        // Separator before methods
-        if !layout.attrs.is_empty() && !layout.methods.is_empty() {
-            elements.push(vir::line_node(
-                Point::new(rect.min_x() + 4.0, line_y),
-                Point::new(rect.max_x() - 4.0, line_y),
-                vir::stroke(theme::class::SEPARATOR, 1.0),
-                Z_AXIS,
-            ));
-        }
+        // Separator before methods (always present — official mermaid shows 3 sections)
+        elements.push(vir::line_node(
+            Point::new(rect.min_x() + 4.0, line_y),
+            Point::new(rect.max_x() - 4.0, line_y),
+            vir::stroke(theme::class::SEPARATOR, 1.0),
+            Z_AXIS,
+        ));
 
         // Methods
         for method in &layout.methods {
@@ -712,7 +713,6 @@ fn draw_triangle_head(
             path,
             style: vir::fs_both(fill.unwrap(), style.color, style.width),
             closed: true,
-            marker_end: None,
         })
         .with_z(Z_AXIS),
     );
@@ -750,7 +750,6 @@ fn draw_diamond_head(
             path,
             style: vir::fs_both(fill.unwrap(), style.color, style.width),
             closed: true,
-            marker_end: None,
         })
         .with_z(Z_AXIS),
     );

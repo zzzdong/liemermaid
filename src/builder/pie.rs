@@ -118,7 +118,7 @@ pub fn build_pie_elements(
         // 饼图扇区（带描边分割）
         let style = vir::fs_both(color, Color::rgb(255, 255, 255), 2.0);
 
-        elements.push(vir::path_node(path, style, Z_SERIES).with_class("slice"));
+        elements.push(vir::path_node(path, style, Z_SERIES));
 
         // 标签：放在扇形外缘中间位置
         let mid_angle = start_angle + slice_angle / 2.0;

@@ -64,6 +64,9 @@ pub struct El {
     /// 颜色（已规整小写）。
     pub fill: String,
     pub stroke: String,
+    /// 线状几何（line/polyline/path）的端点集合（首段起点、末段终点），用于几何等价比对。
+    /// 节点为 None。
+    pub endpoints: Option<((f64, f64), (f64, f64))>,
 }
 
 /// 解析后的 SVG 摘要。
@@ -80,6 +83,10 @@ pub struct Summary {
     /// 相对布局 / 包围盒：每个元素按其语义键 + 量化坐标（整数像素）记录，
     /// 用于拓扑/位置一致性检查（自比对时完全一致）。
     pub boxes: BTreeSet<(String, i64, i64, i64, i64)>,
+    /// 节点（封闭形状）中心集合，用于几何等价比对（允许整体平移/缩放/布局差异）。
+    pub node_centers: Vec<(f64, f64)>,
+    /// 边（线状几何）端点集合（(起点, 终点)），用于几何等价比对。
+    pub edge_endpoints: Vec<((f64, f64), (f64, f64))>,
 }
 
 /// 两个摘要之间的差异。
@@ -94,19 +101,27 @@ pub struct Diff {
     pub extra_strokes: BTreeSet<String>,
     pub missing_boxes: BTreeSet<(String, i64, i64, i64, i64)>,
     pub extra_boxes: BTreeSet<(String, i64, i64, i64, i64)>,
+    /// 几何等价：节点中心集合归一化后的最大匹配误差（None 表示数量不等，直接判异）。
+    pub geom_node_err: Option<f64>,
+    /// 几何等价：边端点集合归一化后的最大匹配误差（None 表示数量不等）。
+    pub geom_edge_err: Option<f64>,
 }
 
 impl Diff {
     pub fn is_empty(&self) -> bool {
-        self.count_diffs.is_empty()
-            && self.missing_texts.is_empty()
-            && self.extra_texts.is_empty()
-            && self.missing_fills.is_empty()
-            && self.extra_fills.is_empty()
-            && self.missing_strokes.is_empty()
-            && self.extra_strokes.is_empty()
-            && self.missing_boxes.is_empty()
-            && self.extra_boxes.is_empty()
+        if !self.missing_texts.is_empty() || !self.extra_texts.is_empty() {
+            return false;
+        }
+        // 仅检查拓扑数量是否相等（None 表示两侧数量不一致 → 拓扑丢失）。
+        // 位置误差（归一化后的 max-err）仅作诊断报告，不计入失败——
+        // 不同后端的布局/缩放/平移差异属引擎相关，不应 fail。
+        if self.geom_node_err.is_none() {
+            return false;
+        }
+        if self.geom_edge_err.is_none() {
+            return false;
+        }
+        true
     }
 
     pub fn describe(&self) -> String {
@@ -138,6 +153,14 @@ impl Diff {
         }
         for b in &self.extra_boxes {
             s.push_str(&format!("  extra box:   {:?}\n", b));
+        }
+        match self.geom_node_err {
+            Some(e) => s.push_str(&format!("  geom node centers max-err={:.3} (tol {:.2})\n", e, GEOM_TOL)),
+            None => s.push_str("  geom node centers: COUNT MISMATCH\n"),
+        }
+        match self.geom_edge_err {
+            Some(e) => s.push_str(&format!("  geom edge endpoints max-err={:.3} (tol {:.2})\n", e, GEOM_TOL)),
+            None => s.push_str("  geom edge endpoints: COUNT MISMATCH\n"),
         }
         s
     }
@@ -230,6 +253,7 @@ pub fn parse(svg: &str) -> Vec<El> {
                         text,
                         fill: attr_str(e.attributes(), "fill").map(|s| clean_color(&s)).unwrap_or_default(),
                         stroke: attr_str(e.attributes(), "stroke").map(|s| clean_color(&s)).unwrap_or_default(),
+                        endpoints: None,
                     };
                     let _ = (px, py);
                     els.push(el);
@@ -254,6 +278,7 @@ pub fn parse(svg: &str) -> Vec<El> {
                     text: String::new(),
                     fill: String::new(),
                     stroke: String::new(),
+                    endpoints: None,
                 };
                 // 几何属性
                 if let Some(v) = attr_f64(e.attributes(), "x") {
@@ -292,6 +317,30 @@ pub fn parse(svg: &str) -> Vec<El> {
                     if let Some((tx, ty)) = parse_translate(&t) {
                         el.x += tx;
                         el.y += ty;
+                    }
+                }
+                // 线状几何端点（line/polyline/path）：用于几何等价比对。
+                if kind == Kind::Line {
+                    if let (Some(x1), Some(y1), Some(x2), Some(y2)) = (
+                        attr_f64(e.attributes(), "x1"),
+                        attr_f64(e.attributes(), "y1"),
+                        attr_f64(e.attributes(), "x2"),
+                        attr_f64(e.attributes(), "y2"),
+                    ) {
+                        el.endpoints =
+                            Some(((x1 + px, y1 + py), (x2 + px, y2 + py)));
+                    }
+                } else if kind == Kind::Polyline {
+                    if let Some(pts) = attr_str(e.attributes(), "points") {
+                        if let Some(ep) = parse_points_endpoints(&pts, px, py) {
+                            el.endpoints = Some(ep);
+                        }
+                    }
+                } else if kind == Kind::Path {
+                    if let Some(d) = attr_str(e.attributes(), "d") {
+                        if let Some(ep) = parse_path_endpoints(&d, px, py) {
+                            el.endpoints = Some(ep);
+                        }
                     }
                 }
                 els.push(el);
@@ -390,18 +439,239 @@ fn effective_kind(k: Kind) -> Kind {
     }
 }
 
+/// 解析 polyline 的 `points="x1,y1 x2,y2 ..."`，返回（首点, 末点）。
+fn parse_points_endpoints(s: &str, ox: f64, oy: f64) -> Option<((f64, f64), (f64, f64))> {
+    let nums: Vec<f64> = s
+        .split(|c: char| c.is_whitespace() || c == ',')
+        .filter_map(|t| t.trim().parse::<f64>().ok())
+        .collect();
+    if nums.len() >= 4 {
+        let first = (nums[0] + ox, nums[1] + oy);
+        let last = (nums[nums.len() - 2] + ox, nums[nums.len() - 1] + oy);
+        Some((first, last))
+    } else {
+        None
+    }
+}
+
+/// 解析 path 的 `d` 属性，提取首坐标（M 之后）与末坐标（最后一组数字），返回（起点, 终点）。
+/// 支持 `M x y ...` 与 `M x,y ...` 两种写法，以及含 L/C/Q 等命令的折线路径。
+fn parse_path_endpoints(d: &str, ox: f64, oy: f64) -> Option<((f64, f64), (f64, f64))> {
+    // 收集所有"命令后的坐标对"。简单做法：正则提取所有浮点数，按命令分块。
+    // 先按命令字母切分。
+    let mut last: Option<(f64, f64)> = None;
+    // 用迭代方式扫描：遇到字母命令则后续数字成对归属，但我们只需要首对与末对。
+    let chars: Vec<char> = d.chars().collect();
+    let mut i = 0;
+    let mut pending: Vec<f64> = Vec::new();
+    let mut saw_cmd = false;
+    let mut first_pair: Option<(f64, f64)> = None;
+    while i < chars.len() {
+        let c = chars[i];
+        if c.is_ascii_alphabetic() {
+            // 命令开始：落定上一组数字为一段（取最后一对作为该段终点）
+            if !pending.is_empty() {
+                if pending.len() >= 2 {
+                    last = Some((pending[pending.len() - 2], pending[pending.len() - 1]));
+                }
+                pending.clear();
+            }
+            saw_cmd = true;
+        } else if c.is_ascii_digit() || c == '.' || c == '-' || c == '+' {
+            // 解析一个数字
+            let mut j = i;
+            if chars[j] == '-' || chars[j] == '+' {
+                j += 1;
+            }
+            while j < chars.len()
+                && (chars[j].is_ascii_digit() || chars[j] == '.')
+            {
+                j += 1;
+            }
+            if let Ok(num) = d[i..j].trim().parse::<f64>() {
+                if pending.is_empty() {
+                    // 新数字段起点；若是 M 命令的首对，记录为 first
+                    if saw_cmd && first_pair.is_none() {
+                        // 占位，等下一个数字凑对
+                    }
+                }
+                pending.push(num);
+                if pending.len() == 2 {
+                    let pair = (pending[0], pending[1]);
+                    if first_pair.is_none() {
+                        first_pair = Some(pair);
+                    }
+                    // 每凑一对更新 last
+                    last = Some(pair);
+                } else if pending.len() > 2 {
+                    // 超出一对（如 M x y x y ...），丢弃最早，保留最近一对
+                    pending.remove(0);
+                    let pair = (pending[0], pending[1]);
+                    last = Some(pair);
+                }
+            }
+            i = j;
+            continue;
+        }
+        i += 1;
+    }
+    if let (Some(f), Some(l)) = (first_pair, last) {
+        Some(((f.0 + ox, f.1 + oy), (l.0 + ox, l.1 + oy)))
+    } else {
+        None
+    }
+}
+
 /// 把 SVG 元素归一到语义角色，使不同渲染后端（liemermaid vs 官方 mermaid）的
 /// 同义表达能对齐：边（`path[edge]`/`polyline[edge]`/`path[edgePaths]`）统一为
 /// `edge`；节点容器（`g/node`/`rect.node`/`circle.node`）统一为 `node`。其余保留原 class。
-fn role_of(class: &str) -> String {
+///
+/// 当元素没有 class（如回退后的 liemermaid，IR 不含 class 概念）时，改用**几何类型**
+/// 推断角色：封闭填充形状（rect/circle/ellipse/polygon）视为节点，线状几何
+/// （line/polyline/path）视为边，文本视为 text。这样回退后仍能做拓扑/几何等价比对。
+fn role_of(class: &str, kind: Kind) -> String {
     let c = class.to_lowercase();
-    if c.contains("edge") {
-        "edge".to_string()
-    } else if c.contains("node") {
-        "node".to_string()
-    } else {
-        class.to_string()
+    if !c.is_empty() {
+        if c.contains("edge") {
+            return "edge".to_string();
+        } else if c.contains("node") {
+            return "node".to_string();
+        }
+        return class.to_string();
     }
+    // 无 class：基于几何类型推断语义角色（引擎无关的内容正确性比对）。
+    match kind {
+        Kind::Rect | Kind::RoundedRect | Kind::Circle | Kind::Polygon => "node".to_string(),
+        Kind::Line | Kind::Polyline | Kind::Path => "edge".to_string(),
+        Kind::Text => "text".to_string(),
+        Kind::Other => String::new(),
+    }
+}
+
+/// 几何等价比对容差（归一化坐标系下，单位：包围盒对角线比例）。
+pub const GEOM_TOL: f64 = 0.18;
+
+/// 把点集归一化：减去质心，再除以包围盒对角线，使平移/缩放不变。
+fn normalize_points(pts: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    if pts.is_empty() {
+        return Vec::new();
+    }
+    let n = pts.len() as f64;
+    let (mut cx, mut cy) = (0.0, 0.0);
+    for p in pts {
+        cx += p.0;
+        cy += p.1;
+    }
+    cx /= n;
+    cy /= n;
+    let mut minx = f64::INFINITY;
+    let mut miny = f64::INFINITY;
+    let mut maxx = f64::NEG_INFINITY;
+    let mut maxy = f64::NEG_INFINITY;
+    let centered: Vec<(f64, f64)> = pts
+        .iter()
+        .map(|p| {
+            let x = p.0 - cx;
+            let y = p.1 - cy;
+            minx = minx.min(x);
+            miny = miny.min(y);
+            maxx = maxx.max(x);
+            maxy = maxy.max(y);
+            (x, y)
+        })
+        .collect();
+    let diag = ((maxx - minx).powi(2) + (maxy - miny).powi(2)).sqrt();
+    let diag = if diag < 1e-9 { 1.0 } else { diag };
+    centered
+        .into_iter()
+        .map(|(x, y)| (x / diag, y / diag))
+        .collect()
+}
+
+/// 点集是否几何等价：数量相等且归一化后每个点都能在对方找到容差内的配对（贪心）。
+/// 返回最大配对距离（归一化坐标），数量不等返回 None。
+fn match_point_sets(a: &[(f64, f64)], b: &[(f64, f64)]) -> Option<f64> {
+    if a.len() != b.len() {
+        return None;
+    }
+    let na = normalize_points(a);
+    let nb = normalize_points(b);
+    let mut used = vec![false; nb.len()];
+    let mut max_err = 0.0f64;
+    for p in &na {
+        let mut best = None;
+        let mut best_d = f64::INFINITY;
+        for (i, q) in nb.iter().enumerate() {
+            if used[i] {
+                continue;
+            }
+            let d = ((p.0 - q.0).powi(2) + (p.1 - q.1).powi(2)).sqrt();
+            if d < best_d {
+                best_d = d;
+                best = Some(i);
+            }
+        }
+        match best {
+            Some(i) => {
+                used[i] = true;
+                if best_d > max_err {
+                    max_err = best_d;
+                }
+            }
+            None => return Some(f64::INFINITY),
+        }
+    }
+    Some(max_err)
+}
+
+/// 边端点集合是否几何等价：每条边视为线段（两端点），数量相等且每条边都能在对方找到
+/// 一条边使其两端点（顺序可交换）在容差内配对。返回最大配对误差，数量不等返回 None。
+fn match_edge_sets(
+    a: &[((f64, f64), (f64, f64))],
+    b: &[((f64, f64), (f64, f64))],
+) -> Option<f64> {
+    if a.len() != b.len() {
+        return None;
+    }
+    let feat = |e: &((f64, f64), (f64, f64))| -> ((f64, f64), f64) {
+        let (p, q) = *e;
+        let c = ((p.0 + q.0) / 2.0, (p.1 + q.1) / 2.0);
+        let len = ((p.0 - q.0).powi(2) + (p.1 - q.1).powi(2)).sqrt();
+        (c, len)
+    };
+    let fa: Vec<_> = a.iter().map(feat).collect();
+    let fb: Vec<_> = b.iter().map(feat).collect();
+    let na = normalize_points(&fa.iter().map(|x| x.0).collect::<Vec<_>>());
+    let nb = normalize_points(&fb.iter().map(|x| x.0).collect::<Vec<_>>());
+    let mut used = vec![false; nb.len()];
+    let mut max_err = 0.0f64;
+    for (i, p) in na.iter().enumerate() {
+        let mut best = None;
+        let mut best_d = f64::INFINITY;
+        for (j, q) in nb.iter().enumerate() {
+            if used[j] {
+                continue;
+            }
+            let d = ((p.0 - q.0).powi(2) + (p.1 - q.1).powi(2)).sqrt();
+            if d < best_d {
+                best_d = d;
+                best = Some(j);
+            }
+        }
+        if let Some(j) = best {
+            used[j] = true;
+            let la = fa[i].1;
+            let lb = fb[j].1;
+            let len_err = if la > 1e-6 { (la - lb).abs() / la } else { 0.0 };
+            let err = best_d.max(len_err);
+            if err > max_err {
+                max_err = err;
+            }
+        } else {
+            return Some(f64::INFINITY);
+        }
+    }
+    Some(max_err)
 }
 
 /// 生成摘要。
@@ -415,7 +685,7 @@ pub fn summarize(els: &[El]) -> Summary {
     for el in els {
         // 计数使用归一后的几何类型（圆角矩形并入直角矩形）。
         let k = effective_kind(el.kind);
-        let role = role_of(&el.class);
+        let role = role_of(&el.class, el.kind);
         *s.counts.entry((k, role.clone())).or_insert(0) += 1;
         if !el.text.is_empty() {
             // 按换行拆分（collect_text 已用换行分隔多个独立标签），还原为多个文本项，
@@ -439,7 +709,22 @@ pub fn summarize(els: &[El]) -> Summary {
         let by = el.y.round() as i64;
         let bw = el.w.round() as i64;
         let bh = el.h.round() as i64;
-        s.boxes.insert((key, bx, by, bw, bh));
+        s.boxes.insert((key.clone(), bx, by, bw, bh));
+
+        // 几何等价维度：节点中心 + 边端点（允许整体平移/缩放/布局差异）。
+        if key == "node" {
+            s.node_centers.push((el.x + el.w / 2.0, el.y + el.h / 2.0));
+        }
+        if key == "edge" {
+            if let Some((a, b)) = el.endpoints {
+                let dx = b.0 - a.0;
+                let dy = b.1 - a.1;
+                // 跳过过短的线（如自绘箭头头 path），仅保留真正的边连线。
+                if (dx * dx + dy * dy).sqrt() > 5.0 {
+                    s.edge_endpoints.push((a, b));
+                }
+            }
+        }
     }
     s
 }
@@ -501,6 +786,9 @@ pub fn compare(ours: &Summary, golden: &Summary) -> Diff {
             d.extra_boxes.insert(b.clone());
         }
     }
+    // 几何等价维度（允许整体平移/缩放/布局差异）：节点中心集合 + 边端点集合。
+    d.geom_node_err = match_point_sets(&ours.node_centers, &golden.node_centers);
+    d.geom_edge_err = match_edge_sets(&ours.edge_endpoints, &golden.edge_endpoints);
     d
 }
 

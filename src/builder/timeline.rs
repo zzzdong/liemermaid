@@ -90,7 +90,7 @@ pub fn build_timeline_elements(
             5.0,
             vir::fs_both(theme::timeline::LINE, theme::timeline::LINE, 2.0),
             Z_SERIES,
-        ).with_class("node"));
+        ));
 
         // Section name
         let ts = vir::text_style(
@@ -128,7 +128,7 @@ pub fn build_timeline_elements(
                 3.0,
                 vir::fs_fill(theme::timeline::LINE),
                 Z_SERIES,
-            ).with_class("node"));
+            ));
 
             // Vertical connector line
             elements.push(vir::line_node(

@@ -7,15 +7,25 @@ use lievisual::Color;
 
 // ---- 基础 ----
 pub const BACKGROUND: Color = Color::new(255.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 1.0);
-pub const FONT_FAMILY: &str = "Segoe UI, system-ui, -apple-system, sans-serif";
-pub const FONT_SIZE: f64 = 13.0;
-pub const NODE_RADIUS: f64 = 6.0;
+// 官方默认主题 fontFamily='"trebuchet ms", verdana, arial, sans-serif'，fontSize='16px'。
+// 测量（measure.rs）与绘制（各 builder）共用以下字体配置，保证节点尺寸一致。
+pub const FONT_FAMILY: &str = "'trebuchet ms', verdana, arial, sans-serif";
+pub const FONT_SIZE: f64 = 16.0;
+// 官方默认 radius=5
+pub const NODE_RADIUS: f64 = 5.0;
 // Stadium 为跑道形：两端半圆直径 = 节点高度（半圆半径 = 半高），故不再用固定小圆角
-pub const STADIUM_RADIUS: f64 = 8.0;
+pub const STADIUM_RADIUS: f64 = 5.0;
+
+// ---- 节点尺寸（测量与绘制共用单一来源，对齐官方默认主题）----
+pub const NODE_MIN_W: f64 = 120.0;
+pub const NODE_MIN_H: f64 = 60.0;
+pub const NODE_PAD_X: f64 = 22.0;
+pub const NODE_PAD_Y: f64 = 12.0;
 
 // ---- 连线通用（对齐 mermaid 默认主题）----
 pub const EDGE_COLOR: Color = Color::new(51.0 / 255.0, 51.0 / 255.0, 51.0 / 255.0, 1.0); // #333333
-pub const EDGE_WIDTH: f64 = 2.0;
+// 官方 flowchart 连线更细（约 1.5px），原 2.0 视觉偏粗。
+pub const EDGE_WIDTH: f64 = 1.5;
 pub const TEXT_COLOR: Color = Color::new(51.0 / 255.0, 51.0 / 255.0, 51.0 / 255.0, 1.0); // #333333
 
 // ==================== Flowchart（对齐 mermaid 默认主题）====================
@@ -64,8 +74,9 @@ pub mod sequence {
     pub const TEXT: Color = super::TEXT_COLOR;
     pub const EDGE: Color = super::EDGE_COLOR;
     pub const LIFELINE: Color = Color::new(153.0 / 255.0, 153.0 / 255.0, 153.0 / 255.0, 1.0); // #999 官方 lifeline 灰
-    // 官方 activationBkgColor=#f4f4f4 / activationBorderColor=#666（灰），保持与官方一致
-    pub const ACTIVATION: Color = Color::new(102.0 / 255.0, 102.0 / 255.0, 102.0 / 255.0, 1.0); // #666
+    // 官方 activationBkgColor=#f4f4f4（浅灰填充）/ activationBorderColor=#666（深灰描边）
+    pub const ACTIVATION_FILL: Color = Color::new(244.0 / 255.0, 244.0 / 255.0, 244.0 / 255.0, 1.0); // #f4f4f4
+    pub const ACTIVATION_STROKE: Color = Color::new(102.0 / 255.0, 102.0 / 255.0, 102.0 / 255.0, 1.0); // #666
     pub const NOTE_FILL: Color = Color::new(237.0 / 255.0, 242.0 / 255.0, 174.0 / 255.0, 1.0); // #EDF2AE 官方 noteBkgColor
     pub const NOTE_STROKE: Color = Color::new(147.0 / 255.0, 112.0 / 255.0, 219.0 / 255.0, 1.0); // #9370DB
     pub const BLOCK_FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF

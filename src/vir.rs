@@ -115,13 +115,11 @@ pub fn path_node(path: BezPath, style: FillStrokeStyle, z: i32) -> SceneNode {
         path,
         style,
         closed: false,
-        marker_end: None,
     })
     .with_z(z)
 }
 
-/// Catmull-Rom 转贝塞尔的平滑曲线：把折线点序列平滑为开放路径，
-/// 视觉上贴近官方 mermaid 的曲线连线（而非正交折角）。
+/// Catmull-Rom 转贝塞尔的平滑曲线：把折线点序列平滑为开放路径。
 fn smooth_curve(pts: &[Point]) -> BezPath {
     let mut p = BezPath::new();
     if pts.len() < 2 {
@@ -144,14 +142,9 @@ fn smooth_curve(pts: &[Point]) -> BezPath {
     p
 }
 
-/// 平滑曲线边：把路由点平滑为贝塞尔路径，可选末端箭头 marker（如 `arrow`）。
-/// 用于取代正交 `polyline_node` + 独立 `draw_arrow_head`，缩小与官方曲线连线的差异。
-pub fn curved_edge_node(
-    points: Vec<Point>,
-    style: Stroke,
-    marker: Option<String>,
-    z: i32,
-) -> SceneNode {
+/// 平滑曲线边：把路由点平滑为贝塞尔开放路径（仅描边）。
+/// 末端箭头由调用方用 [`draw_arrow_head`] 等自绘，IR 本身不含箭头概念。
+pub fn curved_edge_node(points: Vec<Point>, style: Stroke, z: i32) -> SceneNode {
     let path = smooth_curve(&points);
     let fs = FillStrokeStyle {
         fill: None,
@@ -161,7 +154,6 @@ pub fn curved_edge_node(
         path,
         style: fs,
         closed: false,
-        marker_end: marker,
     })
     .with_z(z)
 }
@@ -206,10 +198,19 @@ pub fn group_node(children: Vec<SceneNode>, transform: Option<Transform>, z: i32
     n.with_z(z)
 }
 
-/// 边终点箭头（填充三角形），与历史 `visual::draw_arrow_head` 等价。
+/// 边终点箭头。
+///
+/// `filled = true` → 实心三角形（sequence 默认箭头，对齐官方）；
+/// `filled = false` → 空心三角形（flowchart 普通连线，对齐官方 fill=none）。
 ///
 /// `tip` / `dir` 为 lievisual 坐标（即 kurbo 类型）；内部构造 kurbo [`BezPath`] 供 `Element::Path` 使用。
-pub fn draw_arrow_head(elements: &mut Vec<SceneNode>, tip: &Point, dir: &Point, style: &Stroke) {
+pub fn draw_arrow_head(
+    elements: &mut Vec<SceneNode>,
+    tip: &Point,
+    dir: &Point,
+    style: &Stroke,
+    filled: bool,
+) {
     let sz = 10.0;
     let perp_x = -dir.y;
     let perp_y = dir.x;
@@ -221,11 +222,12 @@ pub fn draw_arrow_head(elements: &mut Vec<SceneNode>, tip: &Point, dir: &Point, 
     path.line_to(Point::new(p1.x, p1.y));
     path.line_to(Point::new(p2.x, p2.y));
     path.close_path();
-    elements.push(path_node(
-        path,
-        fs_both(style.color, style.color, style.width),
-        Z_AXIS,
-    ));
+    let node_style = if filled {
+        fs_both(style.color, style.color, style.width)
+    } else {
+        fs_stroke(style.color, style.width)
+    };
+    elements.push(path_node(path, node_style, Z_AXIS));
 }
 
 /// 边终点圆点标记（`--o`），实心圆。

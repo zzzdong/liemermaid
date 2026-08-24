@@ -103,7 +103,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                 ),
             })
             .with_z(Z_SERIES)
-            .with_class("actor"),
+            ,
         );
 
         // actor 名：先以 Left/Top 排版测量，再计算居中偏移（与 flowchart 一致）
@@ -366,7 +366,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                                 SceneNode::from(Element::RoundedRect {
                                     rect,
                                     radius: 2.0,
-                                    style: vir::fs_both(theme::sequence::ACTIVATION, theme::sequence::ACTIVATION, 1.0),
+                                    style: vir::fs_both(theme::sequence::ACTIVATION_FILL, theme::sequence::ACTIVATION_STROKE, 1.0),
                                 })
                                 .with_z(Z_AXIS + 1),
                             );
@@ -393,7 +393,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                     SceneNode::from(Element::RoundedRect {
                         rect,
                         radius: 2.0,
-                        style: vir::fs_both(theme::sequence::ACTIVATION, theme::sequence::ACTIVATION, 1.0),
+                        style: vir::fs_both(theme::sequence::ACTIVATION_FILL, theme::sequence::ACTIVATION_STROKE, 1.0),
                     })
                     .with_z(Z_AXIS + 1),
                 );
@@ -409,17 +409,21 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             + BLOCK_PAD
             + b.depth as f64 * BLOCK_INDENT;
         let rect = lievisual::geometry::Rect::new(x0, b.y_top, x1, b.y_bottom);
+        // 官方 loop/alt/opt 块：虚线边框、无填充、位于底层
         elements.push(
             SceneNode::from(Element::RoundedRect {
                 rect,
                 radius: theme::NODE_RADIUS,
-                style: vir::fs_both(
-                    theme::sequence::BLOCK_FILL,
-                    theme::sequence::BLOCK_STROKE,
-                    1.0,
-                ),
+                style: vir::FillStrokeStyle {
+                    fill: None,
+                    stroke: Some(vir::dashed_stroke(
+                        theme::sequence::BLOCK_STROKE,
+                        1.0,
+                        vec![6.0, 4.0],
+                    )),
+                },
             })
-            .with_z(Z_AXIS),
+            .with_z(vir::Z_SUBGRAPH), // 底层（在消息/生命线之下）
         );
         // 标签
         let ts = vir::text_style(
@@ -463,7 +467,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                 vec![Point::new(from_x, arrow_y)],
                 vir::stroke(theme::sequence::EDGE, 1.5),
                 Z_AXIS,
-            ).with_class("message"));
+            ));
         } else {
             let dir = if to_x > from_x { 1.0 } else { -1.0 };
             let stroke = match r.arrow {
@@ -482,7 +486,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                 Point::new(to_x, arrow_y),
                 stroke.clone(),
                 Z_AXIS,
-            ).with_class("message"));
+            ));
 
             match r.arrow {
                 MessageArrow::Solid | MessageArrow::Dashed => {}
@@ -490,7 +494,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                     let tip = Point::new(to_x, arrow_y);
                     // 箭头指向消息接收方（与行进方向一致）
                     let head_dir = Point::new(dir, 0.0);
-                    vir::draw_arrow_head(&mut elements, &tip, &head_dir, &stroke);
+                    vir::draw_arrow_head(&mut elements, &tip, &head_dir, &stroke, true);
                 }
                 MessageArrow::Cross => {
                     let sz = 5.0;
@@ -521,11 +525,11 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                     let end_tip = Point::new(to_x, arrow_y);
                     // 终点箭头指向接收方
                     let end_dir = Point::new(dir, 0.0);
-                    vir::draw_arrow_head(&mut elements, &end_tip, &end_dir, &stroke);
+                    vir::draw_arrow_head(&mut elements, &end_tip, &end_dir, &stroke, true);
                     let start_tip = Point::new(from_x, arrow_y);
                     // 起点箭头指向发送方
                     let start_dir = Point::new(-dir, 0.0);
-                    vir::draw_arrow_head(&mut elements, &start_tip, &start_dir, &stroke);
+                    vir::draw_arrow_head(&mut elements, &start_tip, &start_dir, &stroke, true);
                 }
             }
         }
@@ -654,7 +658,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                 ),
             })
             .with_z(Z_SERIES)
-            .with_class("actor"),
+            ,
         );
 
         // actor 名：先以 Left/Top 排版测量，再计算居中偏移（与 flowchart 一致）
