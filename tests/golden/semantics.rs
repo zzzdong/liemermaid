@@ -147,8 +147,7 @@ pub fn extract(svg: &str, official: bool) -> DiagramSemantics {
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => {
-                let lname = e.local_name();
-                let tag = std::str::from_utf8(lname.as_ref()).unwrap_or("");
+                let tag = e.local_name().into_inner();
                 if tag == "style" {
                     style_depth += 1;
                     class_stack.push(None);
@@ -179,7 +178,7 @@ pub fn extract(svg: &str, official: bool) -> DiagramSemantics {
             Ok(Event::Text(t)) => {
                 if style_depth > 0 {
                     // 跳过 <style> 内的 CSS 噪声
-                } else if let Ok(s) = t.unescape() {
+                } else if let Ok(s) = quick_xml::escape::unescape(t.as_ref()) {
                     let trimmed = s.trim();
                     if !trimmed.is_empty() {
                         sem.texts.insert(trimmed.to_string());
@@ -224,8 +223,7 @@ pub fn extract(svg: &str, official: bool) -> DiagramSemantics {
                 if !class_stack.is_empty() {
                     class_stack.pop();
                 }
-                let lname = e.local_name();
-                let tag = std::str::from_utf8(lname.as_ref()).unwrap_or("");
+                let tag = e.local_name().into_inner();
                 if tag == "style" && style_depth > 0 {
                     style_depth -= 1;
                 }
@@ -245,8 +243,8 @@ fn attr_str<'a>(
 ) -> Option<String> {
     for a in attrs {
         if let Ok(a) = a {
-            if a.key.as_ref() == name.as_bytes() {
-                return a.unescape_value().ok().map(|v| v.to_string());
+            if a.key == quick_xml::name::QName(name) {
+                return Some(a.value.into_owned().to_string());
             }
         }
     }

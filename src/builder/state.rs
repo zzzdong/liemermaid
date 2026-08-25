@@ -421,7 +421,7 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
                 let ctrl_x = fp.x.max(tp.x) + dx * 0.6;
                 let ctrl_y = mid_y;
 
-                use vello_cpu::kurbo::BezPath;
+                use lievisual::geometry::BezPath;
                 let mut path = BezPath::new();
                 path.move_to(lievisual::geometry::Point::new(fp.x, from_bottom));
                 path.quad_to(

@@ -217,8 +217,7 @@ pub fn parse(svg: &str) -> Vec<El> {
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => {
-                let tag = e.local_name();
-                let tag = std::str::from_utf8(tag.as_ref()).unwrap_or("");
+                let tag = e.local_name().into_inner();
                 if tag == "g" {
                     let class = attr_str(e.attributes(), "class").unwrap_or_default();
                     let (px, py) = group_stack
@@ -261,8 +260,7 @@ pub fn parse(svg: &str) -> Vec<El> {
                 // 其他 Start（如 tspan）暂不入栈；其 Translate 不处理（文本已收集）
             }
             Ok(Event::Empty(e)) => {
-                let tag = e.local_name();
-                let tag = std::str::from_utf8(tag.as_ref()).unwrap_or("");
+                let tag = e.local_name().into_inner();
                 let kind = Kind::from_tag(tag);
                 if kind == Kind::Other {
                     continue;
@@ -346,8 +344,7 @@ pub fn parse(svg: &str) -> Vec<El> {
                 els.push(el);
             }
             Ok(Event::End(e)) => {
-                let name = e.local_name();
-                let tag = std::str::from_utf8(name.as_ref()).unwrap_or("");
+                let tag = e.local_name().into_inner();
                 if tag == "g" {
                     group_stack.pop();
                 }
@@ -377,7 +374,7 @@ fn collect_text(reader: &mut quick_xml::Reader<&[u8]>) -> String {
                 // 拼接所有文本节点（含 tspan 内部），不同文本节点间用换行分隔，
                 // 以便后续按行拆分还原多个独立标签（官方常把同一 foreignObject 内的多个
                 // <p> 标签拼成一段，加分隔符才能与逐项渲染的 liemermaid 对齐）。
-                if let Ok(s) = t.unescape() {
+                if let Ok(s) = quick_xml::escape::unescape(t.as_ref()) {
                     let trimmed = s.trim();
                     if !trimmed.is_empty() {
                         if !out.is_empty() {
@@ -389,8 +386,7 @@ fn collect_text(reader: &mut quick_xml::Reader<&[u8]>) -> String {
             }
             Ok(Event::Start(_)) => depth += 1,
             Ok(Event::End(e)) => {
-                let name = e.local_name();
-                let tag = std::str::from_utf8(name.as_ref()).unwrap_or("");
+                let tag = e.local_name().into_inner();
                 if tag == "text" && depth == 0 {
                     break;
                 }
@@ -414,11 +410,8 @@ fn attr_str<'a>(
 ) -> Option<String> {
     for a in attrs {
         if let Ok(a) = a {
-            if a.key.as_ref() == name.as_bytes() {
-                return a
-                    .unescape_value()
-                    .ok()
-                    .map(|v| v.to_string());
+            if a.key == quick_xml::name::QName(name) {
+                return Some(a.value.into_owned().to_string());
             }
         }
     }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use lievisual::geometry::{Point, Rect};
 use petgraph::graph::{DiGraph, NodeIndex};
-use vello_cpu::kurbo::BezPath;
+use lievisual::geometry::BezPath;
 
 use crate::{
     ast::{ArrowType, Direction, Flowchart, NodeShape}, builder::types::OutputConfig, error::DiagramResult,     vir::{
@@ -446,7 +446,7 @@ fn render_layout(layout: &Layout) -> Vec<SceneNode> {
             sg.bounds.max_y() + offset_y,
         );
         // 官方 default 主题：subgraph 容器 clusterBkg=#FFFFDE（浅黄）+ 描边 #9370DB
-        let subgraph_fill = Color::new(255.0 / 255.0, 255.0 / 255.0, 222.0 / 255.0, 1.0); // #FFFFDE
+        let subgraph_fill = Color::new(1.0, 1.0, 222.0 / 255.0, 1.0); // #FFFFDE
         let style = vir::fs_both(subgraph_fill, theme::flowchart::SUBGRAPH_STROKE, theme::EDGE_WIDTH);
         elements.push(vir::rect_node(rect, Some(theme::NODE_RADIUS), style, Z_SUBGRAPH));
 

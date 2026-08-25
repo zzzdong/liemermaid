@@ -3,7 +3,7 @@ use std::collections::{HashMap, VecDeque};
 use lievisual::geometry::{Point, Rect};
 use petgraph::Direction;
 use petgraph::graph::{DiGraph, NodeIndex};
-use vello_cpu::kurbo::BezPath;
+use lievisual::geometry::BezPath;
 
 use crate::{
     ast::{ClassDiagram, RelationKind, Visibility},

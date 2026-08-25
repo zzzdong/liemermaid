@@ -1,0 +1,1194 @@
+    Blocking waiting for file lock on build directory
+    Checking liemermaid v0.1.0-beta.1 (D:\code\rust\liemermaid)
+warning: redundant field names in struct initialization
+  --> src\parser\er.rs:75:17
+   |
+75 |                 type_: type_,
+   |                 ^^^^^^^^^^^^ help: replace it with: `type_`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#redundant_field_names
+   = note: `#[warn(clippy::redundant_field_names)]` on by default
+System.Management.Automation.RemoteException
+warning: empty line after doc comment
+  --> src\vir.rs:91:1
+   |
+91 | / /// 仅矢量路径（[`BezPath`]）保留 kurbo（lievisual 的 `Element::Path` 原生使用它）。
+92 | |
+   | |_^
+93 |   pub fn rect_node(rect: Rect, radius: Option<f64>, style: FillStrokeStyle, z: i32) -> SceneNode {
+   |   ---------------- the comment documents this function
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#empty_line_after_doc_comments
+   = note: `#[warn(clippy::empty_line_after_doc_comments)]` on by default
+   = help: if the empty line is unintentional, remove it
+System.Management.Automation.RemoteException
+warning: this `if` statement can be collapsed
+   --> src\builder\class.rs:404:13
+    |
+404 | /             if let Some(lbl) = &rel.label {
+405 | |                 if !lbl.is_empty() {
+406 | |                     let mid = Point::new((start.x + end.x) / 2.0, (start.y + end.y) / 2.0 - 6.0);
+407 | |                     let tl = layout_text(
+...   |
+436 | |             }
+    | |_____________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#collapsible_if
+    = note: `#[warn(clippy::collapsible_if)]` on by default
+help: collapse nested if block
+    |
+404 ~             if let Some(lbl) = &rel.label
+405 ~                 && !lbl.is_empty() {
+406 |                     let mid = Point::new((start.x + end.x) / 2.0, (start.y + end.y) / 2.0 - 6.0);
+...
+434 |                     ));
+435 ~                 }
+    |
+System.Management.Automation.RemoteException
+warning: this `if` statement can be collapsed
+   --> src\builder\dagre_layout.rs:165:9
+    |
+165 | /         if edge.source == edge.target {
+166 | |             if let (Some(&c), Some(&s)) = (centers.get(&edge.source), sizes.get(&edge.source)) {
+167 | |                 let (hw, hh) = if swap { (s.height / 2.0, s.width / 2.0) } else { (s.width / 2.0, s.height / 2.0) };
+168 | |                 let route = if swap {
+...   |
+196 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+165 ~         if edge.source == edge.target
+166 ~             && let (Some(&c), Some(&s)) = (centers.get(&edge.source), sizes.get(&edge.source)) {
+167 |                 let (hw, hh) = if swap { (s.height / 2.0, s.width / 2.0) } else { (s.width / 2.0, s.height / 2.0) };
+...
+194 |                 self_loop_routes.insert((edge.source.clone(), edge.target.clone()), route);
+195 ~             }
+    |
+System.Management.Automation.RemoteException
+warning: this `if` statement can be collapsed
+   --> src\builder\dagre_layout.rs:214:9
+    |
+214 | /         if let Some(el) = found {
+215 | |             if !el.points.is_empty() {
+216 | |                 let mut route: Vec<Point> = el.points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
+217 | |                 if reversed {
+...   |
+222 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+214 ~         if let Some(el) = found
+215 ~             && !el.points.is_empty() {
+216 |                 let mut route: Vec<Point> = el.points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
+...
+220 |                 edge_routes.insert((edge.source.clone(), edge.target.clone()), route);
+221 ~             }
+    |
+System.Management.Automation.RemoteException
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> src\builder\dagre_layout.rs:229:61
+    |
+229 |     separate_parallel_edges(fc, &mut edge_routes, &centers, &sizes);
+    |                                                             ^^^^^^ help: change this to: `sizes`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_borrow
+    = note: `#[warn(clippy::needless_borrow)]` on by default
+System.Management.Automation.RemoteException
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> src\builder\dagre_layout.rs:233:60
+    |
+233 |     clip_diamond_endpoints(fc, &mut edge_routes, &centers, &sizes);
+    |                                                            ^^^^^^ help: change this to: `sizes`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_borrow
+System.Management.Automation.RemoteException
+warning: this function has too many arguments (8/7)
+   --> src\builder\dagre_layout.rs:326:1
+    |
+326 | / fn separate_one(
+327 | |     route: Option<&mut Vec<Point>>,
+328 | |     delta: f64,
+329 | |     nx: f64,
+...   |
+334 | |     dst: &str,
+335 | | ) {
+    | |_^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#too_many_arguments
+    = note: `#[warn(clippy::too_many_arguments)]` on by default
+System.Management.Automation.RemoteException
+warning: the loop variable `i` is used to index `r`
+   --> src\builder\dagre_layout.rs:379:18
+    |
+379 |         for i in 1..n - 1 {
+    |                  ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+    = note: `#[warn(clippy::needless_range_loop)]` on by default
+help: consider using an iterator and enumerate()
+    |
+379 -         for i in 1..n - 1 {
+379 +         for (i, <item>) in r.iter_mut().enumerate().take(n - 1).skip(1) {
+    |
+System.Management.Automation.RemoteException
+warning: this `if` statement can be collapsed
+   --> src\builder\dagre_layout.rs:462:9
+    |
+462 | /         if shape_map.get(&key.0) == Some(&NodeShape::Diamond) {
+463 | |             if let (Some(c), Some(s)) = (centers.get(&key.0), sizes.get(&key.0)) {
+464 | |                 let target = if pts.len() == 2 { &pts[1] } else { &pts[1] };
+465 | |                 pts[0] = diamond_boundary_point(c, s.width / 2.0, s.height / 2.0, target);
+466 | |             }
+467 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+462 ~         if shape_map.get(&key.0) == Some(&NodeShape::Diamond)
+463 ~             && let (Some(c), Some(s)) = (centers.get(&key.0), sizes.get(&key.0)) {
+464 |                 let target = if pts.len() == 2 { &pts[1] } else { &pts[1] };
+465 |                 pts[0] = diamond_boundary_point(c, s.width / 2.0, s.height / 2.0, target);
+466 ~             }
+    |
+System.Management.Automation.RemoteException
+warning: this `if` has identical blocks
+   --> src\builder\dagre_layout.rs:464:48
+    |
+464 |                 let target = if pts.len() == 2 { &pts[1] } else { &pts[1] };
+    |                                                ^^^^^^^^^^^
+    |
+note: same as this
+   --> src\builder\dagre_layout.rs:464:65
+    |
+464 |                 let target = if pts.len() == 2 { &pts[1] } else { &pts[1] };
+    |                                                                 ^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#if_same_then_else
+    = note: `#[warn(clippy::if_same_then_else)]` on by default
+System.Management.Automation.RemoteException
+warning: this `if` statement can be collapsed
+   --> src\builder\dagre_layout.rs:469:9
+    |
+469 | /         if shape_map.get(&key.1) == Some(&NodeShape::Diamond) {
+470 | |             if let (Some(c), Some(s)) = (centers.get(&key.1), sizes.get(&key.1)) {
+471 | |                 let last = pts.len() - 1;
+472 | |                 let src_idx = last.saturating_sub(1);
+...   |
+476 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+469 ~         if shape_map.get(&key.1) == Some(&NodeShape::Diamond)
+470 ~             && let (Some(c), Some(s)) = (centers.get(&key.1), sizes.get(&key.1)) {
+471 |                 let last = pts.len() - 1;
+...
+474 |                 pts[last] = diamond_boundary_point(c, s.width / 2.0, s.height / 2.0, &src_pt);
+475 ~             }
+    |
+System.Management.Automation.RemoteException
+warning: the loop variable `i` is only used to index `dense`
+  --> src\builder\flowchart.rs:84:14
+   |
+84 |     for i in 1..dense.len() {
+   |              ^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+help: consider using an iterator
+   |
+84 -     for i in 1..dense.len() {
+84 +     for <item> in dense.iter().skip(1) {
+   |
+System.Management.Automation.RemoteException
+warning: using `clone` on type `Point` which implements the `Copy` trait
+  --> src\builder\flowchart.rs:86:32
+   |
+86 |         let seg = cur.distance(p.clone());
+   |                                ^^^^^^^^^ help: try removing the `clone` call: `p`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#clone_on_copy
+   = note: `#[warn(clippy::clone_on_copy)]` on by default
+System.Management.Automation.RemoteException
+warning: this `if` statement can be collapsed
+   --> src\builder\flowchart.rs:309:9
+    |
+309 | /         if let (Some(&from_idx), Some(&to_idx)) =
+310 | |             (indices.get(&edge.source), indices.get(&edge.target))
+311 | |             && let Some(route) = result.edge_routes.get(&(from_idx, to_idx))
+...   |
+378 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+311 ~             && let Some(route) = result.edge_routes.get(&(from_idx, to_idx))
+312 ~             && route.len() >= 2 {
+313 |                 let arrow = &edge.arrow_type;
+...
+375 |                 }
+376 ~             }
+    |
+System.Management.Automation.RemoteException
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> src\builder\flowchart.rs:317:53
+    |
+317 |                     draw_dashed_edge(&mut elements, &route);
+    |                                                     ^^^^^^ help: change this to: `route`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_borrow
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\flowchart.rs:449:40
+    |
+449 |         let subgraph_fill = Color::new(255.0 / 255.0, 255.0 / 255.0, 222.0 / 255.0, 1.0); // #FFFFDE
+    |                                        ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+    = note: `#[deny(clippy::eq_op)]` on by default
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\flowchart.rs:449:55
+    |
+449 |         let subgraph_fill = Color::new(255.0 / 255.0, 255.0 / 255.0, 222.0 / 255.0, 1.0); // #FFFFDE
+    |                                                       ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+warning: this `if` statement can be collapsed
+   --> src\builder\flowchart.rs:602:9
+    |
+602 | /         if let (Some(&s), Some(&t)) = (indices.get(&edge.source), indices.get(&edge.target)) {
+603 | |             if let Some(route) = dagre_result
+604 | |                 .edge_routes
+605 | |                 .get(&(edge.source.clone(), edge.target.clone()))
+...   |
+612 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+602 ~         if let (Some(&s), Some(&t)) = (indices.get(&edge.source), indices.get(&edge.target))
+603 ~             && let Some(route) = dagre_result
+604 |                 .edge_routes
+...
+610 |                 );
+611 ~             }
+    |
+System.Management.Automation.RemoteException
+warning: wildcard pattern covers any other pattern as it will match anyway
+   --> src\builder\flowchart.rs:993:9
+    |
+993 |         Some(NodeShape::Rectangle) | _ => {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: consider handling `_` separately
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#wildcard_in_or_patterns
+    = note: `#[warn(clippy::wildcard_in_or_patterns)]` on by default
+System.Management.Automation.RemoteException
+warning: very complex type used. Consider factoring parts into `type` definitions
+   --> src\builder\layout\sugiyama.rs:180:10
+    |
+180 |       ) -> (
+    |  __________^
+181 | |         DiGraph<String, ()>,
+182 | |         HashMap<NodeIndex, NodeSize>,
+183 | |         HashMap<NodeIndex, NodeIndex>,
+184 | |         HashMap<(NodeIndex, NodeIndex), Vec<NodeIndex>>,
+185 | |         HashSet<(NodeIndex, NodeIndex)>,
+186 | |     ) {
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#type_complexity
+    = note: `#[warn(clippy::type_complexity)]` on by default
+System.Management.Automation.RemoteException
+warning: the loop variable `i` is used to index `indeg`
+    --> src\builder\layout\sugiyama.rs:1511:14
+     |
+1511 |     for i in 0..n {
+     |              ^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+help: consider using an iterator and enumerate()
+     |
+1511 -     for i in 0..n {
+1511 +     for (i, <item>) in indeg.iter().enumerate().take(n) {
+     |
+System.Management.Automation.RemoteException
+warning: the loop variable `r` is used to index `parent`
+    --> src\builder\layout\sugiyama.rs:1610:14
+     |
+1610 |     for r in 0..n {
+     |              ^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+help: consider using an iterator and enumerate()
+     |
+1610 -     for r in 0..n {
+1610 +     for (r, <item>) in parent.iter().enumerate().take(n) {
+     |
+System.Management.Automation.RemoteException
+warning: this function has too many arguments (8/7)
+    --> src\builder\layout\sugiyama.rs:1651:1
+     |
+1651 | / fn exchange(
+1652 | |     edges: &[(usize, usize)],
+1653 | |     rank: &mut [usize],
+1654 | |     parent: &mut [Option<usize>],
+...    |
+1659 | |     n: usize,
+1660 | | ) {
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#too_many_arguments
+System.Management.Automation.RemoteException
+warning: the loop variable `v` is used to index `parent`
+    --> src\builder\layout\sugiyama.rs:1755:14
+     |
+1755 |     for v in 0..n {
+     |              ^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+help: consider using an iterator and enumerate()
+     |
+1755 -     for v in 0..n {
+1755 +     for (v, <item>) in parent.iter().enumerate().take(n) {
+     |
+System.Management.Automation.RemoteException
+warning: this function has too many arguments (10/7)
+   --> src\builder\sequence.rs:163:5
+    |
+163 | /     fn push_statement(
+164 | |         stmts: &[SequenceItem],
+165 | |         depth: usize,
+166 | |         name_to_idx: &std::collections::HashMap<&str, usize>,
+...   |
+173 | |         note_gap: f64,
+174 | |     ) {
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#too_many_arguments
+System.Management.Automation.RemoteException
+warning: this `if` statement can be collapsed
+   --> src\builder\sequence.rs:354:17
+    |
+354 | /                 if let Some(stack) = act_stack.get_mut(&r.fi) {
+355 | |                     if let Some(start) = stack.pop() {
+356 | |                         let h = y - start;
+357 | |                         if h > 0.0 {
+...   |
+375 | |                 }
+    | |_________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+354 ~                 if let Some(stack) = act_stack.get_mut(&r.fi)
+355 ~                     && let Some(start) = stack.pop() {
+356 |                         let h = y - start;
+...
+373 |                         }
+374 ~                     }
+    |
+System.Management.Automation.RemoteException
+warning: parameter is only used in recursion
+   --> src\builder\state.rs:66:49
+    |
+ 66 | fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec<SceneNode>, f64, f64) {
+    |                                                 ^^^^^^ help: if this is intentional, prefix it with an underscore: `_config`
+    |
+note: parameter used here
+   --> src\builder\state.rs:120:55
+    |
+120 |         let (_, iw, ih) = render_state_diagram(inner, config);
+    |                                                       ^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#only_used_in_recursion
+    = note: `#[warn(clippy::only_used_in_recursion)]` on by default
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+ --> src\builder\theme.rs:9:42
+  |
+9 | pub const BACKGROUND: Color = Color::new(255.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 1.0);
+  |                                          ^^^^^^^^^^^^^
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+ --> src\builder\theme.rs:9:57
+  |
+9 | pub const BACKGROUND: Color = Color::new(255.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 1.0);
+  |                                                         ^^^^^^^^^^^^^
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+ --> src\builder\theme.rs:9:72
+  |
+9 | pub const BACKGROUND: Color = Color::new(255.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 1.0);
+  |                                                                        ^^^^^^^^^^^^^
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+  --> src\builder\theme.rs:35:70
+   |
+35 |     pub const FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+   |                                                                      ^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+  --> src\builder\theme.rs:46:70
+   |
+46 |     pub const FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+   |                                                                      ^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+  --> src\builder\theme.rs:50:76
+   |
+50 |     pub const START_FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+   |                                                                            ^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+  --> src\builder\theme.rs:57:70
+   |
+57 |     pub const FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+   |                                                                      ^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+  --> src\builder\theme.rs:58:77
+   |
+58 |     pub const HEADER_FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+   |                                                                             ^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+  --> src\builder\theme.rs:70:76
+   |
+70 |     pub const ACTOR_FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+   |                                                                            ^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+  --> src\builder\theme.rs:72:70
+   |
+72 |     pub const FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+   |                                                                      ^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+  --> src\builder\theme.rs:82:76
+   |
+82 |     pub const BLOCK_FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+   |                                                                            ^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+  --> src\builder\theme.rs:90:70
+   |
+90 |     pub const FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+   |                                                                      ^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+  --> src\builder\theme.rs:91:77
+   |
+91 |     pub const HEADER_FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0); // #ECECFF
+   |                                                                             ^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:113:50
+    |
+113 |         Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0), // git0 = primaryColor #ECECFF
+    |                                                  ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:114:20
+    |
+114 |         Color::new(255.0 / 255.0, 255.0 / 255.0, 222.0 / 255.0, 1.0), // git1 = secondaryColor #ffffde
+    |                    ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:114:35
+    |
+114 |         Color::new(255.0 / 255.0, 255.0 / 255.0, 222.0 / 255.0, 1.0), // git1 = secondaryColor #ffffde
+    |                                   ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:115:35
+    |
+115 |         Color::new(249.0 / 255.0, 255.0 / 255.0, 236.0 / 255.0, 1.0), // git2 = adjust(primary,{h:-160})
+    |                                   ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:116:50
+    |
+116 |         Color::new(236.0 / 255.0, 246.0 / 255.0, 255.0 / 255.0, 1.0), // git3 = adjust(primary,{h:-30})
+    |                                                  ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:117:35
+    |
+117 |         Color::new(236.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 1.0), // git4 = adjust(primary,{h:-60})
+    |                                   ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:117:50
+    |
+117 |         Color::new(236.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 1.0), // git4 = adjust(primary,{h:-60})
+    |                                                  ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:118:35
+    |
+118 |         Color::new(236.0 / 255.0, 255.0 / 255.0, 246.0 / 255.0, 1.0), // git5 = adjust(primary,{h:-90})
+    |                                   ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:119:20
+    |
+119 |         Color::new(255.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0), // git6 = adjust(primary,{h:+60})
+    |                    ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:119:50
+    |
+119 |         Color::new(255.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0), // git6 = adjust(primary,{h:+60})
+    |                                                  ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:120:20
+    |
+120 |         Color::new(255.0 / 255.0, 236.0 / 255.0, 236.0 / 255.0, 1.0), // git7 = adjust(primary,{h:+120})
+    |                    ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:123:49
+    |
+123 |     pub const COMMIT_STROKE: Color = Color::new(255.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 1.0);
+    |                                                 ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:123:64
+    |
+123 |     pub const COMMIT_STROKE: Color = Color::new(255.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 1.0);
+    |                                                                ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:123:79
+    |
+123 |     pub const COMMIT_STROKE: Color = Color::new(255.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 1.0);
+    |                                                                               ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:132:50
+    |
+132 |         Color::new(236.0 / 255.0, 236.0 / 255.0, 255.0 / 255.0, 1.0), // pie1 = primaryColor #ECECFF
+    |                                                  ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:133:20
+    |
+133 |         Color::new(255.0 / 255.0, 255.0 / 255.0, 222.0 / 255.0, 1.0), // pie2 = secondaryColor #ffffde
+    |                    ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:133:35
+    |
+133 |         Color::new(255.0 / 255.0, 255.0 / 255.0, 222.0 / 255.0, 1.0), // pie2 = secondaryColor #ffffde
+    |                                   ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:134:35
+    |
+134 |         Color::new(185.0 / 255.0, 255.0 / 255.0, 32.0 / 255.0, 1.0),  // pie3 = adjust(tertiary,{l:-40})
+    |                                   ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:135:50
+    |
+135 |         Color::new(185.0 / 255.0, 185.0 / 255.0, 255.0 / 255.0, 1.0), // pie4 = adjust(primary,{l:-10})
+    |                                                  ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:136:20
+    |
+136 |         Color::new(255.0 / 255.0, 255.0 / 255.0, 69.0 / 255.0, 1.0),  // pie5 = adjust(secondary,{l:-30})
+    |                    ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:136:35
+    |
+136 |         Color::new(255.0 / 255.0, 255.0 / 255.0, 69.0 / 255.0, 1.0),  // pie5 = adjust(secondary,{l:-30})
+    |                                   ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:137:35
+    |
+137 |         Color::new(217.0 / 255.0, 255.0 / 255.0, 134.0 / 255.0, 1.0), // pie6 = adjust(tertiary,{l:-20})
+    |                                   ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:138:20
+    |
+138 |         Color::new(255.0 / 255.0, 134.0 / 255.0, 255.0 / 255.0, 1.0), // pie7 = adjust(primary,{h:+60,l:-20})
+    |                    ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:138:50
+    |
+138 |         Color::new(255.0 / 255.0, 134.0 / 255.0, 255.0 / 255.0, 1.0), // pie7 = adjust(primary,{h:+60,l:-20})
+    |                                                  ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:139:34
+    |
+139 |         Color::new(32.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 1.0),  // pie8 = adjust(primary,{h:-60,l:-40})
+    |                                  ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:139:49
+    |
+139 |         Color::new(32.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 1.0),  // pie8 = adjust(primary,{h:-60,l:-40})
+    |                                                 ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:140:20
+    |
+140 |         Color::new(255.0 / 255.0, 32.0 / 255.0, 32.0 / 255.0, 1.0),   // pie9 = adjust(primary,{h:120,l:-40})
+    |                    ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:141:20
+    |
+141 |         Color::new(255.0 / 255.0, 32.0 / 255.0, 255.0 / 255.0, 1.0),  // pie10 = adjust(primary,{h:+60,l:-40})
+    |                    ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:141:49
+    |
+141 |         Color::new(255.0 / 255.0, 32.0 / 255.0, 255.0 / 255.0, 1.0),  // pie10 = adjust(primary,{h:+60,l:-40})
+    |                                                 ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:142:34
+    |
+142 |         Color::new(32.0 / 255.0, 255.0 / 255.0, 144.0 / 255.0, 1.0),  // pie11 = adjust(primary,{h:-90,l:-40})
+    |                                  ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+   --> src\builder\theme.rs:143:20
+    |
+143 |         Color::new(255.0 / 255.0, 83.0 / 255.0, 83.0 / 255.0, 1.0),   // pie12 = adjust(primary,{h:120,l:-30})
+    |                    ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+  --> src\builder\types.rs:23:36
+   |
+23 |             background: Color::new(255_f64 / 255.0, 255_f64 / 255.0, 255_f64 / 255.0, 1.0),
+   |                                    ^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+  --> src\builder\types.rs:23:53
+   |
+23 |             background: Color::new(255_f64 / 255.0, 255_f64 / 255.0, 255_f64 / 255.0, 1.0),
+   |                                                     ^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+error: equal expressions as operands to `/`
+  --> src\builder\types.rs:23:70
+   |
+23 |             background: Color::new(255_f64 / 255.0, 255_f64 / 255.0, 255_f64 / 255.0, 1.0),
+   |                                                                      ^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#eq_op
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+  --> src\parser\class.rs:43:9
+   |
+43 |         let _ = skip_line(input)?;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+   = note: `#[warn(clippy::let_unit_value)]` on by default
+help: omit the `let` binding
+   |
+43 -         let _ = skip_line(input)?;
+43 +         skip_line(input)?;
+   |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+   --> src\parser\class.rs:102:5
+    |
+102 |     let _ = consume_line(input)?;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+    |
+102 -     let _ = consume_line(input)?;
+102 +     consume_line(input)?;
+    |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+   --> src\parser\class.rs:182:5
+    |
+182 |     let _ = consume_line(input)?;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+    |
+182 -     let _ = consume_line(input)?;
+182 +     consume_line(input)?;
+    |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+   --> src\parser\class.rs:229:9
+    |
+229 |         let _ = consume_line(input)?;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+    |
+229 -         let _ = consume_line(input)?;
+229 +         consume_line(input)?;
+    |
+System.Management.Automation.RemoteException
+warning: this `if` statement can be collapsed
+  --> src\parser\common.rs:24:9
+   |
+24 | /         if let Some(candidate) = input.get(..lower.len()) {
+25 | |             if candidate.to_ascii_lowercase() == lower {
+26 | |                 // 关键字后必须是空白、行尾或常见分隔符，避免误吞前缀
+27 | |                 let after = input[lower.len()..].chars().next();
+...  |
+36 | |         }
+   | |_________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#collapsible_if
+help: collapse nested if block
+   |
+24 ~         if let Some(candidate) = input.get(..lower.len())
+25 ~             && candidate.to_ascii_lowercase() == lower {
+26 |                 // 关键字后必须是空白、行尾或常见分隔符，避免误吞前缀
+...
+34 |                 }
+35 ~             }
+   |
+System.Management.Automation.RemoteException
+warning: this `map_or` can be simplified
+  --> src\parser\common.rs:28:20
+   |
+28 |                   if after.map_or(true, |c| {
+   |  ____________________^
+29 | |                     c.is_whitespace() || c == ':' || c == '\n' || c == '\r' || c == '{'
+30 | |                 }) {
+   | |__________________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#unnecessary_map_or
+   = note: `#[warn(clippy::unnecessary_map_or)]` on by default
+help: use `is_none_or` instead
+   |
+28 -                 if after.map_or(true, |c| {
+28 +                 if after.is_none_or(|c| {
+   |
+System.Management.Automation.RemoteException
+warning: the following explicit lifetimes could be elided: 'i
+   --> src\parser\common.rs:129:18
+    |
+129 | pub fn has_input<'i>(input: &mut &'i str) -> bool {
+    |                  ^^               ^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_lifetimes
+    = note: `#[warn(clippy::needless_lifetimes)]` on by default
+help: elide the lifetimes
+    |
+129 - pub fn has_input<'i>(input: &mut &'i str) -> bool {
+129 + pub fn has_input(input: &mut &str) -> bool {
+    |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+  --> src\parser\er.rs:42:9
+   |
+42 |         let _ = skip_line(input)?;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+   |
+42 -         let _ = skip_line(input)?;
+42 +         skip_line(input)?;
+   |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+  --> src\parser\er.rs:82:5
+   |
+82 |     let _ = consume_line(input)?;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+   |
+82 -     let _ = consume_line(input)?;
+82 +     consume_line(input)?;
+   |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+   --> src\parser\er.rs:129:5
+    |
+129 |     let _ = consume_line(input)?;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+    |
+129 -     let _ = consume_line(input)?;
+129 +     consume_line(input)?;
+    |
+System.Management.Automation.RemoteException
+warning: doc list item without indentation
+   --> src\builder\flowchart.rs:152:5
+    |
+152 | /// 变换后整体平移使坐标非负（与 dagre 的 bounding box 一致）。
+    |     ^
+    |
+    = help: if this is supposed to be its own paragraph, add a blank line
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#doc_lazy_continuation
+    = note: `#[warn(clippy::doc_lazy_continuation)]` on by default
+help: indent this line
+    |
+152 | ///     变换后整体平移使坐标非负（与 dagre 的 bounding box 一致）。
+    |     ++++
+System.Management.Automation.RemoteException
+warning: doc list item without indentation
+   --> src\builder\flowchart.rs:153:5
+    |
+153 | /// LR/RL 同时互换节点矩形宽高，使旋转后矩形方向与坐标排列匹配。
+    |     ^
+    |
+    = help: if this is supposed to be its own paragraph, add a blank line
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#doc_lazy_continuation
+help: indent this line
+    |
+153 | ///     LR/RL 同时互换节点矩形宽高，使旋转后矩形方向与坐标排列匹配。
+    |     ++++
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+  --> src\parser\gitgraph.rs:29:9
+   |
+29 |         let _ = consume_line(input)?;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+   |
+29 -         let _ = consume_line(input)?;
+29 +         consume_line(input)?;
+   |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+  --> src\parser\gitgraph.rs:60:9
+   |
+60 |         let _ = skip_line(input)?;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+   |
+60 -         let _ = skip_line(input)?;
+60 +         skip_line(input)?;
+   |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+  --> src\parser\gitgraph.rs:71:5
+   |
+71 | /     let _ = separated(0.., attr_pair, take_while(1.., |c: char| c.is_whitespace()))
+72 | |         .map(|pairs: Vec<(String, String)>| {
+73 | |             for (k, v) in pairs {
+74 | |                 map.insert(k, v);
+75 | |             }
+76 | |         })
+77 | |         .parse_next(input)?;
+   | |____________________________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+   |
+71 -     let _ = separated(0.., attr_pair, take_while(1.., |c: char| c.is_whitespace()))
+71 +     separated(0.., attr_pair, take_while(1.., |c: char| c.is_whitespace()))
+   |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+  --> src\parser\gitgraph.rs:98:5
+   |
+98 |     let _ = consume_line.parse_next(input)?;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+   |
+98 -     let _ = consume_line.parse_next(input)?;
+98 +     consume_line.parse_next(input)?;
+   |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+   --> src\parser\gitgraph.rs:110:5
+    |
+110 |     let _ = consume_line.parse_next(input)?;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+    |
+110 -     let _ = consume_line.parse_next(input)?;
+110 +     consume_line.parse_next(input)?;
+    |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+   --> src\parser\gitgraph.rs:118:5
+    |
+118 |     let _ = consume_line.parse_next(input)?;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+    |
+118 -     let _ = consume_line.parse_next(input)?;
+118 +     consume_line.parse_next(input)?;
+    |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+   --> src\parser\gitgraph.rs:128:5
+    |
+128 |     let _ = consume_line.parse_next(input)?;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+    |
+128 -     let _ = consume_line.parse_next(input)?;
+128 +     consume_line.parse_next(input)?;
+    |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+   --> src\parser\gitgraph.rs:141:5
+    |
+141 |     let _ = consume_line.parse_next(input)?;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+    |
+141 -     let _ = consume_line.parse_next(input)?;
+141 +     consume_line.parse_next(input)?;
+    |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+  --> src\parser\pie.rs:47:9
+   |
+47 |         let _ = skip_line(input)?;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+   |
+47 -         let _ = skip_line(input)?;
+47 +         skip_line(input)?;
+   |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+  --> src\parser\pie.rs:72:5
+   |
+72 |     let _ = consume_line(input)?;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+   |
+72 -     let _ = consume_line(input)?;
+72 +     consume_line(input)?;
+   |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+  --> src\parser\sequence.rs:57:9
+   |
+57 |         let _ = skip_line(input)?;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+   |
+57 -         let _ = skip_line(input)?;
+57 +         skip_line(input)?;
+   |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+   --> src\parser\sequence.rs:250:9
+    |
+250 |         let _ = skip_line(input)?;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+    |
+250 -         let _ = skip_line(input)?;
+250 +         skip_line(input)?;
+    |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+   --> src\parser\sequence.rs:255:5
+    |
+255 |     let _ = consume_line(input)?;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+    |
+255 -     let _ = consume_line(input)?;
+255 +     consume_line(input)?;
+    |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+  --> src\parser\state.rs:67:9
+   |
+67 |         let _ = skip_line(input)?;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+   |
+67 -         let _ = skip_line(input)?;
+67 +         skip_line(input)?;
+   |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+   --> src\parser\state.rs:190:5
+    |
+190 |     let _ = consume_line(input)?;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+    |
+190 -     let _ = consume_line(input)?;
+190 +     consume_line(input)?;
+    |
+System.Management.Automation.RemoteException
+warning: this let-binding has unit value
+  --> src\parser\timeline.rs:30:9
+   |
+30 |         let _ = consume_line(input)?;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#let_unit_value
+help: omit the `let` binding
+   |
+30 -         let _ = consume_line(input)?;
+30 +         consume_line(input)?;
+   |
+System.Management.Automation.RemoteException
+warning: manual case-insensitive ASCII comparison
+  --> src\parser\timeline.rs:56:41
+   |
+56 |         } else if trimmed.len() >= 5 && trimmed[..5].to_ascii_lowercase() == "title" {
+   |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#manual_ignore_case_cmp
+   = note: `#[warn(clippy::manual_ignore_case_cmp)]` on by default
+help: consider using `.eq_ignore_ascii_case()` instead
+   |
+56 -         } else if trimmed.len() >= 5 && trimmed[..5].to_ascii_lowercase() == "title" {
+56 +         } else if trimmed.len() >= 5 && trimmed[..5].eq_ignore_ascii_case("title") {
+   |
+System.Management.Automation.RemoteException
+warning: `liemermaid` (lib) generated 53 warnings
+error: could not compile `liemermaid` (lib) due to 49 previous errors; 53 warnings emitted
+warning: build failed, waiting for other jobs to finish...
+warning: `liemermaid` (lib test) generated 55 warnings (53 duplicates)
+error: could not compile `liemermaid` (lib test) due to 49 previous errors; 55 warnings emitted

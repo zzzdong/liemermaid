@@ -12,7 +12,7 @@
 
 use lievisual::geometry::{Point, Rect};
 use lievisual::text::TextStyle as LieTextStyle;
-use vello_cpu::kurbo::BezPath;
+use lievisual::geometry::BezPath;
 
 pub use lievisual::geometry::{Color, Point as GeoPoint, Rect as GeoRect, Transform};
 pub use lievisual::scene::{

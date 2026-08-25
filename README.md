@@ -17,7 +17,7 @@ Mermaid 图表的 Rust 解析与渲染库，输出统一走 [lievisual](https://
 
 ```toml
 [dependencies]
-liemermaid = "0.1.0-alpha.1"
+liemermaid = "0.1.0-beta.1"
 ```
 
 ```rust
@@ -48,7 +48,7 @@ Mermaid 文本 → MermaidParser → builder::build_diagram_with_config → Visu
                                             lievisual::SvgRenderer / VelloPixmapRenderer
 ```
 
-- `parser`：pest 语法解析 Mermaid DSL
+- `parser`：winnow 手写组合子解析 Mermaid DSL
 - `builder`：布局引擎（Sugiyama 分层、坐标计算、边路由）产出 `VisualElement`
 - `scene_ext`：将 `VisualElement` 转换为 `lievisual::Scene` 的适配层
 - 渲染统一委托 lievisual（SVG / vello_cpu PNG），本 crate 不维护自有渲染后端
