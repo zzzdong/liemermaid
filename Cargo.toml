@@ -17,7 +17,6 @@ exclude = ["*.svg", "*.png"]
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4", features = ["derive"] }
-dagre = "0.1"
 lievisual = "0.1"
 parley = "0.11"
 petgraph = "0.8"
@@ -41,3 +40,6 @@ path = "src/bin/liemermaid.rs"
 lto = "fat"
 codegen-units = 1
 strip = "symbols"
+
+#[patch.crates-io]
+#lievisual = { path = "../lievisual" }

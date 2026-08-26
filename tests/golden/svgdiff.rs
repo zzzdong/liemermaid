@@ -365,26 +365,48 @@ pub fn parse(svg: &str) -> Vec<El> {
 /// 从 reader 中持续读取，直到遇到匹配的结束标签（如 `text`），拼接期间所有文本。
 /// 会跳过 `<tspan>` 等中间元素的开始/结束，但收集其文本内容。
 fn collect_text(reader: &mut quick_xml::Reader<&[u8]>) -> String {
+    // 上一个事件类型：决定文本之间是「无缝拼接」还是「换行分隔」。
+    // - 相邻 Text / 实体（GeneralRef）属于同一段文本，应无缝拼接（如 `Hello &amp; World`）。
+    // - 跨真实标签（Start/End，如 `<tspan>`、`<p>`）应换行分隔（还原多个独立标签）。
+    #[derive(Clone, Copy, PartialEq)]
+    enum Prev {
+        None,
+        Text,
+        Tag, // Start / End
+    }
     let mut out = String::new();
     let mut buf = Vec::new();
     let mut depth = 0usize; // text 自身为 0，进入子元素 +1
+    let mut prev = Prev::None;
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Text(t)) => {
-                // 拼接所有文本节点（含 tspan 内部），不同文本节点间用换行分隔，
-                // 以便后续按行拆分还原多个独立标签（官方常把同一 foreignObject 内的多个
-                // <p> 标签拼成一段，加分隔符才能与逐项渲染的 liemermaid 对齐）。
                 if let Ok(s) = quick_xml::escape::unescape(t.as_ref()) {
-                    let trimmed = s.trim();
-                    if !trimmed.is_empty() {
-                        if !out.is_empty() {
-                            out.push('\n');
-                        }
-                        out.push_str(trimmed);
+                    if prev == Prev::Tag && !out.is_empty() {
+                        out.push('\n');
                     }
+                    out.push_str(&s);
                 }
+                prev = Prev::Text;
             }
-            Ok(Event::Start(_)) => depth += 1,
+            Ok(Event::GeneralRef(r)) => {
+                // quick-xml 0.42 把 `&amp;` 等实体拆成 GeneralRef 事件；
+                // 此处还原实体字符，保证 `Hello &amp; World` 拼回 `Hello & World`。
+                let ch = match r.as_ref() {
+                    "amp" => '&',
+                    "lt" => '<',
+                    "gt" => '>',
+                    "quot" => '"',
+                    "apos" => '\'',
+                    _ => '?',
+                };
+                out.push(ch);
+                prev = Prev::Text; // 实体的延续仍算同一段文本，不与后续文本加换行
+            }
+            Ok(Event::Start(_)) => {
+                depth += 1;
+                prev = Prev::Tag;
+            }
             Ok(Event::End(e)) => {
                 let tag = e.local_name().into_inner();
                 if tag == "text" && depth == 0 {
@@ -393,6 +415,7 @@ fn collect_text(reader: &mut quick_xml::Reader<&[u8]>) -> String {
                 if depth > 0 {
                     depth -= 1;
                 }
+                prev = Prev::Tag;
             }
             Ok(Event::Empty(_)) => {}
             Ok(Event::Eof) => break,
@@ -401,7 +424,8 @@ fn collect_text(reader: &mut quick_xml::Reader<&[u8]>) -> String {
         }
         buf.clear();
     }
-    out
+    // 整体 trim：去掉首尾空白，但保留文本内部（含实体前后）的空格。
+    out.trim().to_string()
 }
 
 fn attr_str<'a>(

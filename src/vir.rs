@@ -6,7 +6,7 @@
 //! 减少 builder 的样板代码。
 //!
 //! 几何坐标统一使用 [`lievisual::geometry`]（即 kurbo 类型，由 lievisual 直接 re-export，
-//! 与 builder 布局算法零转换互通）；仅矢量路径 [`BezPath`] 保留 `vello_cpu::kurbo`。
+//! 与 builder 布局算法零转换互通）
 //!
 //! 历史 `src/visual.rs`（`VisualElement` 及其私有样式类型）已删除，统一改用 lievisual IR。
 
@@ -127,9 +127,20 @@ fn smooth_curve(pts: &[Point]) -> BezPath {
     }
     p.move_to((pts[0].x, pts[0].y));
     if pts.len() == 2 {
-        p.line_to((pts[1].x, pts[1].y));
+        // 两点边：三次贝塞尔柔和弧（控制点沿轴向 1/3、2/3）
+        let a = pts[0];
+        let b = pts[1];
+        let c1 = Point::new(a.x + (b.x - a.x) * 0.33, a.y + (b.y - a.y) * 0.5);
+        let c2 = Point::new(a.x + (b.x - a.x) * 0.67, a.y + (b.y - a.y) * 0.5);
+        p.curve_to((c1.x, c1.y), (c2.x, c2.y), (b.x, b.y));
         return p;
     }
+    // 正交折线（sugiyama 路由，每段水平/垂直）→ 拐角圆角平滑
+    if pts.windows(2).all(|w| is_axis_aligned(w[0], w[1])) {
+        smooth_orthogonal(&mut p, pts);
+        return p;
+    }
+    // 自由折线 → Catmull-Rom
     for i in 0..pts.len() - 1 {
         let p0 = if i == 0 { pts[0] } else { pts[i - 1] };
         let p1 = pts[i];
@@ -142,10 +153,80 @@ fn smooth_curve(pts: &[Point]) -> BezPath {
     p
 }
 
+/// 判断两点连线是否水平/垂直（sugiyama 路由含微小浮点误差，用宽松阈值）。
+fn is_axis_aligned(a: Point, b: Point) -> bool {
+    (a.x - b.x).abs() < 0.5 || (a.y - b.y).abs() < 0.5
+}
+
+/// 正交折线拐角圆角平滑：每个 90° 拐点用贝塞尔圆弧过渡。
+/// 使用标准圆角贝塞尔系数 K=0.5523，避免 Catmull-Rom 在直角处的横向摆动。
+fn smooth_orthogonal(p: &mut BezPath, pts: &[Point]) {
+    const K: f64 = 0.5523; // 90° 圆弧的贝塞尔系数
+    const RADIUS: f64 = 10.0;
+    let n = pts.len();
+    // 逐点推进：从起点沿直线到每个拐角的圆角起点，贝塞尔过拐角，最后到终点
+    let mut cur = pts[0];
+    for i in 1..n - 1 {
+        let a = pts[i - 1];
+        let b = pts[i];
+        let c = pts[i + 1];
+        // 前段方向（a→b），后段方向（b→c）
+        let d_in = unit_dir(b, a);
+        let d_out = unit_dir(c, b);
+        // 圆角半径（不超过前后段长度，避免过冲）
+        let r = RADIUS.min((b.distance(a) * 0.5).min(b.distance(c) * 0.5));
+        let start = Point::new(b.x - d_in.x * r, b.y - d_in.y * r);
+        let end = Point::new(b.x + d_out.x * r, b.y + d_out.y * r);
+        p.line_to((start.x, start.y));
+        let c1 = Point::new(start.x - d_in.x * r * K, start.y - d_in.y * r * K);
+        let c2 = Point::new(end.x + d_out.x * r * K, end.y + d_out.y * r * K);
+        p.curve_to((c1.x, c1.y), (c2.x, c2.y), (end.x, end.y));
+        cur = end;
+    }
+    let last = pts[n - 1];
+    if cur.distance(last) > 1e-6 {
+        p.line_to((last.x, last.y));
+    }
+}
+
+/// 从 `from` 指向 `to` 的单位方向向量。
+fn unit_dir(to: Point, from: Point) -> Point {
+    let dx = to.x - from.x;
+    let dy = to.y - from.y;
+    let len = (dx * dx + dy * dy).sqrt().max(1e-6);
+    Point::new(dx / len, dy / len)
+}
+
 /// 平滑曲线边：把路由点平滑为贝塞尔开放路径（仅描边）。
 /// 末端箭头由调用方用 [`draw_arrow_head`] 等自绘，IR 本身不含箭头概念。
 pub fn curved_edge_node(points: Vec<Point>, style: Stroke, z: i32) -> SceneNode {
     let path = smooth_curve(&points);
+    let fs = FillStrokeStyle {
+        fill: None,
+        stroke: Some(style),
+    };
+    SceneNode::from(Element::Path {
+        path,
+        style: fs,
+        closed: false,
+    })
+    .with_z(z)
+}
+
+/// 三次贝塞尔边：从 `start` 经控制点 `c1`/`c2` 到 `end` 的单条贝塞尔曲线。
+///
+/// 用于回边等需要明确 S 形绕行的边，避免 Catmull-Rom 对折点的摆动。
+pub fn cubic_bezier_edge(
+    start: Point,
+    c1: Point,
+    c2: Point,
+    end: Point,
+    style: Stroke,
+    z: i32,
+) -> SceneNode {
+    let mut path = BezPath::new();
+    path.move_to((start.x, start.y));
+    path.curve_to((c1.x, c1.y), (c2.x, c2.y), (end.x, end.y));
     let fs = FillStrokeStyle {
         fill: None,
         stroke: Some(style),

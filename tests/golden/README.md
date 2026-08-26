@@ -10,7 +10,6 @@
 | `cases/*.mmd` | 各用例的 Mermaid 源码（经典 + 边界场景） |
 | `golden/*.svg` | **黄金样本**：官方 mermaid-cli 渲染的"标准答案" |
 | `generate_golden.js` | 调用官方 `@mermaid-js/mermaid-cli` 生成黄金样本 |
-| `generate_golden_from_dagre.js` | 回退生成器：从 dagre 布局数据生成黄金样本（无需网络） |
 | `golden_snapshot_test.rs` | 用 liemermaid 渲染同一源码，与黄金样本做**结构化对比** |
 | `catalog_cases_render_test.rs` | 冒烟测试：每个用例源码对 liemermaid 可解析可渲染 |
 
@@ -52,23 +51,20 @@
 
 ## 黄金样本的生成源
 
-- **首选（mermaid-cli）**：`generate_golden.js` 用官方 `@mermaid-js/mermaid-cli`
+- **mermaid-cli**：`generate_golden.js` 用官方 `@mermaid-js/mermaid-cli`
   渲染出标准 SVG（含真实文本测宽）。需要 `npm` 与网络；检测到系统 Chromium
   （如 `pacman -S chromium`）时自动通过 `PUPPETEER_EXECUTABLE_PATH` 使用它，
   避免下载 puppeteer 自带浏览器。
-- **回退（dagre）**：`generate_golden_from_dagre.js` 读取
-  `tests/dagre_ref/layouts.json`，生成与官方 SVG 同构的节点结构。仅覆盖 flowchart。
 
 ## 运行
 
 ```bash
-# 一键：生成黄金样本 + 跑测试（mermaid-cli 失败则回退 dagre）
+# 一键：生成黄金样本 + 跑测试
 bash tests/golden/regenerate.sh
 
 # 或手动
 cd tests/golden
 node generate_golden.js              # 官方模式（需 npm + Chromium）
-node generate_golden_from_dagre.js   # 回退模式（仅 flowchart，无需 npm）
 cd ../..
 cargo test --test golden_snapshot_test       # 结构化对拍（当前仅 flowchart）
 cargo test --test catalog_cases_render_test  # 冒烟：用例可解析可渲染
@@ -85,8 +81,8 @@ cargo test --test catalog_cases_render_test  # 冒烟：用例可解析可渲染
 
 ## 已知差异 / 说明
 
-- **同层左右顺序**：dagre（Barycenter 初始序）与 liemermaid 可能左右互换，属视觉级
-  差异。测试按"同层集合"匹配（容忍顺序），以软断言如实报告坐标距离。
+- **同层左右顺序**：自研 Sugiyama（Barycenter 初始序）与官方 mermaid 可能左右互换，
+  属视觉级差异。测试按"同层集合"匹配（容忍顺序），以软断言如实报告坐标距离。
   例如 `cycle` 用例报告 `soft=DIFF`，是预期的顺序差异。
 - **节点尺寸**：官方 mermaid 用真实文本测宽，liemermaid 用近似宽度。测试用相对
   容差（60%）对比，尺寸不参与硬断言。

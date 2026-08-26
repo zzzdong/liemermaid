@@ -172,7 +172,7 @@ fn network_simplex_more_compact_than_longest_path() {
 
 #[test]
 fn same_layer_y_alignment() {
-    use vello_cpu::kurbo::Point;
+    use lievisual::geometry::Point;
     // B、C 同层（A->B, A->C），验证 Y 中心一致（Brandes-Köpf）
     let mut g = DiGraph::<String, ()>::new();
     let a = g.add_node("A".into());

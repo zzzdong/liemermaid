@@ -173,17 +173,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dagre"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9468ae6a4b98e7102e0e59ba8f9aacd2266cec71817c19b62b2d61ee260524c1"
-dependencies = [
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "displaydoc"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -538,7 +527,6 @@ version = "0.1.0-beta.1"
 dependencies = [
  "anyhow",
  "clap",
- "dagre",
  "lievisual",
  "parley",
  "petgraph",
@@ -552,9 +540,9 @@ dependencies = [
 
 [[package]]
 name = "lievisual"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b9b1b37d0e3187aa48a48e10ab0cc061080a7ec86dc2bd7f3626bc915077b95"
+checksum = "333f52719a9aae1788bc0401be0f20cdd6c293f393d6a30ab24424aafcd4fbe2"
 dependencies = [
  "kurbo",
  "parley",
@@ -808,9 +796,9 @@ dependencies = [
 
 [[package]]
 name = "read-fonts"
-version = "0.43.2"
+version = "0.43.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "315132758c032b03a4d3a3ada9289d5608f2ff16c91157888afc8c8e8e9bb209"
+checksum = "005c8acf251756c478b0bf402885bfd88a1476020c4c7e6060edc1aa68da38ea"
 dependencies = [
  "bytemuck",
  "font-types",
@@ -892,7 +880,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4febebda507fb889c545a37a135517769d1391941013561292897961d1887d6"
 dependencies = [
  "bytemuck",
- "read-fonts 0.43.2",
+ "read-fonts 0.43.3",
 ]
 
 [[package]]

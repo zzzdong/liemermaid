@@ -100,10 +100,10 @@ pub fn build_pie_elements(
         // 扇区路径
         let (sx, sy) = (start_angle.cos(), start_angle.sin());
 
-        let mut path = vello_cpu::kurbo::BezPath::new();
+        let mut path = lievisual::geometry::BezPath::new();
         path.move_to(Point::new(cx, cy));
         path.line_to(Point::new(cx + radius * sx, cy + radius * sy));
-        // 使用多段直线近似扇形外弧（避免 kurbo arc_to 版本兼容问题）
+
         let arc_segments = 20;
         for i in 1..=arc_segments {
             let t = i as f64 / arc_segments as f64;

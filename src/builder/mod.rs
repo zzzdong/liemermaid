@@ -1,10 +1,9 @@
 pub mod class;
-pub mod dagre_layout;
 pub mod er;
-pub mod flowchart;
 pub mod gitgraph;
 pub mod layout;
 pub mod pie;
+pub mod render;
 pub mod sequence;
 pub mod state;
 pub mod theme;
@@ -19,7 +18,7 @@ use crate::{
 use lievisual::geometry::Transform;
 use lievisual::scene::{Element, SceneNode};
 use lievisual::text::{TextAlign, TextBaseline};
-use vello_cpu::kurbo::PathSeg;
+use lievisual::geometry::PathSeg;
 
 /// 构建 Mermaid Diagram 的视觉元素管线
 ///
@@ -36,15 +35,26 @@ pub fn build_diagram_with_config(
     diagram: &Diagram,
     config: &OutputConfig,
 ) -> DiagramResult<lievisual::Scene> {
+    // flowchart / state 走新布局管线（LayoutGraph → PlacedGraph → SceneNode）
+    if matches!(diagram, Diagram::Flowchart(_) | Diagram::State(_)) {
+        let layout_config = layout::LayoutConfig::default();
+        let placed = layout::layout_diagram(diagram, &layout_config, config);
+        let nodes = render::render_placed(&placed, diagram, config);
+        let mut scene = lievisual::Scene::new(config.width, config.height);
+        scene.background = config.background;
+        scene.nodes.extend(fit_to_canvas(nodes, config));
+        return Ok(scene);
+    }
+
+    // 其余图表保留旧引擎
     let engine: Box<dyn LayoutEngine + '_> = match diagram {
         Diagram::Pie(pie) => Box::new(pie::PieEngine::new(pie)),
-        Diagram::Flowchart(fc) => Box::new(flowchart::FlowchartEngine::new(fc)),
         Diagram::Sequence(seq) => Box::new(sequence::SequenceEngine::new(seq)),
         Diagram::Class(class) => Box::new(class::ClassEngine::new(class)),
-        Diagram::State(state) => Box::new(state::StateEngine::new(state)),
         Diagram::Er(er) => Box::new(er::ErEngine::new(er)),
         Diagram::Timeline(timeline) => Box::new(timeline::TimelineEngine::new(timeline)),
         Diagram::GitGraph(gg) => Box::new(gitgraph::GitGraphEngine::new(gg)),
+        Diagram::Flowchart(_) | Diagram::State(_) => unreachable!(),
     };
     let nodes = engine.layout(config)?;
     let mut scene = lievisual::Scene::new(config.width, config.height);
