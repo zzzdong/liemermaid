@@ -1,9 +1,8 @@
 //! # 布局类型 (Layout Types)
 //!
-//! 定义所有图表共用的布局中间表示（Layout IR）与 [`LayoutEngine`] trait。
-//! flowchart 的布局由 dagre（`layout::dagre_layout`）求解，
-//! 其余图表（如 stateDiagram）走各自路径，最终都产出 `Vec<SceneNode>`，
-//! 统一对接 lievisual 的 `Scene`。
+//! 定义所有图表共用的布局中间表示（Layout IR）。
+//! 各图表由 `layout::layout_diagram` 统一求解，最终都产出 `PlacedGraph`，
+//! 再交由 `render` 层渲染为 `Vec<SceneNode>`，统一对接 lievisual 的 `Scene`。
 
 use lievisual::geometry::{Point, Rect};
 
@@ -111,13 +110,4 @@ pub struct Layout {
     pub metadata: LayoutMetadata,
     /// 子图容器列表（渲染时作为背景框 + 标题）
     pub subgraphs: Vec<LayoutSubgraph>,
-}
-
-/// 布局引擎 trait：每种图表类型实现自己的布局逻辑
-///
-/// 通过此 trait 将"布局算法"与"具体图表类型"解耦，
-/// 每种图表内部的布局管线各不相同，但对外暴露统一的入口。
-pub trait LayoutEngine {
-    /// 执行布局管线，输出视觉元素
-    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<SceneNode>>;
 }

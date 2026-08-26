@@ -1,10 +1,11 @@
-use lievisual::geometry::Point;
+//! Pie 渲染器：复用既有几何算法，按新管线统一入口绘制。
 
+use lievisual::geometry::Point;
 use lievisual::text::{RichSpan, layout_text};
 
 use crate::{
     ast::PieDiagram,
-    builder::{layout::types::LayoutEngine, theme, types::OutputConfig},
+    builder::{theme, types::OutputConfig},
     error::{DiagramError, DiagramResult},
     vir::{self, Color, SceneNode, TextAlign, TextBaseline, Z_LABEL, Z_SERIES, Z_TITLE},
 };
@@ -14,26 +15,8 @@ const PIE_TITLE_SIZE: f64 = 24.0;
 const PIE_LABEL_SIZE: f64 = 13.0;
 const PIE_LABEL_OFFSET: f64 = 20.0;
 
-pub struct PieEngine<'a> {
-    pie: &'a PieDiagram,
-}
-
-impl<'a> PieEngine<'a> {
-    pub fn new(pie: &'a PieDiagram) -> Self {
-        Self { pie }
-    }
-}
-
-impl<'a> LayoutEngine for PieEngine<'a> {
-    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<SceneNode>> {
-        build_pie_elements(self.pie, config)
-    }
-}
-
-pub fn build_pie_elements(
-    pie: &PieDiagram,
-    config: &OutputConfig,
-) -> DiagramResult<Vec<SceneNode>> {
+/// 把饼图 AST 渲染为视觉元素（复用原 `build_pie_elements` 的几何算法）。
+pub fn render_pie(pie: &PieDiagram, config: &OutputConfig) -> DiagramResult<Vec<SceneNode>> {
     let mut elements = Vec::new();
 
     // 解析数值

@@ -1,14 +1,19 @@
+//! Sequence 渲染器：复用既有几何算法，按新管线统一入口绘制。
+
+use std::collections::HashMap;
+
+use lievisual::geometry::Point;
+use lievisual::text::{RichSpan, compute_text_offset, layout_text};
+
 use crate::{
     ast::{
         MessageActivation, MessageArrow, NotePlacement, SequenceBlock, SequenceBlockKind,
         SequenceDiagram, SequenceItem, SequenceStatement,
     },
-    builder::{layout::types::LayoutEngine, types::OutputConfig},
+    builder::types::OutputConfig,
     error::DiagramResult,
-    vir::{self, Element, SceneNode, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, theme},
+    vir::{self, Element, SceneNode, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, Z_SUBGRAPH, theme},
 };
-use lievisual::geometry::Point;
-use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
 const BOX_HEIGHT: f64 = 40.0;
 const BOX_MIN_WIDTH: f64 = 80.0;
@@ -19,23 +24,8 @@ const NOTE_HEIGHT_BR: f64 = 36.0;
 const NOTE_GAP: f64 = 14.0;
 const FONT_SIZE: f64 = theme::FONT_SIZE;
 
-pub struct SequenceEngine<'a> {
-    seq: &'a SequenceDiagram,
-}
-
-impl<'a> SequenceEngine<'a> {
-    pub fn new(seq: &'a SequenceDiagram) -> Self {
-        Self { seq }
-    }
-}
-
-impl<'a> LayoutEngine for SequenceEngine<'a> {
-    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<SceneNode>> {
-        Ok(build_sequence_elements(self.seq, config))
-    }
-}
-
-pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> Vec<SceneNode> {
+/// 把时序图 AST 渲染为视觉元素（复用原 `build_sequence_elements` 的几何算法）。
+pub fn render_sequence(seq: &SequenceDiagram, config: &OutputConfig) -> Vec<SceneNode> {
     let mut elements = Vec::new();
 
     if seq.participants.is_empty() {
@@ -43,7 +33,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
     }
 
     // ---- 计算各参与者的列宽和中心 x ----
-    let name_to_idx: std::collections::HashMap<&str, usize> = seq
+    let name_to_idx: HashMap<&str, usize> = seq
         .participants
         .iter()
         .enumerate()
@@ -101,7 +91,6 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             .with_z(Z_SERIES),
         );
 
-        // actor 名：先以 Left/Top 排版测量，再计算居中偏移（与 flowchart 一致）
         let style = vir::text_style(
             theme::sequence::TEXT,
             FONT_SIZE,
@@ -161,7 +150,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
     fn push_statement(
         stmts: &[SequenceItem],
         depth: usize,
-        name_to_idx: &std::collections::HashMap<&str, usize>,
+        name_to_idx: &HashMap<&str, usize>,
         rows: &mut Vec<SeqRow>,
         blocks: &mut Vec<SeqBlock>,
         cur_y: &mut f64,
@@ -332,12 +321,8 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
     }
 
     // ---- 激活条（activation bars） ----
-    // 按消息顺序维护每个参与者的激活栈：
-    //   Activate   在目标生命线上开启一条激活条
-    //   Deactivate 结束该参与者最上层的激活条
     const ACTIVATION_W: f64 = 8.0;
-    let mut act_stack: std::collections::HashMap<usize, Vec<f64>> =
-        std::collections::HashMap::new();
+    let mut act_stack: HashMap<usize, Vec<f64>> = HashMap::new();
     for r in &rows {
         if r.kind != 0 {
             continue;
@@ -345,11 +330,9 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         let y = r.y + MESSAGE_SPACING * 0.3;
         match r.activation {
             Some(MessageActivation::Activate) => {
-                // + 激活接收方（to），与 mermaid 语义一致
                 act_stack.entry(r.ti).or_default().push(y);
             }
             Some(MessageActivation::Deactivate) => {
-                // - 反激活发送方（from），与 mermaid 语义一致
                 if let Some(stack) = act_stack.get_mut(&r.fi) {
                     if let Some(start) = stack.pop() {
                         let h = y - start;
@@ -380,7 +363,6 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             None => {}
         }
     }
-    // 收尾：未关闭的激活条延伸至生命线底部
     for (pi, stack) in &act_stack {
         for start in stack {
             let h = lifeline_bottom - start;
@@ -416,7 +398,6 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             + BLOCK_PAD
             + b.depth as f64 * BLOCK_INDENT;
         let rect = lievisual::geometry::Rect::new(x0, b.y_top, x1, b.y_bottom);
-        // 官方 loop/alt/opt 块：虚线边框、无填充、位于底层
         elements.push(
             SceneNode::from(Element::RoundedRect {
                 rect,
@@ -430,9 +411,8 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                     )),
                 },
             })
-            .with_z(vir::Z_SUBGRAPH), // 底层（在消息/生命线之下）
+            .with_z(Z_SUBGRAPH),
         );
-        // 标签
         let ts = vir::text_style(
             theme::sequence::BLOCK_TEXT,
             FONT_SIZE * 0.85,
@@ -461,7 +441,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
     // ---- 绘制消息 ----
     for r in &rows {
         if r.kind == 1 {
-            continue; // 备注稍后统一绘制
+            continue;
         }
         let base_from = col_centers[r.fi];
         let base_to = col_centers[r.ti];
@@ -495,7 +475,6 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                 MessageArrow::Solid | MessageArrow::Dashed => {}
                 MessageArrow::SolidTip | MessageArrow::DashedTip => {
                     let tip = Point::new(to_x, arrow_y);
-                    // 箭头指向消息接收方（与行进方向一致）
                     let head_dir = Point::new(dir, 0.0);
                     vir::draw_arrow_head(&mut elements, &tip, &head_dir, &stroke, true);
                 }
@@ -526,18 +505,15 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                 }
                 MessageArrow::Both => {
                     let end_tip = Point::new(to_x, arrow_y);
-                    // 终点箭头指向接收方
                     let end_dir = Point::new(dir, 0.0);
                     vir::draw_arrow_head(&mut elements, &end_tip, &end_dir, &stroke, true);
                     let start_tip = Point::new(from_x, arrow_y);
-                    // 起点箭头指向发送方
                     let start_dir = Point::new(-dir, 0.0);
                     vir::draw_arrow_head(&mut elements, &start_tip, &start_dir, &stroke, true);
                 }
             }
         }
 
-        // 消息文本（居中显示在箭头上方，与官方 mermaid 一致）
         if !r.text.is_empty() {
             let mid_x = (from_x + to_x) / 2.0;
             elements.push(vir::text_node(
@@ -596,8 +572,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             }
         };
 
-        let note_rect =
-            lievisual::geometry::Rect::new(nx, note_y, nx + nw, note_y + NOTE_HEIGHT_BR);
+        let note_rect = lievisual::geometry::Rect::new(nx, note_y, nx + nw, note_y + NOTE_HEIGHT_BR);
         elements.push(
             SceneNode::from(Element::RoundedRect {
                 rect: note_rect,
@@ -618,10 +593,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             TextAlign::Left,
             TextBaseline::Top,
         );
-        let layout = layout_text(
-            &[RichSpan::new(r.text.clone(), ts.clone())],
-            Some(nw - 10.0),
-        );
+        let layout = layout_text(&[RichSpan::new(r.text.clone(), ts.clone())], Some(nw - 10.0));
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
         elements.push(vir::text_node(
             r.text.clone(),
@@ -639,7 +611,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         ));
     }
 
-    // ---- 底部参与者盒子（官方 mermaid 在生命线末端也绘制一个相同的 actor box） ----
+    // ---- 底部参与者盒子 ----
     for (i, p) in seq.participants.iter().enumerate() {
         let cx = col_centers[i];
         let bw = col_widths[i];
@@ -664,7 +636,6 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             .with_z(Z_SERIES),
         );
 
-        // actor 名：先以 Left/Top 排版测量，再计算居中偏移（与 flowchart 一致）
         let style = vir::text_style(
             theme::sequence::TEXT,
             FONT_SIZE,

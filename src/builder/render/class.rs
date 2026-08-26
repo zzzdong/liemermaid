@@ -3,11 +3,12 @@ use std::collections::{HashMap, VecDeque};
 use lievisual::geometry::BezPath;
 use lievisual::geometry::{Point, Rect};
 use petgraph::Direction;
-use petgraph::graph::{DiGraph, NodeIndex};
+use petgraph::graph::NodeIndex;
 
 use crate::{
     ast::{ClassDiagram, RelationKind, Visibility},
-    builder::{layout::types::LayoutEngine, types::OutputConfig},
+    builder::types::OutputConfig,
+    error::DiagramResult,
     vir::{
         self, Color, Element, SceneNode, Stroke, TextAlign, TextBaseline, TextStyle, Z_AXIS,
         Z_LABEL, Z_SERIES, theme,
@@ -15,28 +16,20 @@ use crate::{
 };
 use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
-use crate::error::DiagramResult;
-
 const FONT_SIZE: f64 = theme::FONT_SIZE;
 const SMALL_FONT: f64 = 11.0;
 const CLASS_MIN_W: f64 = 140.0;
 const CLASS_PAD: f64 = 12.0;
 const CLASS_MARGIN_X: f64 = 80.0;
 
-pub struct ClassEngine<'a> {
-    diagram: &'a ClassDiagram,
-}
-
-impl<'a> ClassEngine<'a> {
-    pub fn new(diagram: &'a ClassDiagram) -> Self {
-        Self { diagram }
-    }
-}
-
-impl<'a> LayoutEngine for ClassEngine<'a> {
-    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<SceneNode>> {
-        Ok(build_class_elements(self.diagram, config))
-    }
+/// Render a class diagram to scene nodes.
+///
+/// This is part of the **Grid family** (class + er) and is invoked by
+/// `GridRenderer`. The layout/geometry (layered placement of class boxes and
+/// relation routing) is domain-specific, so it lives here rather than in the
+/// generic grid solver.
+pub fn render_class(diagram: &ClassDiagram, _config: &OutputConfig) -> DiagramResult<Vec<SceneNode>> {
+    Ok(build_class_elements(diagram, _config))
 }
 
 pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> Vec<SceneNode> {
@@ -153,7 +146,7 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
     let class_names: Vec<String> = diagram.classes.iter().map(|c| c.name.clone()).collect();
 
     // Build inheritance graph using petgraph
-    let mut graph = DiGraph::new();
+    let mut graph = petgraph::graph::DiGraph::new();
     let mut node_indices: HashMap<String, NodeIndex> = HashMap::new();
     for name in &class_names {
         let idx = graph.add_node(name.clone());
@@ -197,11 +190,10 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
     }
 
     // Ensure all class nodes have a layer (disconnected nodes go to layer 0)
-    let mut next_layer = layers.values().copied().max().unwrap_or(0) + 1;
+    let _next_layer = layers.values().copied().max().unwrap_or(0) + 1;
     for name in &class_names {
         if let std::collections::hash_map::Entry::Vacant(e) = layers.entry(node_indices[name]) {
             e.insert(0);
-            next_layer = next_layer.max(1);
         }
     }
 
@@ -706,14 +698,11 @@ fn draw_triangle_head(
     } else {
         Some(Color::rgb(255, 255, 255))
     };
-    elements.push(
-        SceneNode::from(Element::Path {
-            path,
-            style: vir::fs_both(fill.unwrap(), style.color, style.width),
-            closed: true,
-        })
-        .with_z(Z_AXIS),
-    );
+    elements.push(vir::path_node(
+        path,
+        vir::fs_both(fill.unwrap(), style.color, style.width),
+        Z_AXIS,
+    ));
 }
 
 fn draw_diamond_head(
@@ -743,14 +732,11 @@ fn draw_diamond_head(
     } else {
         Some(Color::rgb(255, 255, 255))
     };
-    elements.push(
-        SceneNode::from(Element::Path {
-            path,
-            style: vir::fs_both(fill.unwrap(), style.color, style.width),
-            closed: true,
-        })
-        .with_z(Z_AXIS),
-    );
+    elements.push(vir::path_node(
+        path,
+        vir::fs_both(fill.unwrap(), style.color, style.width),
+        Z_AXIS,
+    ));
 }
 
 fn draw_dashed_line(elements: &mut Vec<SceneNode>, start: &Point, end: &Point, style: &Stroke) {

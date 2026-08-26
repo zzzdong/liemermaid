@@ -1,89 +1,18 @@
+//! Timeline 渲染器：复用既有几何算法，按新管线统一入口绘制。
+
 use lievisual::geometry::{Color, Point, Rect};
+use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
 use crate::{
     ast::TimelineDiagram,
-    builder::{layout::types::LayoutEngine, types::OutputConfig},
-    error::DiagramResult,
-    vir::{self, SceneNode, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, Z_TITLE, theme},
+    builder::{theme, types::OutputConfig},
+    vir::{self, SceneNode, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, Z_TITLE},
 };
-use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
 const TITLE_SIZE: f64 = 22.0;
 
-pub struct TimelineEngine<'a> {
-    timeline: &'a TimelineDiagram,
-}
-
-impl<'a> TimelineEngine<'a> {
-    pub fn new(timeline: &'a TimelineDiagram) -> Self {
-        Self { timeline }
-    }
-}
-
-impl<'a> LayoutEngine for TimelineEngine<'a> {
-    fn layout(&self, config: &OutputConfig) -> DiagramResult<Vec<SceneNode>> {
-        Ok(build_timeline_elements(self.timeline, config))
-    }
-}
-
-/// 取第 index 个 section 的任务块填充色（来自 theme 调色板，循环）
-fn section_color(index: usize) -> Color {
-    let colors = theme::timeline::BLOCK_COLORS;
-    colors[index % colors.len()]
-}
-
-/// 画一个带圆角的彩色矩形块（section 或 event 任务块），样式全部来自 theme
-fn draw_task_block(
-    elements: &mut Vec<SceneNode>,
-    cx: f64,
-    cy: f64,
-    color: Color,
-    text: &str,
-    font_size: f64,
-) {
-    let w = theme::timeline::BLOCK_W;
-    let h = theme::timeline::BLOCK_H;
-    let x = cx - w / 2.0;
-    let y = cy - h / 2.0;
-    let stroke = theme::timeline::BLOCK_STROKE;
-    let text_color = theme::timeline::BLOCK_TEXT;
-
-    // 圆角矩形背景
-    elements.push(vir::rect_node(
-        Rect::new(x, y, x + w, y + h),
-        Some(theme::timeline::BLOCK_RX),
-        vir::fs_both(color, stroke, theme::timeline::BLOCK_STROKE_W),
-        Z_SERIES,
-    ));
-
-    // 文字居中
-    let ts = vir::text_style(
-        text_color,
-        font_size,
-        theme::FONT_FAMILY.to_string(),
-        TextAlign::Center,
-        TextBaseline::Middle,
-    );
-    let layout = layout_text(
-        &[RichSpan::new(text.to_string(), ts.clone())],
-        Some(w - 16.0),
-    );
-    let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
-    elements.push(vir::text_node(
-        text.to_string(),
-        Point::new(cx + x_off, cy + y_off),
-        ts.with_align(TextAlign::Left)
-            .with_baseline(TextBaseline::Top),
-        0.0,
-        Some(w - 16.0),
-        Z_LABEL,
-    ));
-}
-
-pub fn build_timeline_elements(
-    timeline: &TimelineDiagram,
-    config: &OutputConfig,
-) -> Vec<SceneNode> {
+/// 把时间轴 AST 渲染为视觉元素（复用原 `build_timeline_elements` 的几何算法）。
+pub fn render_timeline(timeline: &TimelineDiagram, config: &OutputConfig) -> Vec<SceneNode> {
     let mut elements = Vec::new();
 
     if timeline.sections.is_empty() {
@@ -241,4 +170,58 @@ pub fn build_timeline_elements(
     }
 
     elements
+}
+
+/// 取第 index 个 section 的任务块填充色（来自 theme 调色板，循环）
+fn section_color(index: usize) -> Color {
+    let colors = theme::timeline::BLOCK_COLORS;
+    colors[index % colors.len()]
+}
+
+/// 画一个带圆角的彩色矩形块（section 或 event 任务块），样式全部来自 theme
+fn draw_task_block(
+    elements: &mut Vec<SceneNode>,
+    cx: f64,
+    cy: f64,
+    color: Color,
+    text: &str,
+    font_size: f64,
+) {
+    let w = theme::timeline::BLOCK_W;
+    let h = theme::timeline::BLOCK_H;
+    let x = cx - w / 2.0;
+    let y = cy - h / 2.0;
+    let stroke = theme::timeline::BLOCK_STROKE;
+    let text_color = theme::timeline::BLOCK_TEXT;
+
+    // 圆角矩形背景
+    elements.push(vir::rect_node(
+        Rect::new(x, y, x + w, y + h),
+        Some(theme::timeline::BLOCK_RX),
+        vir::fs_both(color, stroke, theme::timeline::BLOCK_STROKE_W),
+        Z_SERIES,
+    ));
+
+    // 文字居中
+    let ts = vir::text_style(
+        text_color,
+        font_size,
+        theme::FONT_FAMILY.to_string(),
+        TextAlign::Center,
+        TextBaseline::Middle,
+    );
+    let layout = layout_text(
+        &[RichSpan::new(text.to_string(), ts.clone())],
+        Some(w - 16.0),
+    );
+    let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
+    elements.push(vir::text_node(
+        text.to_string(),
+        Point::new(cx + x_off, cy + y_off),
+        ts.with_align(TextAlign::Left)
+            .with_baseline(TextBaseline::Top),
+        0.0,
+        Some(w - 16.0),
+        Z_LABEL,
+    ));
 }

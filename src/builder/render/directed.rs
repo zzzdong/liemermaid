@@ -7,7 +7,7 @@ use lievisual::geometry::{BezPath, Point, Rect, Size};
 use lievisual::scene::SceneNode;
 use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
-use crate::ast::{Flowchart, NodeShape, StateDiagram};
+use crate::ast::{Diagram, Flowchart, NodeShape, StateDiagram};
 use crate::builder::layout::ir::PlacedGraph;
 use crate::builder::layout::measure::measure_nodes;
 use crate::builder::layout::recognize::all_flowchart_nodes;
@@ -408,5 +408,18 @@ impl DirectedRenderer {
             );
         }
         elements
+    }
+
+    /// Directed 家族（`Flowchart` / `State`）的统一渲染入口。
+    pub fn render(
+        placed: &PlacedGraph,
+        diagram: &Diagram,
+        config: &OutputConfig,
+    ) -> Vec<SceneNode> {
+        match diagram {
+            Diagram::Flowchart(fc) => Self::render_flowchart(placed, fc, config),
+            Diagram::State(sd) => Self::render_state(placed, sd, config),
+            _ => Vec::new(),
+        }
     }
 }

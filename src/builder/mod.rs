@@ -1,20 +1,9 @@
-pub mod class;
-pub mod er;
-pub mod gitgraph;
 pub mod layout;
-pub mod pie;
 pub mod render;
-pub mod sequence;
-pub mod state;
 pub mod theme;
-pub mod timeline;
 pub mod types;
 
-use crate::{
-    ast::Diagram,
-    builder::{layout::types::LayoutEngine, types::OutputConfig},
-    error::DiagramResult,
-};
+use crate::{ast::Diagram, builder::types::OutputConfig, error::DiagramResult};
 use lievisual::geometry::PathSeg;
 use lievisual::geometry::Transform;
 use lievisual::scene::{Element, SceneNode};
@@ -24,9 +13,10 @@ use lievisual::text::{TextAlign, TextBaseline};
 ///
 /// # 管线流程
 ///
-/// 1. 分发：根据 Diagram 枚举类型创建对应的 LayoutEngine
-/// 2. 布局：引擎内部执行布局管线，输出 lievisual `SceneNode` 列表
-/// 3. 渲染：组装为 [`lievisual::Scene`] 供渲染器消费
+/// 1. 统一入口：所有图表类型都先经 `layout::layout_diagram` 生成 `PlacedGraph`
+///    （部分图表几何语义在渲染层基于 AST 自绘，见 `render`）。
+/// 2. 渲染：由 `render::render_placed` 根据图表类型分派渲染器，输出 `SceneNode`。
+/// 3. 适配：所有 `SceneNode` 经 `fit_to_canvas` 居中适配到画布。
 pub fn build_diagram(diagram: &Diagram) -> DiagramResult<lievisual::Scene> {
     build_diagram_with_config(diagram, &OutputConfig::default())
 }
@@ -35,28 +25,9 @@ pub fn build_diagram_with_config(
     diagram: &Diagram,
     config: &OutputConfig,
 ) -> DiagramResult<lievisual::Scene> {
-    // flowchart / state 走新布局管线（LayoutGraph → PlacedGraph → SceneNode）
-    if matches!(diagram, Diagram::Flowchart(_) | Diagram::State(_)) {
-        let layout_config = layout::LayoutConfig::default();
-        let placed = layout::layout_diagram(diagram, &layout_config, config);
-        let nodes = render::render_placed(&placed, diagram, config);
-        let mut scene = lievisual::Scene::new(config.width, config.height);
-        scene.background = config.background;
-        scene.nodes.extend(fit_to_canvas(nodes, config));
-        return Ok(scene);
-    }
-
-    // 其余图表保留旧引擎
-    let engine: Box<dyn LayoutEngine + '_> = match diagram {
-        Diagram::Pie(pie) => Box::new(pie::PieEngine::new(pie)),
-        Diagram::Sequence(seq) => Box::new(sequence::SequenceEngine::new(seq)),
-        Diagram::Class(class) => Box::new(class::ClassEngine::new(class)),
-        Diagram::Er(er) => Box::new(er::ErEngine::new(er)),
-        Diagram::Timeline(timeline) => Box::new(timeline::TimelineEngine::new(timeline)),
-        Diagram::GitGraph(gg) => Box::new(gitgraph::GitGraphEngine::new(gg)),
-        Diagram::Flowchart(_) | Diagram::State(_) => unreachable!(),
-    };
-    let nodes = engine.layout(config)?;
+    let layout_config = layout::LayoutConfig::default();
+    let placed = layout::layout_diagram(diagram, &layout_config, config);
+    let nodes = render::render_placed(&placed, diagram, config);
     let mut scene = lievisual::Scene::new(config.width, config.height);
     scene.background = config.background;
     scene.nodes.extend(fit_to_canvas(nodes, config));
