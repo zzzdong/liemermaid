@@ -44,7 +44,8 @@ fn default_true() -> bool {
 }
 
 fn load_catalog() -> Catalog {
-    let raw = fs::read_to_string(Path::new(CASES_DIR).join("catalog.json")).expect("read catalog.json");
+    let raw =
+        fs::read_to_string(Path::new(CASES_DIR).join("catalog.json")).expect("read catalog.json");
     serde_json::from_str(&raw).expect("parse catalog.json")
 }
 
@@ -133,9 +134,7 @@ fn generate_html_report() {
          .missing{color:#b91c1c;font-style:italic}\n\
          </style></head>\n<body>\n",
     );
-    html.push_str(
-        "<header><h1>liemermaid vs 官方 mermaid — SVG 对比报告</h1></header>\n",
-    );
+    html.push_str("<header><h1>liemermaid vs 官方 mermaid — SVG 对比报告</h1></header>\n");
 
     // 导航
     html.push_str("<nav>\n");
@@ -154,7 +153,8 @@ fn generate_html_report() {
         let key = format!("{}__{}", c.typ, c.name);
         let src_path = Path::new(CASES_DIR).join(&c.source);
         let golden_path = Path::new(GOLDEN_DIR).join(format!("{}.svg", key));
-        let src = fs::read_to_string(&src_path).unwrap_or_else(|e| format!("(read mmd error: {e})"));
+        let src =
+            fs::read_to_string(&src_path).unwrap_or_else(|e| format!("(read mmd error: {e})"));
         let ours = match liemermaid::render(&src, 900, 700) {
             Ok(s) => s,
             Err(e) => {
@@ -171,19 +171,21 @@ fn generate_html_report() {
         let (official_html, diff_html) = if golden_path.exists() {
             with_official += 1;
             let golden = fs::read_to_string(&golden_path).expect("read golden");
-            let diff = if c.compare { describe_diff(&ours, &golden) } else { String::new() };
+            let diff = if c.compare {
+                describe_diff(&ours, &golden)
+            } else {
+                String::new()
+            };
             let diff_block = if diff.is_empty() {
                 String::new()
             } else {
                 format!("<div class=\"diff\">{}</div>\n", escape_html(&diff))
             };
-            (
-                format!("<div class=\"svg-box\">{golden}</div>"),
-                diff_block,
-            )
+            (format!("<div class=\"svg-box\">{golden}</div>"), diff_block)
         } else {
             (
-                "<div class=\"svg-box\"><span class=\"missing\">（无官方 golden SVG）</span></div>".to_string(),
+                "<div class=\"svg-box\"><span class=\"missing\">（无官方 golden SVG）</span></div>"
+                    .to_string(),
                 String::new(),
             )
         };

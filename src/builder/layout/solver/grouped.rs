@@ -11,11 +11,9 @@ use std::collections::{HashMap, HashSet};
 
 use lievisual::geometry::{Point, Rect, Size};
 
-use super::directed::DirectedSolver;
 use super::super::config::LayoutConfig;
-use super::super::ir::{
-    GroupChild, LEdge, LGroup, LNode, LayoutGraph, PlacedGraph, PortHint,
-};
+use super::super::ir::{GroupChild, LEdge, LGroup, LNode, LayoutGraph, PlacedGraph, PortHint};
+use super::directed::DirectedSolver;
 
 /// 子图容器标题区高度（额外计入容器尺寸）。
 const SUBGRAPH_TITLE_H: f64 = 22.0;
@@ -42,7 +40,10 @@ impl GroupedDirected {
                     size: Size::new(0.0, 0.0),
                 });
                 sub_member_lists.push(member_list);
-                container_sizes.push(Size::new(2.0 * config.group_padding, 2.0 * config.group_padding));
+                container_sizes.push(Size::new(
+                    2.0 * config.group_padding,
+                    2.0 * config.group_padding,
+                ));
                 continue;
             }
             let placed = DirectedSolver::solve(&sub, config);
@@ -92,14 +93,16 @@ impl GroupedDirected {
 
         // 外部边：原 lg.edges 中两端都在外部节点池（独立 或 super-node）的
         for e in &lg.edges {
-            let s_ext = external_idx_of_node
-                .get(&e.source)
-                .copied()
-                .or_else(|| node_in_group.get(&e.source).and_then(|&g| external_idx_of_group.get(&g).copied()));
-            let t_ext = external_idx_of_node
-                .get(&e.target)
-                .copied()
-                .or_else(|| node_in_group.get(&e.target).and_then(|&g| external_idx_of_group.get(&g).copied()));
+            let s_ext = external_idx_of_node.get(&e.source).copied().or_else(|| {
+                node_in_group
+                    .get(&e.source)
+                    .and_then(|&g| external_idx_of_group.get(&g).copied())
+            });
+            let t_ext = external_idx_of_node.get(&e.target).copied().or_else(|| {
+                node_in_group
+                    .get(&e.target)
+                    .and_then(|&g| external_idx_of_group.get(&g).copied())
+            });
             if let (Some(s), Some(t)) = (s_ext, t_ext)
                 && s != t
             {
@@ -114,14 +117,16 @@ impl GroupedDirected {
         }
         // 跨组边（lg.cross_group_edges）
         for e in &lg.cross_group_edges {
-            let s_ext = external_idx_of_node
-                .get(&e.source)
-                .copied()
-                .or_else(|| node_in_group.get(&e.source).and_then(|&g| external_idx_of_group.get(&g).copied()));
-            let t_ext = external_idx_of_node
-                .get(&e.target)
-                .copied()
-                .or_else(|| node_in_group.get(&e.target).and_then(|&g| external_idx_of_group.get(&g).copied()));
+            let s_ext = external_idx_of_node.get(&e.source).copied().or_else(|| {
+                node_in_group
+                    .get(&e.source)
+                    .and_then(|&g| external_idx_of_group.get(&g).copied())
+            });
+            let t_ext = external_idx_of_node.get(&e.target).copied().or_else(|| {
+                node_in_group
+                    .get(&e.target)
+                    .and_then(|&g| external_idx_of_group.get(&g).copied())
+            });
             if let (Some(s), Some(t)) = (s_ext, t_ext)
                 && s != t
             {
@@ -218,7 +223,13 @@ impl GroupedDirected {
                     let end = clip_to_border(b, a, lg.nodes[t].size);
                     // 避障：检测穿过中间节点/子图容器，绕行
                     let route = route_cross_group(
-                        start, end, s, t, &positions_now(&final_positions), lg, &group_bounds,
+                        start,
+                        end,
+                        s,
+                        t,
+                        &positions_now(&final_positions),
+                        lg,
+                        &group_bounds,
                     );
                     final_edges.push(route);
                 }
@@ -347,8 +358,16 @@ fn clip_to_border(from: Point, toward: Point, size: Size) -> Point {
     let half_h = size.height / 2.0;
     let vx = toward.x - from.x;
     let vy = toward.y - from.y;
-    let tx = if vx.abs() > 1e-9 { half_w / vx.abs() } else { f64::INFINITY };
-    let ty = if vy.abs() > 1e-9 { half_h / vy.abs() } else { f64::INFINITY };
+    let tx = if vx.abs() > 1e-9 {
+        half_w / vx.abs()
+    } else {
+        f64::INFINITY
+    };
+    let ty = if vy.abs() > 1e-9 {
+        half_h / vy.abs()
+    } else {
+        f64::INFINITY
+    };
     let t = tx.min(ty);
     if !t.is_finite() {
         return from;
@@ -399,10 +418,7 @@ fn route_cross_group(
             let mid = Point::new((start.x + end.x) / 2.0, (start.y + end.y) / 2.0);
             // 绕行方向：优先取水平外扩（避开上下障碍），dx 同号方向外
             let dx = if mid.x >= rect.center().x { 1.0 } else { -1.0 };
-            let detour = Point::new(
-                mid.x + dx * (rect.width() / 2.0 + 30.0),
-                mid.y,
-            );
+            let detour = Point::new(mid.x + dx * (rect.width() / 2.0 + 30.0), mid.y);
             return vec![start, detour, end];
         }
     }
@@ -423,10 +439,22 @@ fn segment_intersects_rect(a: Point, b: Point, rect: Rect) -> bool {
         return false;
     }
     let edges = [
-        (Point::new(rect.min_x(), rect.min_y()), Point::new(rect.max_x(), rect.min_y())),
-        (Point::new(rect.max_x(), rect.min_y()), Point::new(rect.max_x(), rect.max_y())),
-        (Point::new(rect.max_x(), rect.max_y()), Point::new(rect.min_x(), rect.max_y())),
-        (Point::new(rect.min_x(), rect.max_y()), Point::new(rect.min_x(), rect.min_y())),
+        (
+            Point::new(rect.min_x(), rect.min_y()),
+            Point::new(rect.max_x(), rect.min_y()),
+        ),
+        (
+            Point::new(rect.max_x(), rect.min_y()),
+            Point::new(rect.max_x(), rect.max_y()),
+        ),
+        (
+            Point::new(rect.max_x(), rect.max_y()),
+            Point::new(rect.min_x(), rect.max_y()),
+        ),
+        (
+            Point::new(rect.min_x(), rect.max_y()),
+            Point::new(rect.min_x(), rect.min_y()),
+        ),
     ];
     for (p1, p2) in edges {
         if segments_intersect(a, b, p1, p2) {

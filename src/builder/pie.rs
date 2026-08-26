@@ -4,11 +4,7 @@ use lievisual::text::{RichSpan, layout_text};
 
 use crate::{
     ast::PieDiagram,
-    builder::{
-        layout::types::LayoutEngine,
-        theme,
-        types::OutputConfig,
-    },
+    builder::{layout::types::LayoutEngine, theme, types::OutputConfig},
     error::{DiagramError, DiagramResult},
     vir::{self, Color, SceneNode, TextAlign, TextBaseline, Z_LABEL, Z_SERIES, Z_TITLE},
 };

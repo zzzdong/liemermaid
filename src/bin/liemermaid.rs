@@ -54,9 +54,8 @@ fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     // 读取 mmd 文本
-    let mmd = std::fs::read_to_string(&args.input).map_err(|e| {
-        anyhow::anyhow!("读取输入文件失败 {}: {}", args.input.display(), e)
-    })?;
+    let mmd = std::fs::read_to_string(&args.input)
+        .map_err(|e| anyhow::anyhow!("读取输入文件失败 {}: {}", args.input.display(), e))?;
 
     // 推断输出格式
     let format = args
@@ -75,21 +74,17 @@ fn main() -> anyhow::Result<()> {
 
     match format {
         Format::Svg => {
-            let svg = render(&mmd, args.width, args.height).map_err(|e| {
-                anyhow::anyhow!("渲染 SVG 失败: {}", e)
-            })?;
-            std::fs::write(&args.output, &svg).map_err(|e| {
-                anyhow::anyhow!("写入文件失败 {}: {}", args.output.display(), e)
-            })?;
+            let svg = render(&mmd, args.width, args.height)
+                .map_err(|e| anyhow::anyhow!("渲染 SVG 失败: {}", e))?;
+            std::fs::write(&args.output, &svg)
+                .map_err(|e| anyhow::anyhow!("写入文件失败 {}: {}", args.output.display(), e))?;
             println!("SVG 已保存至: {}", args.output.display());
         }
         Format::Png => {
-            let png = render_png(&mmd, args.width, args.height).map_err(|e| {
-                anyhow::anyhow!("渲染 PNG 失败: {}", e)
-            })?;
-            std::fs::write(&args.output, &png).map_err(|e| {
-                anyhow::anyhow!("写入文件失败 {}: {}", args.output.display(), e)
-            })?;
+            let png = render_png(&mmd, args.width, args.height)
+                .map_err(|e| anyhow::anyhow!("渲染 PNG 失败: {}", e))?;
+            std::fs::write(&args.output, &png)
+                .map_err(|e| anyhow::anyhow!("写入文件失败 {}: {}", args.output.display(), e))?;
             println!("PNG 已保存至: {}", args.output.display());
         }
     }

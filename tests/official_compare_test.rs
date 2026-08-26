@@ -119,7 +119,10 @@ fn official_semantic_compare() {
         checked += 1;
     }
 
-    println!("official_semantic_compare: checked {checked} cases, {} mismatches", failures.len());
+    println!(
+        "official_semantic_compare: checked {checked} cases, {} mismatches",
+        failures.len()
+    );
     for (k, v) in &failures {
         println!("--- {k} ---\n{v}");
     }

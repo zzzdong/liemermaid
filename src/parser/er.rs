@@ -4,12 +4,10 @@
 //! - 实体：`ENTITY { type name [PK|FK|...] ... }`
 //! - 关系：`E1 ||--o{ E2 : label`，两端基数映射为 [`Cardinality`]
 
-use crate::ast::{
-    Cardinality, ErAttribute, ErDiagram, ErEntity, ErRelationship,
-};
+use crate::ast::{Cardinality, ErAttribute, ErDiagram, ErEntity, ErRelationship};
 use crate::parser::common::{
-    consume_line, has_input, identifier, quoted_string, rest_of_line, skip_line,
-    skip_ws_and_comments, ws, PResult,
+    PResult, consume_line, has_input, identifier, quoted_string, rest_of_line, skip_line,
+    skip_ws_and_comments, ws,
 };
 use winnow::{
     Parser,
@@ -69,8 +67,8 @@ fn entity<'i>(input: &mut &'i str) -> PResult<'i, ErEntity> {
             skip_ws_and_comments(input)?;
             let attr_name = alt((quoted_string, identifier)).parse_next(input)?;
             // 消费行尾（PK/FK/UK/NN 等行内标记一并随行尾跳过；注意不能跨行）
-            let _ = take_while(0.., |c: char| c != '\n' && c != '}' && c != '\r')
-                .parse_next(input)?;
+            let _ =
+                take_while(0.., |c: char| c != '\n' && c != '}' && c != '\r').parse_next(input)?;
             attributes.push(ErAttribute {
                 type_: type_,
                 name: attr_name,
@@ -182,7 +180,13 @@ mod tests {
             "erDiagram\nA ||--|| B : ExactlyOne\nC |o--|o D : ZeroOrOne\nE }|--|{ F : OneOrMany\nG }o--o| H : ZeroOrMany",
         );
         assert_eq!(d.relationships.len(), 4);
-        assert_eq!(d.relationships[1].cardinality_second, Cardinality::ZeroOrOne);
-        assert_eq!(d.relationships[3].cardinality_second, Cardinality::ZeroOrOne);
+        assert_eq!(
+            d.relationships[1].cardinality_second,
+            Cardinality::ZeroOrOne
+        );
+        assert_eq!(
+            d.relationships[3].cardinality_second,
+            Cardinality::ZeroOrOne
+        );
     }
 }

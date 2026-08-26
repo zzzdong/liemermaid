@@ -40,7 +40,13 @@ fn dag_has_no_scc() {
     }
     assert!(analysis.feedback_arcs.is_empty(), "DAG 不应有反馈弧");
     // 拓扑序：C(2) 必须在 A(0) 之后
-    let pos = |id: usize| analysis.topological_order.iter().position(|&x| x == id).unwrap();
+    let pos = |id: usize| {
+        analysis
+            .topological_order
+            .iter()
+            .position(|&x| x == id)
+            .unwrap()
+    };
     assert!(pos(2) > pos(0));
     assert!(pos(2) > pos(1));
     assert!(pos(2) > pos(3));
@@ -76,7 +82,11 @@ fn disconnected_components() {
             .connected_components
             .iter()
             .any(|c| comp_contains(c, 2, 3) && !c.contains(&0));
-    assert!(ok, "连通分量分组不正确: {:?}", analysis.connected_components);
+    assert!(
+        ok,
+        "连通分量分组不正确: {:?}",
+        analysis.connected_components
+    );
 }
 
 #[test]

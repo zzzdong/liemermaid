@@ -48,13 +48,15 @@ fn all_catalog_cases_parse_and_render() {
             skipped.push(format!("{}__{}", c.ty, c.name));
             continue;
         }
-        let src_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/cases/")
-            .to_string()
-            + &c.source;
+        let src_path =
+            concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/cases/").to_string() + &c.source;
         let mermaid = match std::fs::read_to_string(&src_path) {
             Ok(t) => t,
             Err(e) => {
-                failed.push(format!("{}__{}: missing source {} ({})", c.ty, c.name, c.source, e));
+                failed.push(format!(
+                    "{}__{}: missing source {} ({})",
+                    c.ty, c.name, c.source, e
+                ));
                 continue;
             }
         };

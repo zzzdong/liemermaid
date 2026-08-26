@@ -11,7 +11,7 @@
 //   --x   单叉头
 //   <->   双向箭头
 
-use liemermaid::{render, MermaidParser};
+use liemermaid::{MermaidParser, render};
 use std::fs;
 
 fn main() {

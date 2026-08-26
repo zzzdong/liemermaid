@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use lievisual::geometry::{Point, Rect, BezPath};
+use lievisual::geometry::{BezPath, Point, Rect};
 use petgraph::Direction;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
@@ -98,9 +98,7 @@ pub fn build_gitgraph_elements(graph: &GitGraphDiagram, _config: &OutputConfig) 
                 let parent2 = branch_heads.get(branch).copied();
                 let idx = dag.add_node(CommitData {
                     branch_name: current_branch.clone(),
-                    tag: tag
-                        .clone()
-                        .or_else(|| Some(format!("merge {}", branch))),
+                    tag: tag.clone().or_else(|| Some(format!("merge {}", branch))),
                     is_merge: true,
                 });
                 if let Some(p1) = parent1 {
@@ -227,7 +225,7 @@ pub fn build_gitgraph_elements(graph: &GitGraphDiagram, _config: &OutputConfig) 
             path.line_to(Point::new(parent_x, first.y - r));
             // 二次贝塞尔弧线弯折到目标 X
             path.quad_to(
-                Point::new(parent_x, first.y),       // 控制点（形成圆角）
+                Point::new(parent_x, first.y), // 控制点（形成圆角）
                 Point::new(first.x, first.y),
             );
             elements.push(vir::path_node(
@@ -309,7 +307,13 @@ pub fn build_gitgraph_elements(graph: &GitGraphDiagram, _config: &OutputConfig) 
             elements.push(vir::text_node(
                 tag.clone(),
                 Point::new(cp.position.x - 20.0, cp.position.y + COMMIT_RADIUS + 4.0),
-                vir::text_style(color, FONT_SIZE, theme::FONT_FAMILY, TextAlign::Left, TextBaseline::Top),
+                vir::text_style(
+                    color,
+                    FONT_SIZE,
+                    theme::FONT_FAMILY,
+                    TextAlign::Left,
+                    TextBaseline::Top,
+                ),
                 0.0,
                 Some(200.0),
                 Z_LABEL,
@@ -330,7 +334,10 @@ pub fn build_gitgraph_elements(graph: &GitGraphDiagram, _config: &OutputConfig) 
             TextAlign::Center,
             TextBaseline::Middle,
         );
-        let label_layout = layout_text(&[RichSpan::new(branch_name.to_string(), ts_label.clone())], None);
+        let label_layout = layout_text(
+            &[RichSpan::new(branch_name.to_string(), ts_label.clone())],
+            None,
+        );
         let pad_x = 12.0;
         let pad_y = 6.0;
         let lw = label_layout.width + pad_x * 2.0;
@@ -352,7 +359,9 @@ pub fn build_gitgraph_elements(graph: &GitGraphDiagram, _config: &OutputConfig) 
         elements.push(vir::text_node(
             branch_name.clone(),
             Point::new(lx + lw / 2.0 + tx_off, ly + lh / 2.0 + ty_off),
-            ts_label.with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+            ts_label
+                .with_align(TextAlign::Left)
+                .with_baseline(TextBaseline::Top),
             0.0,
             None,
             Z_LABEL,
@@ -367,7 +376,10 @@ pub fn build_gitgraph_elements(graph: &GitGraphDiagram, _config: &OutputConfig) 
             elements.push(vir::line_node(
                 Point::new(last.position.x + COMMIT_RADIUS + 4.0, y),
                 Point::new(last.position.x + COMMIT_RADIUS + 40.0, y),
-                vir::stroke(Color::new(180.0 / 255.0, 180.0 / 255.0, 180.0 / 255.0, 1.0), 1.0),
+                vir::stroke(
+                    Color::new(180.0 / 255.0, 180.0 / 255.0, 180.0 / 255.0, 1.0),
+                    1.0,
+                ),
                 Z_AXIS,
             ));
         }

@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use lievisual::geometry::Size;
 
 use crate::ast::{
-    ArrowType, ClassDiagram, Diagram, ErDiagram, Flowchart, NodeShape, SequenceDiagram,
-    State, StateDiagram, TimelineDiagram,
+    ArrowType, ClassDiagram, Diagram, ErDiagram, Flowchart, NodeShape, SequenceDiagram, State,
+    StateDiagram, TimelineDiagram,
 };
 use crate::builder::layout::ir::{
     GroupChild, LEdge, LGroup, LNode, LayoutGraph, LineKind, PortHint, ShapeHint,
@@ -45,11 +45,17 @@ fn shape_hint_of(shape: &Option<NodeShape>) -> ShapeHint {
     match shape {
         Some(NodeShape::Diamond) => ShapeHint::Diamond,
         Some(NodeShape::Circle) | Some(NodeShape::DoubleCircle) => ShapeHint::Circle,
-        Some(NodeShape::Hexagon) | Some(NodeShape::Rounded) | Some(NodeShape::Stadium)
-        | Some(NodeShape::Subroutine) | Some(NodeShape::Cylinder)
-        | Some(NodeShape::Asymmetric) | Some(NodeShape::Parallelogram)
-        | Some(NodeShape::ParallelogramAlt) | Some(NodeShape::Trapezoid)
-        | Some(NodeShape::TrapezoidAlt) | Some(NodeShape::Rectangle) => ShapeHint::Rounded,
+        Some(NodeShape::Hexagon)
+        | Some(NodeShape::Rounded)
+        | Some(NodeShape::Stadium)
+        | Some(NodeShape::Subroutine)
+        | Some(NodeShape::Cylinder)
+        | Some(NodeShape::Asymmetric)
+        | Some(NodeShape::Parallelogram)
+        | Some(NodeShape::ParallelogramAlt)
+        | Some(NodeShape::Trapezoid)
+        | Some(NodeShape::TrapezoidAlt)
+        | Some(NodeShape::Rectangle) => ShapeHint::Rounded,
         None => ShapeHint::Rect,
     }
 }
@@ -60,8 +66,12 @@ fn line_kind_of(arrow: &ArrowType) -> LineKind {
         ArrowType::Dotted => LineKind::Dashed,
         ArrowType::Both | ArrowType::MultiCircle | ArrowType::MultiCross => LineKind::Bidirectional,
         ArrowType::Invisible => LineKind::Invisible,
-        ArrowType::Solid | ArrowType::Thick | ArrowType::NoArrow | ArrowType::Circle
-        | ArrowType::Cross | ArrowType::Labeled(_) => LineKind::Solid,
+        ArrowType::Solid
+        | ArrowType::Thick
+        | ArrowType::NoArrow
+        | ArrowType::Circle
+        | ArrowType::Cross
+        | ArrowType::Labeled(_) => LineKind::Solid,
     }
 }
 
@@ -104,7 +114,10 @@ impl ToLayoutGraph for Flowchart {
         }
 
         // 3. 边（顶层 + 组内），映射到节点索引；跨组边单独收集
-        let collect_edges = |from: &str, to: &str, arrow: &ArrowType, out: &mut Vec<LEdge>,
+        let collect_edges = |from: &str,
+                             to: &str,
+                             arrow: &ArrowType,
+                             out: &mut Vec<LEdge>,
                              cross: &mut Vec<LEdge>| {
             let (Some(&s), Some(&t)) = (id_to_idx.get(from), id_to_idx.get(to)) else {
                 return;
@@ -128,11 +141,23 @@ impl ToLayoutGraph for Flowchart {
         };
 
         for e in &self.edges {
-            collect_edges(&e.source, &e.target, &e.arrow_type, &mut lg.edges, &mut lg.cross_group_edges);
+            collect_edges(
+                &e.source,
+                &e.target,
+                &e.arrow_type,
+                &mut lg.edges,
+                &mut lg.cross_group_edges,
+            );
         }
         for sg in &self.subgraphs {
             for e in &sg.edges {
-                collect_edges(&e.source, &e.target, &e.arrow_type, &mut lg.edges, &mut lg.cross_group_edges);
+                collect_edges(
+                    &e.source,
+                    &e.target,
+                    &e.arrow_type,
+                    &mut lg.edges,
+                    &mut lg.cross_group_edges,
+                );
             }
         }
 
@@ -169,7 +194,11 @@ fn add_state_node(
     }
     let idx = lg.nodes.len();
     id_to_idx.insert(id.clone(), idx);
-    lg.nodes.push(LNode { id, size, shape_hint: shape });
+    lg.nodes.push(LNode {
+        id,
+        size,
+        shape_hint: shape,
+    });
 }
 
 impl ToLayoutGraph for StateDiagram {
@@ -187,20 +216,42 @@ impl ToLayoutGraph for StateDiagram {
                 | State::Composite { id, .. }
                 | State::Fork { id }
                 | State::Join { id } => {
-                    add_state_node(&mut lg, &mut id_to_idx, id.clone(), Size::new(100.0, 48.0), ShapeHint::Rect);
+                    add_state_node(
+                        &mut lg,
+                        &mut id_to_idx,
+                        id.clone(),
+                        Size::new(100.0, 48.0),
+                        ShapeHint::Rect,
+                    );
                 }
                 State::Start => {
-                    add_state_node(&mut lg, &mut id_to_idx, "__start__".into(), Size::new(32.0, 32.0), ShapeHint::Circle);
+                    add_state_node(
+                        &mut lg,
+                        &mut id_to_idx,
+                        "__start__".into(),
+                        Size::new(32.0, 32.0),
+                        ShapeHint::Circle,
+                    );
                 }
                 State::End => {
-                    add_state_node(&mut lg, &mut id_to_idx, "__end__".into(), Size::new(36.0, 36.0), ShapeHint::Circle);
+                    add_state_node(
+                        &mut lg,
+                        &mut id_to_idx,
+                        "__end__".into(),
+                        Size::new(36.0, 36.0),
+                        ShapeHint::Circle,
+                    );
                 }
             }
         }
 
         // 2. 从 transitions 收集出现的节点（states 为空时也覆盖；[*] 映射 start/end）
         for t in &self.transitions {
-            let from = if t.from == "[*]" { "__start__" } else { &t.from };
+            let from = if t.from == "[*]" {
+                "__start__"
+            } else {
+                &t.from
+            };
             let to = if t.to == "[*]" { "__end__" } else { &t.to };
             let (fsize, fshape) = if from == "__start__" {
                 (Size::new(32.0, 32.0), ShapeHint::Circle)
@@ -218,7 +269,11 @@ impl ToLayoutGraph for StateDiagram {
 
         // 3. 生成边（from/to → 节点索引）
         for t in &self.transitions {
-            let from = if t.from == "[*]" { "__start__" } else { &t.from };
+            let from = if t.from == "[*]" {
+                "__start__"
+            } else {
+                &t.from
+            };
             let to = if t.to == "[*]" { "__end__" } else { &t.to };
             if let (Some(&s), Some(&tgt)) = (id_to_idx.get(from), id_to_idx.get(to)) {
                 lg.edges.push(LEdge {
@@ -294,8 +349,10 @@ impl ToLayoutGraph for ErDiagram {
             .map(|(i, n)| (n.id.clone(), i))
             .collect();
         for r in &self.relationships {
-            if let (Some(&s), Some(&t)) = (id_to_idx.get(&r.first_entity), id_to_idx.get(&r.second_entity))
-            {
+            if let (Some(&s), Some(&t)) = (
+                id_to_idx.get(&r.first_entity),
+                id_to_idx.get(&r.second_entity),
+            ) {
                 lg.edges.push(LEdge {
                     source: s,
                     target: t,

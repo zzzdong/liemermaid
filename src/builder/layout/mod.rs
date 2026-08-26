@@ -19,7 +19,10 @@ use crate::builder::types::OutputConfig;
 pub use config::LayoutConfig;
 pub use convert::ToLayoutGraph;
 pub use ir::{LayoutGraph, PlacedGraph};
-pub use solver::{DirectedSolver, GroupedDirected, GridSolver, LayoutSolver, LinearSolver, SimpleSolver, SolverKind};
+pub use solver::{
+    DirectedSolver, GridSolver, GroupedDirected, LayoutSolver, LinearSolver, SimpleSolver,
+    SolverKind,
+};
 
 /// 主布局入口：从 AST 求解为 `PlacedGraph`（纯几何）。
 ///

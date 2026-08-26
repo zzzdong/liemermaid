@@ -7,8 +7,8 @@
 
 use crate::ast::{State, StateDiagram, Transition};
 use crate::parser::common::{
-    consume_line, has_input, identifier, keyword, quoted_string, rest_of_line, skip_line,
-    skip_ws_and_comments, inline_ws, PResult,
+    PResult, consume_line, has_input, identifier, inline_ws, keyword, quoted_string, rest_of_line,
+    skip_line, skip_ws_and_comments,
 };
 use winnow::{
     Parser,
@@ -18,11 +18,7 @@ use winnow::{
 
 /// 顶层入口：`stateDiagram` / `stateDiagram-v2` 图表。
 pub fn state_diagram<'i>(input: &mut &'i str) -> PResult<'i, StateDiagram> {
-    let _ = alt((
-        keyword("stateDiagram-v2"),
-        keyword("stateDiagram"),
-    ))
-    .parse_next(input)?;
+    let _ = alt((keyword("stateDiagram-v2"), keyword("stateDiagram"))).parse_next(input)?;
     skip_ws_and_comments(input)?;
 
     parse_body(input)
@@ -67,7 +63,10 @@ fn parse_body<'i>(input: &mut &'i str) -> PResult<'i, StateDiagram> {
         let _ = skip_line(input)?;
     }
 
-    Ok(StateDiagram { states, transitions })
+    Ok(StateDiagram {
+        states,
+        transitions,
+    })
 }
 
 /// 状态引用（字符串）：`[*]` 或普通标识符/引号串。
@@ -87,13 +86,9 @@ fn state_decl<'i>(input: &mut &'i str) -> PResult<'i, State> {
     inline_ws(input)?;
 
     // 形如 `state "desc"` 或 `state "desc" as A`
-    let description = opt(delimited(
-        '"',
-        take_while(0.., |c: char| c != '"'),
-        '"',
-    ))
-    .parse_next(input)?
-    .map(|s: &str| s.trim().to_string());
+    let description = opt(delimited('"', take_while(0.., |c: char| c != '"'), '"'))
+        .parse_next(input)?
+        .map(|s: &str| s.trim().to_string());
 
     inline_ws(input)?;
 
@@ -108,12 +103,8 @@ fn state_decl<'i>(input: &mut &'i str) -> PResult<'i, State> {
     inline_ws(input)?;
 
     // 可选注解：`<<fork>>` / `<<join>>`
-    let annotation = opt(delimited(
-        "<<",
-        take_while(0.., |c: char| c != '>'),
-        ">>",
-    ))
-    .parse_next(input)?;
+    let annotation =
+        opt(delimited("<<", take_while(0.., |c: char| c != '>'), ">>")).parse_next(input)?;
     inline_ws(input)?;
 
     if let Some(anno) = annotation {
@@ -169,7 +160,10 @@ fn bare_state_decl<'i>(input: &mut &'i str) -> PResult<'i, State> {
         })
     } else {
         consume_line(input)?;
-        Ok(State::Simple { id, description: None })
+        Ok(State::Simple {
+            id,
+            description: None,
+        })
     }
 }
 

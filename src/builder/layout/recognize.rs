@@ -34,5 +34,3 @@ pub fn all_flowchart_nodes(fc: &Flowchart) -> Vec<crate::ast::Node> {
     }
     out
 }
-
-

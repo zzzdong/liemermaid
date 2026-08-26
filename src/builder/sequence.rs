@@ -86,12 +86,8 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         let bw = col_widths[i];
         let display_name = p.alias.as_deref().unwrap_or(&p.name);
 
-        let rect = lievisual::geometry::Rect::new(
-            cx - bw / 2.0,
-            box_top,
-            cx + bw / 2.0,
-            box_bottom,
-        );
+        let rect =
+            lievisual::geometry::Rect::new(cx - bw / 2.0, box_top, cx + bw / 2.0, box_bottom);
         elements.push(
             SceneNode::from(Element::RoundedRect {
                 rect,
@@ -102,8 +98,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                     2.0,
                 ),
             })
-            .with_z(Z_SERIES)
-            ,
+            .with_z(Z_SERIES),
         );
 
         // actor 名：先以 Left/Top 排版测量，再计算居中偏移（与 flowchart 一致）
@@ -114,7 +109,10 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             TextAlign::Left,
             TextBaseline::Top,
         );
-        let layout = layout_text(&[RichSpan::new(display_name.to_string(), style)], Some(bw - 8.0));
+        let layout = layout_text(
+            &[RichSpan::new(display_name.to_string(), style)],
+            Some(bw - 8.0),
+        );
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
         elements.push(vir::text_node(
             display_name.to_string(),
@@ -338,7 +336,8 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
     //   Activate   在目标生命线上开启一条激活条
     //   Deactivate 结束该参与者最上层的激活条
     const ACTIVATION_W: f64 = 8.0;
-    let mut act_stack: std::collections::HashMap<usize, Vec<f64>> = std::collections::HashMap::new();
+    let mut act_stack: std::collections::HashMap<usize, Vec<f64>> =
+        std::collections::HashMap::new();
     for r in &rows {
         if r.kind != 0 {
             continue;
@@ -366,7 +365,11 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                                 SceneNode::from(Element::RoundedRect {
                                     rect,
                                     radius: 2.0,
-                                    style: vir::fs_both(theme::sequence::ACTIVATION_FILL, theme::sequence::ACTIVATION_STROKE, 1.0),
+                                    style: vir::fs_both(
+                                        theme::sequence::ACTIVATION_FILL,
+                                        theme::sequence::ACTIVATION_STROKE,
+                                        1.0,
+                                    ),
                                 })
                                 .with_z(Z_AXIS + 1),
                             );
@@ -393,7 +396,11 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                     SceneNode::from(Element::RoundedRect {
                         rect,
                         radius: 2.0,
-                        style: vir::fs_both(theme::sequence::ACTIVATION_FILL, theme::sequence::ACTIVATION_STROKE, 1.0),
+                        style: vir::fs_both(
+                            theme::sequence::ACTIVATION_FILL,
+                            theme::sequence::ACTIVATION_STROKE,
+                            1.0,
+                        ),
                     })
                     .with_z(Z_AXIS + 1),
                 );
@@ -471,13 +478,9 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
         } else {
             let dir = if to_x > from_x { 1.0 } else { -1.0 };
             let stroke = match r.arrow {
-                MessageArrow::Dashed
-                | MessageArrow::DashedTip
-                | MessageArrow::Cross => vir::dashed_stroke(
-                    theme::sequence::EDGE,
-                    1.5,
-                    vec![6.0, 3.0],
-                ),
+                MessageArrow::Dashed | MessageArrow::DashedTip | MessageArrow::Cross => {
+                    vir::dashed_stroke(theme::sequence::EDGE, 1.5, vec![6.0, 3.0])
+                }
                 _ => vir::stroke(theme::sequence::EDGE, 1.5),
             };
 
@@ -593,7 +596,8 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             }
         };
 
-        let note_rect = lievisual::geometry::Rect::new(nx, note_y, nx + nw, note_y + NOTE_HEIGHT_BR);
+        let note_rect =
+            lievisual::geometry::Rect::new(nx, note_y, nx + nw, note_y + NOTE_HEIGHT_BR);
         elements.push(
             SceneNode::from(Element::RoundedRect {
                 rect: note_rect,
@@ -657,8 +661,7 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
                     2.0,
                 ),
             })
-            .with_z(Z_SERIES)
-            ,
+            .with_z(Z_SERIES),
         );
 
         // actor 名：先以 Left/Top 排版测量，再计算居中偏移（与 flowchart 一致）
@@ -669,8 +672,10 @@ pub fn build_sequence_elements(seq: &SequenceDiagram, config: &OutputConfig) -> 
             TextAlign::Left,
             TextBaseline::Top,
         );
-        let layout =
-            layout_text(&[RichSpan::new(display_name.to_string(), style)], Some(bw - 8.0));
+        let layout = layout_text(
+            &[RichSpan::new(display_name.to_string(), style)],
+            Some(bw - 8.0),
+        );
         let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
         elements.push(vir::text_node(
             display_name.to_string(),

@@ -10,9 +10,9 @@
 //!
 //! 历史 `src/visual.rs`（`VisualElement` 及其私有样式类型）已删除，统一改用 lievisual IR。
 
+use lievisual::geometry::BezPath;
 use lievisual::geometry::{Point, Rect};
 use lievisual::text::TextStyle as LieTextStyle;
-use lievisual::geometry::BezPath;
 
 pub use lievisual::geometry::{Color, Point as GeoPoint, Rect as GeoRect, Transform};
 pub use lievisual::scene::{
@@ -145,7 +145,11 @@ fn smooth_curve(pts: &[Point]) -> BezPath {
         let p0 = if i == 0 { pts[0] } else { pts[i - 1] };
         let p1 = pts[i];
         let p2 = pts[i + 1];
-        let p3 = if i + 2 < pts.len() { pts[i + 2] } else { pts[i + 1] };
+        let p3 = if i + 2 < pts.len() {
+            pts[i + 2]
+        } else {
+            pts[i + 1]
+        };
         let c1 = Point::new(p1.x + (p2.x - p0.x) / 6.0, p1.y + (p2.y - p0.y) / 6.0);
         let c2 = Point::new(p2.x - (p3.x - p1.x) / 6.0, p2.y - (p3.y - p1.y) / 6.0);
         p.curve_to((c1.x, c1.y), (c2.x, c2.y), (p2.x, p2.y));

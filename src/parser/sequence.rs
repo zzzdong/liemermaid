@@ -12,7 +12,8 @@ use crate::ast::{
     SequenceBlock, SequenceBlockKind, SequenceDiagram, SequenceItem, SequenceStatement,
 };
 use crate::parser::common::{
-    PResult, consume_line, has_input, inline_ws, keyword, participant_kind, quoted_string, rest_of_line, skip_line, skip_ws_and_comments,
+    PResult, consume_line, has_input, inline_ws, keyword, participant_kind, quoted_string,
+    rest_of_line, skip_line, skip_ws_and_comments,
 };
 use winnow::{
     Parser,
@@ -80,8 +81,7 @@ fn participant_decl<'i>(input: &mut &'i str) -> PResult<'i, Participant> {
 
     // `as` 别名
     inline_ws(input)?;
-    let alias = opt(preceded((keyword("as"), inline_ws), p_name))
-        .parse_next(input)?;
+    let alias = opt(preceded((keyword("as"), inline_ws), p_name)).parse_next(input)?;
 
     // 必须到达行尾（否则这不是一个合法的参与者声明）；仅跳过行内空白，不跨行
     inline_ws(input)?;
@@ -90,11 +90,7 @@ fn participant_decl<'i>(input: &mut &'i str) -> PResult<'i, Participant> {
     }
     let _ = opt(("\r\n", "\n")).parse_next(input)?;
 
-    Ok(Participant {
-        name,
-        alias,
-        kind,
-    })
+    Ok(Participant { name, alias, kind })
 }
 
 /// 参与者名字：引号串或标识符。
@@ -148,7 +144,10 @@ fn arrow_with_activation<'i>(
         alt((
             "-->".map(|_| MessageArrow::Dashed),
             "-x".map(|_| MessageArrow::Cross),
-            alt(("x->".map(|_| MessageArrow::Open), "x-->".map(|_| MessageArrow::Open))),
+            alt((
+                "x->".map(|_| MessageArrow::Open),
+                "x-->".map(|_| MessageArrow::Open),
+            )),
         )),
     ))
     .parse_next(input)?;
@@ -195,7 +194,9 @@ fn note_statement<'i>(input: &mut &'i str) -> PResult<'i, SequenceStatement> {
     };
 
     skip_ws_and_comments(input)?;
-    let text = opt(preceded(':', rest_of_line)).parse_next(input)?.unwrap_or_default();
+    let text = opt(preceded(':', rest_of_line))
+        .parse_next(input)?
+        .unwrap_or_default();
 
     Ok(SequenceStatement::Note(Note {
         placement,

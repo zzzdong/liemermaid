@@ -98,8 +98,8 @@ pub fn analyze(lg: &LayoutGraph) -> GraphAnalysis {
 
 /// 用 DFS 回边检测反馈弧（构成环的边）。
 fn detect_feedback_arcs(graph: &DiGraph<usize, ()>) -> Vec<(usize, usize)> {
-    use petgraph::visit::NodeIndexable;
     use petgraph::Direction;
+    use petgraph::visit::NodeIndexable;
     let mut visited = vec![false; graph.node_bound()];
     let mut on_stack = vec![false; graph.node_bound()];
     let mut fas = Vec::new();
@@ -138,8 +138,8 @@ fn detect_feedback_arcs(graph: &DiGraph<usize, ()>) -> Vec<(usize, usize)> {
 
 /// 弱连通分量分组（DFS/BFS 遍历）。
 fn compute_connected_components(graph: &DiGraph<usize, ()>, n: usize) -> Vec<Vec<usize>> {
-    use petgraph::visit::NodeIndexable;
     use petgraph::Direction;
+    use petgraph::visit::NodeIndexable;
     let mut comps: Vec<Vec<usize>> = Vec::new();
     let mut visited = vec![false; graph.node_bound()];
     for ni in graph.node_indices() {

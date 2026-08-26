@@ -1,4 +1,4 @@
-use lievisual::geometry::{Point, Rect, Color};
+use lievisual::geometry::{Color, Point, Rect};
 
 use crate::{
     ast::TimelineDiagram,
@@ -64,12 +64,16 @@ fn draw_task_block(
         TextAlign::Center,
         TextBaseline::Middle,
     );
-    let layout = layout_text(&[RichSpan::new(text.to_string(), ts.clone())], Some(w - 16.0));
+    let layout = layout_text(
+        &[RichSpan::new(text.to_string(), ts.clone())],
+        Some(w - 16.0),
+    );
     let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
     elements.push(vir::text_node(
         text.to_string(),
         Point::new(cx + x_off, cy + y_off),
-        ts.with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+        ts.with_align(TextAlign::Left)
+            .with_baseline(TextBaseline::Top),
         0.0,
         Some(w - 16.0),
         Z_LABEL,
@@ -163,7 +167,14 @@ pub fn build_timeline_elements(
         ));
 
         // === 上排：Section 彩色矩形块 ===
-        draw_task_block(&mut elements, cx, section_block_y, color, &section.name, 14.0);
+        draw_task_block(
+            &mut elements,
+            cx,
+            section_block_y,
+            color,
+            &section.name,
+            14.0,
+        );
 
         // 从时间点到上排块的垂直连接线（虚线 + 下端箭头）
         let conn_top = line_y - theme::timeline::DOT_R;
@@ -171,7 +182,11 @@ pub fn build_timeline_elements(
         elements.push(vir::line_node(
             Point::new(cx, conn_top),
             Point::new(cx, conn_bot - 6.0),
-            vir::dashed_stroke(theme::timeline::LINE, theme::timeline::CONNECTOR_W, [6.0, 4.0].to_vec()),
+            vir::dashed_stroke(
+                theme::timeline::LINE,
+                theme::timeline::CONNECTOR_W,
+                [6.0, 4.0].to_vec(),
+            ),
             Z_AXIS,
         ));
         // 向上箭头（指向 section 块底部）
@@ -191,7 +206,8 @@ pub fn build_timeline_elements(
 
         // === 下排：Event 彩色矩形块 ===
         for (j, event) in section.events.iter().enumerate() {
-            let ey = event_block_y + j as f64 * (theme::timeline::BLOCK_H + theme::timeline::EVENT_GAP);
+            let ey =
+                event_block_y + j as f64 * (theme::timeline::BLOCK_H + theme::timeline::EVENT_GAP);
             draw_task_block(&mut elements, cx, ey, color, event, 13.0);
 
             // 从时间点到下排块的垂直连接线（虚线 + 向下箭头）
@@ -200,7 +216,11 @@ pub fn build_timeline_elements(
             elements.push(vir::line_node(
                 Point::new(cx, e_conn_top),
                 Point::new(cx, e_conn_bot - 6.0),
-                vir::dashed_stroke(theme::timeline::LINE, theme::timeline::CONNECTOR_W, [6.0, 4.0].to_vec()),
+                vir::dashed_stroke(
+                    theme::timeline::LINE,
+                    theme::timeline::CONNECTOR_W,
+                    [6.0, 4.0].to_vec(),
+                ),
                 Z_AXIS,
             ));
             // 向下箭头（指向 event 块顶部）

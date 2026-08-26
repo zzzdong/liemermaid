@@ -7,8 +7,8 @@
 
 use crate::ast::{PieData, PieDiagram};
 use crate::parser::common::{
-    consume_line, has_input, identifier, keyword, quoted_string, rest_of_line, skip_line,
-    skip_ws_and_comments, PResult,
+    PResult, consume_line, has_input, identifier, keyword, quoted_string, rest_of_line, skip_line,
+    skip_ws_and_comments,
 };
 use winnow::{
     Parser,

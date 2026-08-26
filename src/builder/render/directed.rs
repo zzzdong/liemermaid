@@ -266,12 +266,17 @@ fn draw_node_label(elements: &mut Vec<SceneNode>, center: Point, text: &str, max
         TextAlign::Center,
         TextBaseline::Middle,
     );
-    let layout = layout_text(&[RichSpan::new(text.to_string(), style.clone())], Some(max_w));
+    let layout = layout_text(
+        &[RichSpan::new(text.to_string(), style.clone())],
+        Some(max_w),
+    );
     let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
     elements.push(vir::text_node(
         text.to_string(),
         Point::new(center.x + x_off, center.y + y_off),
-        style.with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+        style
+            .with_align(TextAlign::Left)
+            .with_baseline(TextBaseline::Top),
         0.0,
         Some(max_w),
         Z_LABEL,
@@ -319,7 +324,12 @@ impl DirectedRenderer {
                 // （避免 Catmull-Rom 对 4 点折线的摆动/阶梯圆角问题）
                 if route.len() == 4 {
                     elements.push(vir::cubic_bezier_edge(
-                        route[0], route[1], route[2], route[3], stroke.clone(), Z_AXIS,
+                        route[0],
+                        route[1],
+                        route[2],
+                        route[3],
+                        stroke.clone(),
+                        Z_AXIS,
                     ));
                 } else {
                     elements.push(vir::curved_edge_node(route.clone(), stroke.clone(), Z_AXIS));
@@ -342,7 +352,11 @@ impl DirectedRenderer {
             elements.push(vir::rect_node(
                 *bound,
                 None,
-                vir::fs_both(subgraph_fill, theme::flowchart::SUBGRAPH_STROKE, theme::EDGE_WIDTH),
+                vir::fs_both(
+                    subgraph_fill,
+                    theme::flowchart::SUBGRAPH_STROKE,
+                    theme::EDGE_WIDTH,
+                ),
                 Z_SUBGRAPH,
             ));
         }
@@ -362,7 +376,11 @@ impl DirectedRenderer {
         let edge_stroke = vir::stroke(theme::state::EDGE, theme::EDGE_WIDTH);
         for route in &placed.edge_routes {
             if route.len() >= 2 {
-                elements.push(vir::curved_edge_node(route.clone(), edge_stroke.clone(), Z_AXIS));
+                elements.push(vir::curved_edge_node(
+                    route.clone(),
+                    edge_stroke.clone(),
+                    Z_AXIS,
+                ));
                 let last = route.len() - 1;
                 let tip = route[last];
                 let prev = route[last - 1];

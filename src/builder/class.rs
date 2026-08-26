@@ -1,9 +1,9 @@
 use std::collections::{HashMap, VecDeque};
 
+use lievisual::geometry::BezPath;
 use lievisual::geometry::{Point, Rect};
 use petgraph::Direction;
 use petgraph::graph::{DiGraph, NodeIndex};
-use lievisual::geometry::BezPath;
 
 use crate::{
     ast::{ClassDiagram, RelationKind, Visibility},
@@ -69,10 +69,7 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
         )
         .with_align(TextAlign::Left)
         .with_baseline(TextBaseline::Top);
-        let name_layout = layout_text(
-            &[RichSpan::new(display_name.clone(), ts.clone())],
-            None,
-        );
+        let name_layout = layout_text(&[RichSpan::new(display_name.clone(), ts.clone())], None);
         let name_w = name_layout.width + CLASS_PAD * 2.0;
 
         let mut attr_lines = Vec::new();
@@ -417,7 +414,8 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
                         )],
                         None,
                     );
-                    let (ox, oy) = compute_text_offset(&tl, TextAlign::Center, TextBaseline::Middle);
+                    let (ox, oy) =
+                        compute_text_offset(&tl, TextAlign::Center, TextBaseline::Middle);
                     elements.push(vir::text_node(
                         lbl.clone(),
                         Point::new(mid.x + ox, mid.y + oy),

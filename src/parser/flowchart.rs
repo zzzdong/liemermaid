@@ -6,8 +6,8 @@
 
 use crate::ast::{ArrowType, Edge, Flowchart, Node, NodeShape, Subgraph};
 use crate::parser::common::{
-    direction, has_input, identifier, peek_end, rest_of_line, skip_ws_and_comments, text, ws1,
-    PResult,
+    PResult, direction, has_input, identifier, peek_end, rest_of_line, skip_ws_and_comments, text,
+    ws1,
 };
 use winnow::{
     Parser,
@@ -24,11 +24,20 @@ fn node_shape_with_text<'i>(
     input: &mut &'i str,
 ) -> PResult<'i, (Option<NodeShape>, Option<String>)> {
     let first = alt((
-        delimited("(((", take_while(1.., |c: char| c != ')' && c != '\n' && c != '\r'), ")))")
-            .map(|t: &str| (Some(NodeShape::DoubleCircle), Some(t.trim().to_string()))),
-        delimited("\x28\x28", take_while(1.., |c: char| c != ')' && c != '\n' && c != '\r'), "\x29\x29")
-            .map(|t: &str| (Some(NodeShape::Circle), Some(t.trim().to_string()))),
-        delimited("\x5b\x28", text, "\x29\x5d").map(|t| (Some(NodeShape::Cylinder), Some(t)))
+        delimited(
+            "(((",
+            take_while(1.., |c: char| c != ')' && c != '\n' && c != '\r'),
+            ")))",
+        )
+        .map(|t: &str| (Some(NodeShape::DoubleCircle), Some(t.trim().to_string()))),
+        delimited(
+            "\x28\x28",
+            take_while(1.., |c: char| c != ')' && c != '\n' && c != '\r'),
+            "\x29\x29",
+        )
+        .map(|t: &str| (Some(NodeShape::Circle), Some(t.trim().to_string()))),
+        delimited("\x5b\x28", text, "\x29\x5d")
+            .map(|t| (Some(NodeShape::Cylinder), Some(t)))
             .map(|(s, t)| (s, t)),
         delimited("([", text, "])").map(|t| (Some(NodeShape::Stadium), Some(t))),
         delimited("[[", text, "]]").map(|t| (Some(NodeShape::Subroutine), Some(t))),
@@ -55,7 +64,11 @@ fn node_definition<'i>(input: &mut &'i str) -> PResult<'i, Node> {
     let _ = peek((identifier, node_shape_with_text)).parse_next(input)?;
     let id = identifier.parse_next(input)?;
     let (shape, txt) = node_shape_with_text.parse_next(input)?;
-    Ok(Node { id, shape, text: txt })
+    Ok(Node {
+        id,
+        shape,
+        text: txt,
+    })
 }
 
 /// 裸节点声明（孤立节点），如 `E`：identifier 后紧跟行尾/分号/EOF（而非箭头等
@@ -124,8 +137,7 @@ fn edge<'i>(input: &mut &'i str) -> PResult<'i, Edge> {
         // A --label--> B（裸标签在箭头中间）
         (alt(("--", "-.", "==")), text, arrow_type).map(|(_, label, arrow)| (arrow, Some(label))),
         // A -->|label| B（标签在箭头后）
-        (arrow_type, opt(delimited("|", text, "|")))
-            .map(|(arrow, label)| (arrow, label)),
+        (arrow_type, opt(delimited("|", text, "|"))).map(|(arrow, label)| (arrow, label)),
         // 无标签
         arrow_type.map(|arrow| (arrow, None)),
     ))
@@ -263,8 +275,7 @@ pub fn flowchart_diagram<'i>(input: &mut &'i str) -> PResult<'i, Flowchart> {
         }
         // 跳过无法识别的行（剩余纯空白或空时不再强制消费字符）
         let before = input.len();
-        let _ = take_while(0.., |c: char| c != ';' && c != '\n' && c != '\r')
-            .parse_next(input)?;
+        let _ = take_while(0.., |c: char| c != ';' && c != '\n' && c != '\r').parse_next(input)?;
         let _ = opt(("\r\n", "\n")).parse_next(input)?;
         if input.len() == before {
             // 没有任何进展，防止死锁，强制消费一个字符
@@ -412,9 +423,8 @@ mod tests {
 
     #[test]
     fn subgraph_with_title() {
-        let fc = parse(
-            "flowchart TD\nsubgraph One\nA --> B\nend\nsubgraph Two\nC --> D\nend\nA --> C",
-        );
+        let fc =
+            parse("flowchart TD\nsubgraph One\nA --> B\nend\nsubgraph Two\nC --> D\nend\nA --> C");
         assert_eq!(fc.subgraphs.len(), 2);
         assert_eq!(fc.subgraphs[0].title.as_deref(), Some("One"));
         assert_eq!(fc.subgraphs[0].edges.len(), 1);
@@ -423,9 +433,7 @@ mod tests {
 
     #[test]
     fn nested_subgraph() {
-        let fc = parse(
-            "flowchart TD\nsubgraph outer\nsubgraph inner\nA --> B\nend\nend\nC --> A",
-        );
+        let fc = parse("flowchart TD\nsubgraph outer\nsubgraph inner\nA --> B\nend\nend\nC --> A");
         assert_eq!(fc.subgraphs.len(), 1);
         assert_eq!(fc.subgraphs[0].title.as_deref(), Some("outer"));
         // 内层节点/边被提升

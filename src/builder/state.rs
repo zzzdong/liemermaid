@@ -63,7 +63,10 @@ pub fn build_state_elements(diagram: &StateDiagram, _config: &OutputConfig) -> V
 }
 
 /// 渲染单个状态图（递归用于复合状态）。返回图元与包围盒尺寸，坐标已归一化到 (0,0) 起。
-fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec<SceneNode>, f64, f64) {
+fn render_state_diagram(
+    diagram: &StateDiagram,
+    config: &SugiyamaConfig,
+) -> (Vec<SceneNode>, f64, f64) {
     let mut elements = Vec::new();
 
     if diagram.transitions.is_empty() && diagram.states.is_empty() {
@@ -80,9 +83,7 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
         .states
         .iter()
         .filter_map(|s| match s {
-            State::Simple { id, description } => {
-                description.clone().map(|d| (id.clone(), d))
-            }
+            State::Simple { id, description } => description.clone().map(|d| (id.clone(), d)),
             _ => None,
         })
         .collect();
@@ -161,7 +162,9 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
                 .or_insert(StateNode::Start);
         } else {
             let lbl = state_labels.get(&t.from).cloned();
-            state_map.entry(t.from.clone()).or_insert_with(|| make_node(&t.from, lbl));
+            state_map
+                .entry(t.from.clone())
+                .or_insert_with(|| make_node(&t.from, lbl));
         }
 
         if t.to == "[*]" {
@@ -170,7 +173,9 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
                 .or_insert(StateNode::End);
         } else {
             let lbl = state_labels.get(&t.to).cloned();
-            state_map.entry(t.to.clone()).or_insert_with(|| make_node(&t.to, lbl));
+            state_map
+                .entry(t.to.clone())
+                .or_insert_with(|| make_node(&t.to, lbl));
         }
 
         // Build edge list using internal keys
@@ -208,9 +213,12 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
             // join 节点显示其 id 作为标签（官方 mermaid 行为）。
             StateNode::Join => (id.clone(), None),
             StateNode::Composite => (id.clone(), None),
-            StateNode::Normal { label, description, .. } => {
-                (label.clone().unwrap_or_else(|| id.clone()), description.clone())
-            }
+            StateNode::Normal {
+                label, description, ..
+            } => (
+                label.clone().unwrap_or_else(|| id.clone()),
+                description.clone(),
+            ),
         };
 
         // Measure text
@@ -294,10 +302,7 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
             }
             StateNode::Composite => {
                 // 容器尺寸 = 内部子图包围盒 + 标题高度 + 内边距。
-                let (iw, ih) = composite_bounds
-                    .get(id)
-                    .copied()
-                    .unwrap_or((120.0, 80.0));
+                let (iw, ih) = composite_bounds.get(id).copied().unwrap_or((120.0, 80.0));
                 let w = iw + COMPOSITE_PAD * 2.0;
                 let h = ih + COMPOSITE_TITLE_H + COMPOSITE_PAD * 2.0;
                 node_layouts.insert(
@@ -428,7 +433,11 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
                     lievisual::geometry::Point::new(ctrl_x, ctrl_y),
                     lievisual::geometry::Point::new(tp.x, to_top),
                 );
-                elements.push(vir::path_node(path, vir::fs_stroke(stroke.color, stroke.width), Z_AXIS));
+                elements.push(vir::path_node(
+                    path,
+                    vir::fs_stroke(stroke.color, stroke.width),
+                    Z_AXIS,
+                ));
 
                 // 箭头：沿曲线末端切线方向
                 let sz = 7.0;
@@ -440,13 +449,19 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
                 let uy = end_dy / end_l;
                 elements.push(vir::line_node(
                     lievisual::geometry::Point::new(tp.x, to_top),
-                    lievisual::geometry::Point::new(tp.x - sz * (ux * 0.4 + uy * 0.5), to_top - sz * (uy * 0.4 - ux * 0.5)),
+                    lievisual::geometry::Point::new(
+                        tp.x - sz * (ux * 0.4 + uy * 0.5),
+                        to_top - sz * (uy * 0.4 - ux * 0.5),
+                    ),
                     stroke.clone(),
                     Z_AXIS,
                 ));
                 elements.push(vir::line_node(
                     lievisual::geometry::Point::new(tp.x, to_top),
-                    lievisual::geometry::Point::new(tp.x + sz * (ux * 0.4 - uy * 0.5), to_top - sz * (uy * 0.4 + ux * 0.5)),
+                    lievisual::geometry::Point::new(
+                        tp.x + sz * (ux * 0.4 - uy * 0.5),
+                        to_top - sz * (uy * 0.4 + ux * 0.5),
+                    ),
                     stroke,
                     Z_AXIS,
                 ));
@@ -478,7 +493,10 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
             } else {
                 // 普通正向边：直角折线路由
                 let points = if (fp.x - tp.x).abs() < 0.001 {
-                    vec![lievisual::geometry::Point::new(fp.x, from_bottom), lievisual::geometry::Point::new(fp.x, to_top)]
+                    vec![
+                        lievisual::geometry::Point::new(fp.x, from_bottom),
+                        lievisual::geometry::Point::new(fp.x, to_top),
+                    ]
                 } else {
                     vec![
                         lievisual::geometry::Point::new(fp.x, from_bottom),
@@ -598,16 +616,15 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
                         TextAlign::Center,
                         TextBaseline::Top,
                     );
-                    let layout = layout_text(
-                        &[RichSpan::new(nl.label.to_string(), ts.clone())],
-                        None,
-                    );
+                    let layout =
+                        layout_text(&[RichSpan::new(nl.label.to_string(), ts.clone())], None);
                     let (x_off, y_off) =
                         compute_text_offset(&layout, TextAlign::Center, TextBaseline::Top);
                     elements.push(vir::text_node(
                         nl.label.clone(),
                         Point::new(pos.x + x_off, y + 6.0 + y_off),
-                        ts.with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+                        ts.with_align(TextAlign::Left)
+                            .with_baseline(TextBaseline::Top),
                         0.0,
                         None,
                         Z_LABEL,
@@ -621,10 +638,7 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
                 let left = pos.x - w;
                 let top = pos.y - h;
                 elements.push(vir::rect_node(
-                    Rect::from_points(
-                        Point::new(left, top),
-                        Point::new(pos.x + w, pos.y + h),
-                    ),
+                    Rect::from_points(Point::new(left, top), Point::new(pos.x + w, pos.y + h)),
                     None,
                     vir::fs_both(theme::state::FILL, theme::state::STROKE, 1.0),
                     Z_SERIES,
@@ -638,16 +652,15 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
                         TextAlign::Center,
                         TextBaseline::Middle,
                     );
-                    let layout = layout_text(
-                        &[RichSpan::new(nl.label.to_string(), ts.clone())],
-                        None,
-                    );
+                    let layout =
+                        layout_text(&[RichSpan::new(nl.label.to_string(), ts.clone())], None);
                     let (x_off, y_off) =
                         compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
                     elements.push(vir::text_node(
                         nl.label.clone(),
                         Point::new(pos.x + x_off, top + COMPOSITE_TITLE_H / 2.0 + y_off),
-                        ts.with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+                        ts.with_align(TextAlign::Left)
+                            .with_baseline(TextBaseline::Top),
                         0.0,
                         None,
                         Z_LABEL,
@@ -757,7 +770,11 @@ fn render_state_diagram(diagram: &StateDiagram, config: &SugiyamaConfig) -> (Vec
     let width = max_x - min_x;
     let height = max_y - min_y;
     let norm = if min_x != 0.0 || min_y != 0.0 {
-        vec![vir::group_node(elements, Some(Transform::translate(-min_x, -min_y)), 0)]
+        vec![vir::group_node(
+            elements,
+            Some(Transform::translate(-min_x, -min_y)),
+            0,
+        )]
     } else {
         elements
     };

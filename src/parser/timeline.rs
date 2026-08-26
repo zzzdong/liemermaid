@@ -8,7 +8,7 @@
 
 use crate::ast::{TimelineDiagram, TimelineDirection, TimelineSection};
 use crate::parser::common::{
-    consume_line, has_input, keyword, rest_of_line, skip_ws_and_comments, PResult,
+    PResult, consume_line, has_input, keyword, rest_of_line, skip_ws_and_comments,
 };
 use winnow::{Parser, combinator::alt};
 

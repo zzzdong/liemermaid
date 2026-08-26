@@ -61,8 +61,10 @@ fn group_container_contains_members() {
     for &idx in &[1, 2] {
         let p = placed.positions[idx];
         assert!(
-            p.x >= bound.min_x() && p.x <= bound.max_x()
-                && p.y >= bound.min_y() && p.y <= bound.max_y(),
+            p.x >= bound.min_x()
+                && p.x <= bound.max_x()
+                && p.y >= bound.min_y()
+                && p.y <= bound.max_y(),
             "成员 {idx} 应在容器包围盒内: pos={:?} bound={:?}",
             p,
             bound

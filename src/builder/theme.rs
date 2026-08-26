@@ -76,7 +76,8 @@ pub mod sequence {
     pub const LIFELINE: Color = Color::new(153.0 / 255.0, 153.0 / 255.0, 153.0 / 255.0, 1.0); // #999 官方 lifeline 灰
     // 官方 activationBkgColor=#f4f4f4（浅灰填充）/ activationBorderColor=#666（深灰描边）
     pub const ACTIVATION_FILL: Color = Color::new(244.0 / 255.0, 244.0 / 255.0, 244.0 / 255.0, 1.0); // #f4f4f4
-    pub const ACTIVATION_STROKE: Color = Color::new(102.0 / 255.0, 102.0 / 255.0, 102.0 / 255.0, 1.0); // #666
+    pub const ACTIVATION_STROKE: Color =
+        Color::new(102.0 / 255.0, 102.0 / 255.0, 102.0 / 255.0, 1.0); // #666
     pub const NOTE_FILL: Color = Color::new(237.0 / 255.0, 242.0 / 255.0, 174.0 / 255.0, 1.0); // #EDF2AE 官方 noteBkgColor
     pub const NOTE_STROKE: Color = Color::new(147.0 / 255.0, 112.0 / 255.0, 219.0 / 255.0, 1.0); // #9370DB
     pub const BLOCK_FILL: Color = Color::new(236.0 / 255.0, 236.0 / 255.0, 1.0, 1.0); // #ECECFF
@@ -123,11 +124,11 @@ pub mod timeline {
     pub const BLOCK_H: f64 = 44.0;
     pub const BLOCK_RX: f64 = 6.0;
     pub const DOT_R: f64 = 7.0;
-    pub const TITLE_Y: f64 = 25.0;          // 标题 Y 位置
-    pub const LINE_Y: f64 = 130.0;         // 时间线 Y 位置（从画布顶部计）
-    pub const SECTION_DY: f64 = 60.0;      // section 块在时间线上方的距离
-    pub const EVENT_DY: f64 = 75.0;        // event 块在时间线下方首个位置的距离
-    pub const EVENT_GAP: f64 = 15.0;       // 同列多个 event 块之间的间距
+    pub const TITLE_Y: f64 = 25.0; // 标题 Y 位置
+    pub const LINE_Y: f64 = 130.0; // 时间线 Y 位置（从画布顶部计）
+    pub const SECTION_DY: f64 = 60.0; // section 块在时间线上方的距离
+    pub const EVENT_DY: f64 = 75.0; // event 块在时间线下方首个位置的距离
+    pub const EVENT_GAP: f64 = 15.0; // 同列多个 event 块之间的间距
     pub const LINE_WIDTH: f64 = 2.5;
     pub const BLOCK_STROKE_W: f64 = 1.5;
     pub const CONNECTOR_W: f64 = 1.5;
@@ -154,13 +155,13 @@ pub mod gitgraph {
     pub const COMMIT_STROKE: Color = Color::new(1.0, 1.0, 1.0, 1.0);
 
     // 布局尺寸（横向布局，测量与绘制共用单一来源）
-    pub const COMMIT_RADIUS: f64 = 9.0;      // commit 圆点半径
-    pub const BRANCH_SPACING: f64 = 60.0;     // 分支行间距（Y 方向）
-    pub const COMMIT_SPACING: f64 = 70.0;     // commit 间距（X 方向）
-    pub const LABEL_OFFSET: f64 = 20.0;       // 标签偏移
-    pub const LEFT_MARGIN: f64 = 120.0;       // 左边距（留出分支标签空间）
-    pub const TOP_MARGIN: f64 = 35.0;         // 上边距
-    pub const LINE_WIDTH: f64 = 4.0;          // 连线宽度（加粗更醒目）
+    pub const COMMIT_RADIUS: f64 = 9.0; // commit 圆点半径
+    pub const BRANCH_SPACING: f64 = 60.0; // 分支行间距（Y 方向）
+    pub const COMMIT_SPACING: f64 = 70.0; // commit 间距（X 方向）
+    pub const LABEL_OFFSET: f64 = 20.0; // 标签偏移
+    pub const LEFT_MARGIN: f64 = 120.0; // 左边距（留出分支标签空间）
+    pub const TOP_MARGIN: f64 = 35.0; // 上边距
+    pub const LINE_WIDTH: f64 = 4.0; // 连线宽度（加粗更醒目）
 }
 
 // ==================== Pie (多色轮盘，对齐 mermaid 默认主题) ====================
@@ -170,15 +171,15 @@ pub mod pie {
     use super::Color;
     pub const COLORS: [Color; 12] = [
         Color::new(236.0 / 255.0, 236.0 / 255.0, 1.0, 1.0), // pie1 = primaryColor #ECECFF
-        Color::new(1.0, 1.0, 222.0 / 255.0, 1.0), // pie2 = secondaryColor #ffffde
+        Color::new(1.0, 1.0, 222.0 / 255.0, 1.0),           // pie2 = secondaryColor #ffffde
         Color::new(185.0 / 255.0, 1.0, 32.0 / 255.0, 1.0),  // pie3 = adjust(tertiary,{l:-40})
         Color::new(185.0 / 255.0, 185.0 / 255.0, 1.0, 1.0), // pie4 = adjust(primary,{l:-10})
-        Color::new(1.0, 1.0, 69.0 / 255.0, 1.0),  // pie5 = adjust(secondary,{l:-30})
+        Color::new(1.0, 1.0, 69.0 / 255.0, 1.0),            // pie5 = adjust(secondary,{l:-30})
         Color::new(217.0 / 255.0, 1.0, 134.0 / 255.0, 1.0), // pie6 = adjust(tertiary,{l:-20})
-        Color::new(1.0, 134.0 / 255.0, 1.0, 1.0), // pie7 = adjust(primary,{h:+60,l:-20})
-        Color::new(32.0 / 255.0, 1.0, 1.0, 1.0),  // pie8 = adjust(primary,{h:-60,l:-40})
+        Color::new(1.0, 134.0 / 255.0, 1.0, 1.0),           // pie7 = adjust(primary,{h:+60,l:-20})
+        Color::new(32.0 / 255.0, 1.0, 1.0, 1.0),            // pie8 = adjust(primary,{h:-60,l:-40})
         Color::new(1.0, 32.0 / 255.0, 32.0 / 255.0, 1.0),   // pie9 = adjust(primary,{h:120,l:-40})
-        Color::new(1.0, 32.0 / 255.0, 1.0, 1.0),  // pie10 = adjust(primary,{h:+60,l:-40})
+        Color::new(1.0, 32.0 / 255.0, 1.0, 1.0),            // pie10 = adjust(primary,{h:+60,l:-40})
         Color::new(32.0 / 255.0, 1.0, 144.0 / 255.0, 1.0),  // pie11 = adjust(primary,{h:-90,l:-40})
         Color::new(1.0, 83.0 / 255.0, 83.0 / 255.0, 1.0),   // pie12 = adjust(primary,{h:120,l:-30})
     ];

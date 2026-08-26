@@ -15,10 +15,10 @@ use crate::{
     builder::{layout::types::LayoutEngine, types::OutputConfig},
     error::DiagramResult,
 };
+use lievisual::geometry::PathSeg;
 use lievisual::geometry::Transform;
 use lievisual::scene::{Element, SceneNode};
 use lievisual::text::{TextAlign, TextBaseline};
-use lievisual::geometry::PathSeg;
 
 /// 构建 Mermaid Diagram 的视觉元素管线
 ///

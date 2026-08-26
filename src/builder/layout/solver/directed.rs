@@ -16,7 +16,7 @@ use petgraph::graph::{DiGraph, NodeIndex};
 
 use crate::ast::Direction;
 
-use super::super::analyze::{analyze, GraphAnalysis};
+use super::super::analyze::{GraphAnalysis, analyze};
 use super::super::config::LayoutConfig;
 use super::super::ir::{LNode, LayoutGraph, PlacedGraph};
 use super::super::sugiyama::{NodeSize, SugiyamaConfig, SugiyamaLayout};
@@ -196,12 +196,7 @@ impl DirectedSolver {
             } else {
                 // 正向边：先两点，检测是否穿过中间节点，必要时绕行
                 edge_routes.push(route_forward(
-                    start,
-                    end,
-                    e.source,
-                    e.target,
-                    &positions,
-                    lg,
+                    start, end, e.source, e.target, &positions, lg,
                 ));
             }
         }
@@ -248,8 +243,16 @@ fn clip_to_border(from: Point, toward: Point, size: &Size) -> Point {
     let half_h = size.height / 2.0;
     let vx = toward.x - from.x;
     let vy = toward.y - from.y;
-    let tx = if vx.abs() > 1e-9 { half_w / vx.abs() } else { f64::INFINITY };
-    let ty = if vy.abs() > 1e-9 { half_h / vy.abs() } else { f64::INFINITY };
+    let tx = if vx.abs() > 1e-9 {
+        half_w / vx.abs()
+    } else {
+        f64::INFINITY
+    };
+    let ty = if vy.abs() > 1e-9 {
+        half_h / vy.abs()
+    } else {
+        f64::INFINITY
+    };
     let t = tx.min(ty);
     if !t.is_finite() {
         return from;
@@ -323,10 +326,22 @@ fn segment_intersects_rect(a: Point, b: Point, rect: lievisual::geometry::Rect) 
     // 线段与矩形四条边的相交检测（简化为采样检测中点附近）
     // 更稳妥：检查线段是否与矩形边相交
     let edges = [
-        (Point::new(rect.min_x(), rect.min_y()), Point::new(rect.max_x(), rect.min_y())),
-        (Point::new(rect.max_x(), rect.min_y()), Point::new(rect.max_x(), rect.max_y())),
-        (Point::new(rect.max_x(), rect.max_y()), Point::new(rect.min_x(), rect.max_y())),
-        (Point::new(rect.min_x(), rect.max_y()), Point::new(rect.min_x(), rect.min_y())),
+        (
+            Point::new(rect.min_x(), rect.min_y()),
+            Point::new(rect.max_x(), rect.min_y()),
+        ),
+        (
+            Point::new(rect.max_x(), rect.min_y()),
+            Point::new(rect.max_x(), rect.max_y()),
+        ),
+        (
+            Point::new(rect.max_x(), rect.max_y()),
+            Point::new(rect.min_x(), rect.max_y()),
+        ),
+        (
+            Point::new(rect.min_x(), rect.max_y()),
+            Point::new(rect.min_x(), rect.min_y()),
+        ),
     ];
     for (p1, p2) in edges {
         if segments_intersect(a, b, p1, p2) {

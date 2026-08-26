@@ -164,7 +164,12 @@ impl PlacedGraph {
             }
         }
         for b in self.group_bounds.iter_mut() {
-            *b = Rect::new(b.min_x() - min_x, b.min_y() - min_y, b.max_x() - min_x, b.max_y() - min_y);
+            *b = Rect::new(
+                b.min_x() - min_x,
+                b.min_y() - min_y,
+                b.max_x() - min_x,
+                b.max_y() - min_y,
+            );
         }
     }
 

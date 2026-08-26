@@ -135,8 +135,5 @@ fn measure_node(node: &Node, _config: &OutputConfig) -> NodeMetrics {
 
     let anchors = NodeAnchors::new((size.width, size.height));
 
-    NodeMetrics {
-        size,
-        anchors,
-    }
+    NodeMetrics { size, anchors }
 }

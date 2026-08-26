@@ -127,8 +127,16 @@ impl Diff {
     pub fn describe(&self) -> String {
         let mut s = String::new();
         for ((k, c), (a, b)) in &self.count_diffs {
-            let cls = if c.is_empty() { String::new() } else { format!("[{c}]") };
-            s.push_str(&format!("  count {}{}: ours={a} golden={b}\n", kind_name(*k), cls));
+            let cls = if c.is_empty() {
+                String::new()
+            } else {
+                format!("[{c}]")
+            };
+            s.push_str(&format!(
+                "  count {}{}: ours={a} golden={b}\n",
+                kind_name(*k),
+                cls
+            ));
         }
         for t in &self.missing_texts {
             s.push_str(&format!("  missing text: {t:?}\n"));
@@ -155,11 +163,17 @@ impl Diff {
             s.push_str(&format!("  extra box:   {:?}\n", b));
         }
         match self.geom_node_err {
-            Some(e) => s.push_str(&format!("  geom node centers max-err={:.3} (tol {:.2})\n", e, GEOM_TOL)),
+            Some(e) => s.push_str(&format!(
+                "  geom node centers max-err={:.3} (tol {:.2})\n",
+                e, GEOM_TOL
+            )),
             None => s.push_str("  geom node centers: COUNT MISMATCH\n"),
         }
         match self.geom_edge_err {
-            Some(e) => s.push_str(&format!("  geom edge endpoints max-err={:.3} (tol {:.2})\n", e, GEOM_TOL)),
+            Some(e) => s.push_str(&format!(
+                "  geom edge endpoints max-err={:.3} (tol {:.2})\n",
+                e, GEOM_TOL
+            )),
             None => s.push_str("  geom edge endpoints: COUNT MISMATCH\n"),
         }
         s
@@ -220,38 +234,43 @@ pub fn parse(svg: &str) -> Vec<El> {
                 let tag = e.local_name().into_inner();
                 if tag == "g" {
                     let class = attr_str(e.attributes(), "class").unwrap_or_default();
-                    let (px, py) = group_stack
-                        .last()
-                        .map(|(_, p)| *p)
-                        .unwrap_or((0.0, 0.0));
+                    let (px, py) = group_stack.last().map(|(_, p)| *p).unwrap_or((0.0, 0.0));
                     let (tx, ty) = attr_str(e.attributes(), "transform")
                         .and_then(|t| parse_translate(&t))
                         .unwrap_or((0.0, 0.0));
                     group_stack.push((class, (px + tx, py + ty)));
-                } else if tag == "text" || tag == "div" || tag == "p" || tag == "span"
+                } else if tag == "text"
+                    || tag == "div"
+                    || tag == "p"
+                    || tag == "span"
                     || tag == "foreignObject"
                 {
                     // 抽取文本（可能跨 tspan/子节点），坐标：text 用自身 x/y + group 平移，
                     // 其他容器（foreignObject/div/p/span）无 x/y 属性，用 group 累加平移近似。
-                    let (cx, cy) = group_stack
-                        .last()
-                        .map(|(_, p)| *p)
-                        .unwrap_or((0.0, 0.0));
-                    let (bx, by) = attr_f64(e.attributes(), "x").map(|v| (v + cx, v))
+                    let (cx, cy) = group_stack.last().map(|(_, p)| *p).unwrap_or((0.0, 0.0));
+                    let (bx, by) = attr_f64(e.attributes(), "x")
+                        .map(|v| (v + cx, v))
                         .unwrap_or((cx, cy));
                     let by = attr_f64(e.attributes(), "y").map(|v| v + cy).unwrap_or(by);
                     let text = collect_text(&mut reader);
                     let (px, py) = group_stack.last().map(|(_, p)| *p).unwrap_or((0.0, 0.0));
                     let el = El {
                         kind: Kind::Text,
-                        class: group_stack.last().map(|(c, _)| c.clone()).unwrap_or_default(),
+                        class: group_stack
+                            .last()
+                            .map(|(c, _)| c.clone())
+                            .unwrap_or_default(),
                         x: bx,
                         y: by,
                         w: 0.0,
                         h: 0.0,
                         text,
-                        fill: attr_str(e.attributes(), "fill").map(|s| clean_color(&s)).unwrap_or_default(),
-                        stroke: attr_str(e.attributes(), "stroke").map(|s| clean_color(&s)).unwrap_or_default(),
+                        fill: attr_str(e.attributes(), "fill")
+                            .map(|s| clean_color(&s))
+                            .unwrap_or_default(),
+                        stroke: attr_str(e.attributes(), "stroke")
+                            .map(|s| clean_color(&s))
+                            .unwrap_or_default(),
                         endpoints: None,
                     };
                     let _ = (px, py);
@@ -268,7 +287,10 @@ pub fn parse(svg: &str) -> Vec<El> {
                 let (px, py) = group_stack.last().map(|(_, p)| *p).unwrap_or((0.0, 0.0));
                 let mut el = El {
                     kind,
-                    class: group_stack.last().map(|(c, _)| c.clone()).unwrap_or_default(),
+                    class: group_stack
+                        .last()
+                        .map(|(c, _)| c.clone())
+                        .unwrap_or_default(),
                     x: 0.0,
                     y: 0.0,
                     w: 0.0,
@@ -325,8 +347,7 @@ pub fn parse(svg: &str) -> Vec<El> {
                         attr_f64(e.attributes(), "x2"),
                         attr_f64(e.attributes(), "y2"),
                     ) {
-                        el.endpoints =
-                            Some(((x1 + px, y1 + py), (x2 + px, y2 + py)));
+                        el.endpoints = Some(((x1 + px, y1 + py), (x2 + px, y2 + py)));
                     }
                 } else if kind == Kind::Polyline {
                     if let Some(pts) = attr_str(e.attributes(), "points") {
@@ -500,9 +521,7 @@ fn parse_path_endpoints(d: &str, ox: f64, oy: f64) -> Option<((f64, f64), (f64, 
             if chars[j] == '-' || chars[j] == '+' {
                 j += 1;
             }
-            while j < chars.len()
-                && (chars[j].is_ascii_digit() || chars[j] == '.')
-            {
+            while j < chars.len() && (chars[j].is_ascii_digit() || chars[j] == '.') {
                 j += 1;
             }
             if let Ok(num) = d[i..j].trim().parse::<f64>() {
@@ -643,10 +662,7 @@ fn match_point_sets(a: &[(f64, f64)], b: &[(f64, f64)]) -> Option<f64> {
 
 /// 边端点集合是否几何等价：每条边视为线段（两端点），数量相等且每条边都能在对方找到
 /// 一条边使其两端点（顺序可交换）在容差内配对。返回最大配对误差，数量不等返回 None。
-fn match_edge_sets(
-    a: &[((f64, f64), (f64, f64))],
-    b: &[((f64, f64), (f64, f64))],
-) -> Option<f64> {
+fn match_edge_sets(a: &[((f64, f64), (f64, f64))], b: &[((f64, f64), (f64, f64))]) -> Option<f64> {
     if a.len() != b.len() {
         return None;
     }
@@ -847,12 +863,19 @@ mod tests {
 
     #[test]
     fn compare_detects_count_and_text_diffs() {
-        let a = summarize(&parse(r#"<svg><g class='node'><rect x='0' y='0' width='10' height='10'/></g><text x='0' y='0'>A</text></svg>"#));
-        let b = summarize(&parse(r#"<svg><g class='node'><rect x='0' y='0' width='10' height='10'/></g><g class='node'><rect x='50' y='0' width='10' height='10'/></g><text x='0' y='0'>B</text></svg>"#));
+        let a = summarize(&parse(
+            r#"<svg><g class='node'><rect x='0' y='0' width='10' height='10'/></g><text x='0' y='0'>A</text></svg>"#,
+        ));
+        let b = summarize(&parse(
+            r#"<svg><g class='node'><rect x='0' y='0' width='10' height='10'/></g><g class='node'><rect x='50' y='0' width='10' height='10'/></g><text x='0' y='0'>B</text></svg>"#,
+        ));
         let d = compare(&a, &b);
         assert!(!d.is_empty());
         // b 比 a 多一个 node 矩形
-        assert_eq!(d.count_diffs.get(&(Kind::Rect, "node".to_string())), Some(&(1usize, 2usize)));
+        assert_eq!(
+            d.count_diffs.get(&(Kind::Rect, "node".to_string())),
+            Some(&(1usize, 2usize))
+        );
         // a=ours（少文本 A），b=golden（多文本 B）：
         // ours 多出 A（golden 没有）→ extra；ours 缺失 B（golden 有）→ missing
         assert!(d.extra_texts.contains("A"));

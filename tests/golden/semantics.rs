@@ -22,13 +22,13 @@ use std::collections::{BTreeMap, BTreeSet};
 /// 归一化语义标签。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Sem {
-    Node,      // 通用节点（flowchart 节点、class/er/state 实体、timeline 节点、git commit）
-    Edge,      // 边 / 连接
-    Actor,     // sequence 参与者
-    Message,   // sequence 消息文本
-    Note,      // sequence/class/er 标注
-    Slice,     // pie 扇区
-    Label,     // 节点/边上的纯标签文本容器
+    Node,    // 通用节点（flowchart 节点、class/er/state 实体、timeline 节点、git commit）
+    Edge,    // 边 / 连接
+    Actor,   // sequence 参与者
+    Message, // sequence 消息文本
+    Note,    // sequence/class/er 标注
+    Slice,   // pie 扇区
+    Label,   // 节点/边上的纯标签文本容器
     Other,
 }
 
@@ -65,8 +65,12 @@ fn official_class_sem(cls: &str) -> Option<Sem> {
             "er" | "erLabel" | "relationship" => Some(Sem::Node),
             "stateGroup" | "state-title" | "state" => Some(Sem::Node),
             "stateLabel" | "transition" | "transitionLabel" => Some(Sem::Edge),
-            "edgeLabel" | "edge" | "edge-thickness-normal" | "edge-pattern-solid"
-            | "edge-thickness-thick" | "edge-pattern-dashed" => Some(Sem::Edge),
+            "edgeLabel"
+            | "edge"
+            | "edge-thickness-normal"
+            | "edge-pattern-solid"
+            | "edge-thickness-thick"
+            | "edge-pattern-dashed" => Some(Sem::Edge),
             "timeline-node" | "commit" | "commit-id" | "commit-msg" => Some(Sem::Node),
             "section" => Some(Sem::Node),
             "label" | "nodeLabel" | "flowchart-label" => Some(Sem::Label),
@@ -354,8 +358,14 @@ mod tests {
 
     #[test]
     fn compare_text_equality() {
-        let a = extract(r#"<svg><g class="node"><text>A</text></g><text>B</text></svg>"#, false);
-        let b = extract(r#"<svg><g class="node"><text>A</text></g><text>C</text></svg>"#, false);
+        let a = extract(
+            r#"<svg><g class="node"><text>A</text></g><text>B</text></svg>"#,
+            false,
+        );
+        let b = extract(
+            r#"<svg><g class="node"><text>A</text></g><text>C</text></svg>"#,
+            false,
+        );
         let d = compare(&a, &b);
         assert!(d.missing_texts.contains("C"));
         assert!(d.extra_texts.contains("B"));

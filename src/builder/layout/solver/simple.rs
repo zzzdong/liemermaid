@@ -15,7 +15,10 @@ impl SimpleSolver {
         let mut positions = Vec::with_capacity(lg.nodes.len());
         let mut cur = 0.0;
         for node in &lg.nodes {
-            positions.push(Point::new(cur + node.size.width / 2.0, node.size.height / 2.0));
+            positions.push(Point::new(
+                cur + node.size.width / 2.0,
+                node.size.height / 2.0,
+            ));
             cur += node.size.width + config.node_gap;
         }
         PlacedGraph {

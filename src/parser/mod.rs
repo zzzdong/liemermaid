@@ -50,10 +50,7 @@ impl WinnowParser {
         let kw = |p: &str| {
             lower
                 .strip_prefix(p)
-                .filter(|r| {
-                    r.is_empty()
-                        || r.starts_with([' ', '\t', '\n', '\r', ':', '-'])
-                })
+                .filter(|r| r.is_empty() || r.starts_with([' ', '\t', '\n', '\r', ':', '-']))
                 .map(|r| &trimmed[trimmed.len() - r.len()..])
         };
         if kw("sequencediagram").is_some() {
@@ -88,14 +85,17 @@ impl WinnowParser {
 
     /// 解析 flowchart 图表。
     pub fn parse_flowchart(input: &str) -> ParseResult<Diagram> {
-        run(flowchart::flowchart_diagram, flowchart::trailing_ws, input)
-            .map(Diagram::Flowchart)
+        run(flowchart::flowchart_diagram, flowchart::trailing_ws, input).map(Diagram::Flowchart)
     }
 
     /// 解析 sequenceDiagram 图表。
     pub fn parse_sequence(input: &str) -> ParseResult<Diagram> {
-        run(sequence::sequence_diagram, common::skip_ws_and_comments, input)
-            .map(Diagram::Sequence)
+        run(
+            sequence::sequence_diagram,
+            common::skip_ws_and_comments,
+            input,
+        )
+        .map(Diagram::Sequence)
     }
 
     /// 解析 classDiagram 图表。
@@ -120,12 +120,22 @@ impl WinnowParser {
 
     /// 解析 timeline 图表。
     pub fn parse_timeline(input: &str) -> ParseResult<Diagram> {
-        run(timeline::timeline_diagram, common::skip_ws_and_comments, input).map(Diagram::Timeline)
+        run(
+            timeline::timeline_diagram,
+            common::skip_ws_and_comments,
+            input,
+        )
+        .map(Diagram::Timeline)
     }
 
     /// 解析 gitGraph 图表。
     pub fn parse_gitgraph(input: &str) -> ParseResult<Diagram> {
-        run(gitgraph::gitgraph_diagram, common::skip_ws_and_comments, input).map(Diagram::GitGraph)
+        run(
+            gitgraph::gitgraph_diagram,
+            common::skip_ws_and_comments,
+            input,
+        )
+        .map(Diagram::GitGraph)
     }
 }
 

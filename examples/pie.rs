@@ -3,7 +3,7 @@
 // 运行：cargo run --example pie
 // 产物：examples/out/pie.svg
 
-use liemermaid::{render, MermaidParser};
+use liemermaid::{MermaidParser, render};
 use std::fs;
 
 fn main() {

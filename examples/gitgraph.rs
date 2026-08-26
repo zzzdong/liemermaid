@@ -3,7 +3,7 @@
 // 运行：cargo run --example gitgraph
 // 产物：examples/out/gitgraph.svg
 
-use liemermaid::{render, MermaidParser};
+use liemermaid::{MermaidParser, render};
 use std::fs;
 
 fn main() {

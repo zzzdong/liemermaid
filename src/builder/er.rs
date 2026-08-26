@@ -78,10 +78,7 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
                 TextBaseline::Top,
             );
             for part in [ty.as_str(), nm.as_str()] {
-                let l = layout_text(
-                    &[RichSpan::new(part.to_string(), small_ts.clone())],
-                    None,
-                );
+                let l = layout_text(&[RichSpan::new(part.to_string(), small_ts.clone())], None);
                 max_w = max_w.max(l.width + ENTITY_PAD * 2.0);
             }
         }
@@ -407,8 +404,7 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
                     &[RichSpan::new(part.to_string(), ts.clone())],
                     Some(layout.width - ENTITY_PAD),
                 );
-                let (x_off, y_off) =
-                    compute_text_offset(&l, TextAlign::Left, TextBaseline::Top);
+                let (x_off, y_off) = compute_text_offset(&l, TextAlign::Left, TextBaseline::Top);
                 elements.push(vir::text_node(
                     part.to_string(),
                     Point::new(rect.min_x() + ENTITY_PAD + x_off, line_y + y_off),

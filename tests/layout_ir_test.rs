@@ -19,13 +19,35 @@ fn flowchart_node_order_matches_source() {
     let fc = Flowchart {
         direction: None,
         nodes: vec![
-            Node { id: "A".into(), shape: None, text: None },
-            Node { id: "B".into(), shape: None, text: None },
-            Node { id: "C".into(), shape: None, text: None },
+            Node {
+                id: "A".into(),
+                shape: None,
+                text: None,
+            },
+            Node {
+                id: "B".into(),
+                shape: None,
+                text: None,
+            },
+            Node {
+                id: "C".into(),
+                shape: None,
+                text: None,
+            },
         ],
         edges: vec![
-            Edge { source: "A".into(), target: "B".into(), arrow_type: ArrowType::Solid, label: None },
-            Edge { source: "B".into(), target: "C".into(), arrow_type: ArrowType::Solid, label: None },
+            Edge {
+                source: "A".into(),
+                target: "B".into(),
+                arrow_type: ArrowType::Solid,
+                label: None,
+            },
+            Edge {
+                source: "B".into(),
+                target: "C".into(),
+                arrow_type: ArrowType::Solid,
+                label: None,
+            },
         ],
         subgraphs: vec![],
     };
@@ -44,23 +66,57 @@ fn flowchart_subgraph_maps_to_group() {
     let fc = Flowchart {
         direction: None,
         nodes: vec![
-            Node { id: "A".into(), shape: None, text: None },
-            Node { id: "X".into(), shape: None, text: None },
-            Node { id: "Y".into(), shape: None, text: None },
+            Node {
+                id: "A".into(),
+                shape: None,
+                text: None,
+            },
+            Node {
+                id: "X".into(),
+                shape: None,
+                text: None,
+            },
+            Node {
+                id: "Y".into(),
+                shape: None,
+                text: None,
+            },
         ],
-        edges: vec![Edge { source: "A".into(), target: "X".into(), arrow_type: ArrowType::Solid, label: None }],
+        edges: vec![Edge {
+            source: "A".into(),
+            target: "X".into(),
+            arrow_type: ArrowType::Solid,
+            label: None,
+        }],
         subgraphs: vec![Subgraph {
             title: Some("Group".into()),
             nodes: vec![
-                Node { id: "X".into(), shape: None, text: None },
-                Node { id: "Y".into(), shape: None, text: None },
+                Node {
+                    id: "X".into(),
+                    shape: None,
+                    text: None,
+                },
+                Node {
+                    id: "Y".into(),
+                    shape: None,
+                    text: None,
+                },
             ],
-            edges: vec![Edge { source: "X".into(), target: "Y".into(), arrow_type: ArrowType::Solid, label: None }],
+            edges: vec![Edge {
+                source: "X".into(),
+                target: "Y".into(),
+                arrow_type: ArrowType::Solid,
+                label: None,
+            }],
         }],
     };
     let lg = fc.to_layout_graph(&measure());
     assert_eq!(lg.groups.len(), 1, "一个子图 → 一个 LGroup");
-    assert_eq!(lg.groups[0].title.as_deref(), Some("Group"), "子图标题映射到 LGroup.title");
+    assert_eq!(
+        lg.groups[0].title.as_deref(),
+        Some("Group"),
+        "子图标题映射到 LGroup.title"
+    );
     // 组内节点：X(idx1)、Y(idx2)
     use liemermaid::builder::layout::ir::GroupChild;
     let member_ids: Vec<usize> = lg.groups[0]
@@ -83,28 +139,48 @@ fn line_kind_mapping() {
     let fc = Flowchart {
         direction: None,
         nodes: vec![
-            Node { id: "A".into(), shape: None, text: None },
-            Node { id: "B".into(), shape: None, text: None },
+            Node {
+                id: "A".into(),
+                shape: None,
+                text: None,
+            },
+            Node {
+                id: "B".into(),
+                shape: None,
+                text: None,
+            },
         ],
-        edges: vec![
-            Edge { source: "A".into(), target: "B".into(), arrow_type: ArrowType::Dotted, label: None },
-        ],
+        edges: vec![Edge {
+            source: "A".into(),
+            target: "B".into(),
+            arrow_type: ArrowType::Dotted,
+            label: None,
+        }],
         subgraphs: vec![],
     };
     let lg = fc.to_layout_graph(&measure());
-    assert_eq!(lg.edges[0].line_kind, LineKind::Dashed, "虚线箭头 → LineKind::Dashed");
+    assert_eq!(
+        lg.edges[0].line_kind,
+        LineKind::Dashed,
+        "虚线箭头 → LineKind::Dashed"
+    );
 }
 
 #[test]
 fn self_loop_and_invisible() {
     let fc = Flowchart {
         direction: None,
-        nodes: vec![
-            Node { id: "A".into(), shape: None, text: None },
-        ],
-        edges: vec![
-            Edge { source: "A".into(), target: "A".into(), arrow_type: ArrowType::Solid, label: None },
-        ],
+        nodes: vec![Node {
+            id: "A".into(),
+            shape: None,
+            text: None,
+        }],
+        edges: vec![Edge {
+            source: "A".into(),
+            target: "A".into(),
+            arrow_type: ArrowType::Solid,
+            label: None,
+        }],
         subgraphs: vec![],
     };
     let lg = fc.to_layout_graph(&measure());

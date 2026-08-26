@@ -13,13 +13,35 @@ fn small_flowchart() -> Diagram {
     Diagram::Flowchart(Flowchart {
         direction: None,
         nodes: vec![
-            Node { id: "A".into(), shape: None, text: Some("Start".into()) },
-            Node { id: "B".into(), shape: None, text: Some("Process".into()) },
-            Node { id: "C".into(), shape: None, text: Some("End".into()) },
+            Node {
+                id: "A".into(),
+                shape: None,
+                text: Some("Start".into()),
+            },
+            Node {
+                id: "B".into(),
+                shape: None,
+                text: Some("Process".into()),
+            },
+            Node {
+                id: "C".into(),
+                shape: None,
+                text: Some("End".into()),
+            },
         ],
         edges: vec![
-            Edge { source: "A".into(), target: "B".into(), arrow_type: ArrowType::Solid, label: None },
-            Edge { source: "B".into(), target: "C".into(), arrow_type: ArrowType::Solid, label: None },
+            Edge {
+                source: "A".into(),
+                target: "B".into(),
+                arrow_type: ArrowType::Solid,
+                label: None,
+            },
+            Edge {
+                source: "B".into(),
+                target: "C".into(),
+                arrow_type: ArrowType::Solid,
+                label: None,
+            },
         ],
         subgraphs: vec![],
     })
@@ -50,8 +72,16 @@ fn diamond_and_rounded_shapes_render() {
     let diagram = Diagram::Flowchart(Flowchart {
         direction: None,
         nodes: vec![
-            Node { id: "D".into(), shape: Some(liemermaid::ast::NodeShape::Diamond), text: Some("?".into()) },
-            Node { id: "X".into(), shape: Some(liemermaid::ast::NodeShape::Rounded), text: Some("ok".into()) },
+            Node {
+                id: "D".into(),
+                shape: Some(liemermaid::ast::NodeShape::Diamond),
+                text: Some("?".into()),
+            },
+            Node {
+                id: "X".into(),
+                shape: Some(liemermaid::ast::NodeShape::Rounded),
+                text: Some("ok".into()),
+            },
         ],
         edges: vec![Edge {
             source: "D".into(),

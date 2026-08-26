@@ -14,9 +14,7 @@ use crate::ast::{Direction, ParticipantKind};
 ///
 /// 例如 `keyword("sequenceDiagram")` 能匹配 `sequenceDiagram` / `SequenceDiagram`
 /// / `SEQUENCEDIAGRAM`。
-pub fn keyword<'i>(
-    kw: &'static str,
-) -> impl Parser<&'i str, &'i str, InputError<&'i str>> {
+pub fn keyword<'i>(kw: &'static str) -> impl Parser<&'i str, &'i str, InputError<&'i str>> {
     move |input: &mut &'i str| {
         let lower = kw.to_ascii_lowercase();
         // 使用 `get` 安全切片：当 input 以多字节字符（如 BOM/中文）开头时，
@@ -164,8 +162,9 @@ pub fn peek_end<'i>(input: &mut &'i str) -> PResult<'i, &'i str> {
 /// 标识符：字母、数字、下划线、连字符（首字母不能数字）
 pub fn identifier<'i>(input: &mut &'i str) -> PResult<'i, String> {
     let start = take_while(1.., |c: char| c.is_ascii_alphabetic() || c == '_');
-    let rest =
-        take_while(0.., |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    let rest = take_while(0.., |c: char| {
+        c.is_ascii_alphanumeric() || c == '_' || c == '-'
+    });
     (start, rest)
         .map(|(s, r): (&str, &str)| format!("{}{}", s, r))
         .parse_next(input)

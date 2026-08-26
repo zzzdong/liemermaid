@@ -8,8 +8,8 @@
 //! - [`SimpleSolver`]：pie / gitgraph（画布中心 / 分支列）
 
 pub mod directed;
-pub mod grouped;
 pub mod grid;
+pub mod grouped;
 pub mod linear;
 pub mod simple;
 
@@ -19,8 +19,8 @@ use super::config::LayoutConfig;
 use super::ir::{LayoutGraph, PlacedGraph};
 
 pub use directed::DirectedSolver;
-pub use grouped::GroupedDirected;
 pub use grid::GridSolver;
+pub use grouped::GroupedDirected;
 pub use linear::LinearSolver;
 pub use simple::SimpleSolver;
 

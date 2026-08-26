@@ -7,8 +7,8 @@
 
 use crate::ast::{GitGraphDiagram, GitGraphStatement};
 use crate::parser::common::{
-    consume_line, has_input, identifier, keyword, quoted_string, skip_line, skip_ws_and_comments,
-    inline_ws, PResult,
+    PResult, consume_line, has_input, identifier, inline_ws, keyword, quoted_string, skip_line,
+    skip_ws_and_comments,
 };
 use winnow::{
     Parser,
@@ -64,9 +64,7 @@ pub fn gitgraph_diagram<'i>(input: &mut &'i str) -> PResult<'i, GitGraphDiagram>
 }
 
 /// 解析一组 `key: value` 属性对，返回映射。
-fn attr_map<'i>(
-    input: &mut &'i str,
-) -> PResult<'i, std::collections::HashMap<String, String>> {
+fn attr_map<'i>(input: &mut &'i str) -> PResult<'i, std::collections::HashMap<String, String>> {
     let mut map = std::collections::HashMap::new();
     let _ = separated(0.., attr_pair, take_while(1.., |c: char| c.is_whitespace()))
         .map(|pairs: Vec<(String, String)>| {
@@ -80,8 +78,7 @@ fn attr_map<'i>(
 
 fn attr_pair<'i>(input: &mut &'i str) -> PResult<'i, (String, String)> {
     // 用 peek 守卫：只有当形如 `identifier : ...` 时才消费，避免部分消费导致不回滚丢字符。
-    let _ = peek((identifier, skip_ws_and_comments, ':'))
-        .parse_next(input)?;
+    let _ = peek((identifier, skip_ws_and_comments, ':')).parse_next(input)?;
     let key = identifier.parse_next(input)?;
     skip_ws_and_comments(input)?;
     let _ = ':'.parse_next(input)?;
@@ -89,7 +86,6 @@ fn attr_pair<'i>(input: &mut &'i str) -> PResult<'i, (String, String)> {
     let value = alt((quoted_string, identifier)).parse_next(input)?;
     Ok((key, value))
 }
-
 
 fn commit_stmt<'i>(input: &mut &'i str) -> PResult<'i, GitGraphStatement> {
     keyword("commit").parse_next(input)?;
@@ -162,14 +158,21 @@ mod tests {
         assert_eq!(d.statements.len(), 4);
         assert!(matches!(d.statements[0], GitGraphStatement::Commit { .. }));
         assert!(matches!(d.statements[2], GitGraphStatement::Branch { .. }));
-        assert!(matches!(d.statements[3], GitGraphStatement::Checkout { .. }));
+        assert!(matches!(
+            d.statements[3],
+            GitGraphStatement::Checkout { .. }
+        ));
     }
 
     #[test]
     fn commit_with_attrs() {
         let d = parse("gitGraph\ncommit id: \"a1\" type: HIGHLIGHT tag: \"v1\"");
         match &d.statements[0] {
-            GitGraphStatement::Commit { id, tag, commit_type } => {
+            GitGraphStatement::Commit {
+                id,
+                tag,
+                commit_type,
+            } => {
                 assert_eq!(id.as_deref(), Some("a1"));
                 assert_eq!(tag.as_deref(), Some("v1"));
                 assert_eq!(commit_type.as_deref(), Some("HIGHLIGHT"));
@@ -180,9 +183,7 @@ mod tests {
 
     #[test]
     fn merge_and_cherry_pick() {
-        let d = parse(
-            "gitGraph\nmerge develop id: \"m1\"\ncherry-pick id: \"c1\" parent: \"p1\"",
-        );
+        let d = parse("gitGraph\nmerge develop id: \"m1\"\ncherry-pick id: \"c1\" parent: \"p1\"");
         assert_eq!(d.statements.len(), 2);
         match &d.statements[0] {
             GitGraphStatement::Merge { branch, id, .. } => {

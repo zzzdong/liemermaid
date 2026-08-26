@@ -5,12 +5,10 @@
 //! - 成员：可见性 `+`/`-`/`#`/`~` + 名字（含 `()` 为方法）+ 可选 `: 类型`
 //! - 关系：`*--`/`o--`/`-->`/`..>`/`<|--`/`--*>`/`--o` 等，带可选基数与标签
 
-use crate::ast::{
-    Class, ClassDiagram, ClassMember, Relation, RelationKind, Visibility,
-};
+use crate::ast::{Class, ClassDiagram, ClassMember, Relation, RelationKind, Visibility};
 use crate::parser::common::{
-    consume_line, has_input, identifier, inline_ws, quoted_string, rest_of_line, skip_line,
-    skip_ws_and_comments, PResult,
+    PResult, consume_line, has_input, identifier, inline_ws, quoted_string, rest_of_line,
+    skip_line, skip_ws_and_comments,
 };
 use winnow::{
     Parser,
@@ -56,8 +54,7 @@ fn class_decl<'i>(input: &mut &'i str) -> PResult<'i, Class> {
 
     // 泛型：`class Animal~T~`
     let generic = if input.starts_with('~') {
-        let g = delimited('~', take_while(0.., |c: char| c != '~'), '~')
-            .parse_next(input)?;
+        let g = delimited('~', take_while(0.., |c: char| c != '~'), '~').parse_next(input)?;
         Some(g.trim().to_string())
     } else {
         None

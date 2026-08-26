@@ -3,7 +3,7 @@
 // 运行：cargo run --example class
 // 产物：examples/out/class.svg
 
-use liemermaid::{render, MermaidParser};
+use liemermaid::{MermaidParser, render};
 use std::fs;
 
 fn main() {
