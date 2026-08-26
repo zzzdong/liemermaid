@@ -6,7 +6,7 @@ use liemermaid::builder::layout::config::LayoutConfig;
 use liemermaid::builder::layout::ir::{
     GroupChild, LEdge, LGroup, LNode, LayoutGraph, LineKind, PortHint, ShapeHint,
 };
-use liemermaid::builder::layout::solver::DirectedSolver;
+use liemermaid::builder::layout::solver::{DirectedSolver, LayoutSolver};
 
 /// 构造带子图的 LayoutGraph：
 /// - 顶层独立节点 A(0)
@@ -47,7 +47,7 @@ fn grouped_graph() -> LayoutGraph {
 #[test]
 fn grouped_positions_len_matches_nodes() {
     let lg = grouped_graph();
-    let placed = DirectedSolver::solve(&lg, &LayoutConfig::default());
+    let placed = DirectedSolver.solve(&lg, &LayoutConfig::default());
     assert_eq!(placed.positions.len(), 3, "3 个节点位置");
     assert_eq!(placed.group_bounds.len(), 1, "1 个子图容器包围盒");
 }
@@ -55,7 +55,7 @@ fn grouped_positions_len_matches_nodes() {
 #[test]
 fn group_container_contains_members() {
     let lg = grouped_graph();
-    let placed = DirectedSolver::solve(&lg, &LayoutConfig::default());
+    let placed = DirectedSolver.solve(&lg, &LayoutConfig::default());
     let bound = placed.group_bounds[0];
     // 成员 X、Y 的中心应在容器内
     for &idx in &[1, 2] {
@@ -75,7 +75,7 @@ fn group_container_contains_members() {
 #[test]
 fn all_grouped_members_have_valid_positions() {
     let lg = grouped_graph();
-    let placed = DirectedSolver::solve(&lg, &LayoutConfig::default());
+    let placed = DirectedSolver.solve(&lg, &LayoutConfig::default());
     // 所有节点都有非零位置（没有落在原点）
     for (i, p) in placed.positions.iter().enumerate() {
         assert!(

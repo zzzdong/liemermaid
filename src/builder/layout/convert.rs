@@ -66,9 +66,9 @@ fn line_kind_of(arrow: &ArrowType) -> LineKind {
         ArrowType::Dotted => LineKind::Dashed,
         ArrowType::Both | ArrowType::MultiCircle | ArrowType::MultiCross => LineKind::Bidirectional,
         ArrowType::Invisible => LineKind::Invisible,
+        ArrowType::NoArrow => LineKind::NoArrow,
+        ArrowType::Thick => LineKind::Thick,
         ArrowType::Solid
-        | ArrowType::Thick
-        | ArrowType::NoArrow
         | ArrowType::Circle
         | ArrowType::Cross
         | ArrowType::Labeled(_) => LineKind::Solid,
@@ -212,16 +212,23 @@ impl ToLayoutGraph for StateDiagram {
         let mut id_to_idx: HashMap<String, usize> = HashMap::new();
         for s in &self.states {
             match s {
-                State::Simple { id, .. }
-                | State::Composite { id, .. }
-                | State::Fork { id }
-                | State::Join { id } => {
+                State::Simple { id, .. } | State::Composite { id, .. } => {
                     add_state_node(
                         &mut lg,
                         &mut id_to_idx,
                         id.clone(),
                         Size::new(100.0, 48.0),
                         ShapeHint::Rect,
+                    );
+                }
+                State::Fork { id } | State::Join { id } => {
+                    // fork / join：水平横条。
+                    add_state_node(
+                        &mut lg,
+                        &mut id_to_idx,
+                        id.clone(),
+                        Size::new(100.0, 10.0),
+                        ShapeHint::Bar,
                     );
                 }
                 State::Start => {
@@ -306,7 +313,7 @@ impl ToLayoutGraph for ClassDiagram {
         for c in &self.classes {
             lg.nodes.push(LNode {
                 id: c.name.clone(),
-                size: Size::new(120.0, 60.0),
+                size: measure_class_box(c),
                 shape_hint: ShapeHint::Rect,
             });
         }
@@ -332,22 +339,125 @@ impl ToLayoutGraph for ClassDiagram {
     }
 }
 
+/// 测量类框尺寸（header + attrs + methods 三栏），与渲染层 `class.rs` 保持一致。
+fn measure_class_box(c: &crate::ast::Class) -> lievisual::geometry::Size {
+    use lievisual::text::{RichSpan, layout_text};
+    use crate::builder::theme;
+    use crate::vir::{TextAlign, TextBaseline, TextStyle};
+
+    const PAD: f64 = 12.0;
+    const MIN_W: f64 = 140.0;
+    const SMALL_FONT: f64 = 11.0;
+    // 空栏占位高度与"一行内容"一致（行高 18 + 上下留白 8），保证三栏高度均匀。
+    const SECTION_MIN_H: f64 = 18.0 + 8.0;
+
+    let display_name = match &c.generic {
+        Some(g) => format!("{}<{}>", c.name, g),
+        None => c.name.clone(),
+    };
+    let ts = TextStyle::new(
+        theme::class::TEXT,
+        theme::FONT_SIZE,
+        theme::FONT_FAMILY.to_string(),
+    )
+    .with_align(TextAlign::Left)
+    .with_baseline(TextBaseline::Top);
+    let name_layout = layout_text(&[RichSpan::new(display_name, ts.clone())], None);
+    let name_w = name_layout.width + PAD * 2.0;
+
+    let mut attr_lines = Vec::new();
+    let mut method_lines = Vec::new();
+    for m in &c.members {
+        let prefix = match m.visibility {
+            Some(crate::ast::Visibility::Public) => "+",
+            Some(crate::ast::Visibility::Private) => "-",
+            Some(crate::ast::Visibility::Protected) => "#",
+            Some(crate::ast::Visibility::Package) => "~",
+            None => "",
+        };
+        let line = if m.is_method {
+            if let Some(ret) = &m.type_ {
+                format!("{}{}() : {}", prefix, m.name, ret)
+            } else {
+                format!("{}{}()", prefix, m.name)
+            }
+        } else if let Some(t) = &m.type_ {
+            format!("{}{} {}", prefix, t, m.name)
+        } else {
+            format!("{}{}", prefix, m.name)
+        };
+        if m.is_method {
+            method_lines.push(line);
+        } else {
+            attr_lines.push(line);
+        }
+    }
+
+    let mut max_w = name_w;
+    for line in attr_lines.iter().chain(method_lines.iter()) {
+        let l = layout_text(
+            &[RichSpan::new(
+                line.to_string(),
+                TextStyle::new(
+                    theme::class::TEXT,
+                    SMALL_FONT,
+                    theme::FONT_FAMILY.to_string(),
+                ),
+            )],
+            None,
+        );
+        max_w = max_w.max(l.width + PAD * 2.0);
+    }
+    let header_h = name_layout.height + 12.0;
+    // 三栏恒定：名称栏 + 属性栏 + 方法栏，空栏保留占位高度，与渲染层 class.rs 一致。
+    let attr_h = if attr_lines.is_empty() {
+        SECTION_MIN_H
+    } else {
+        attr_lines.len() as f64 * 18.0 + 8.0
+    };
+    let method_h = if method_lines.is_empty() {
+        SECTION_MIN_H
+    } else {
+        method_lines.len() as f64 * 18.0 + 8.0
+    };
+    let height = header_h + attr_h + method_h;
+    lievisual::geometry::Size::new(max_w.max(MIN_W), height)
+}
+
 impl ToLayoutGraph for ErDiagram {
     fn to_layout_graph(&self, measure: &Measure) -> LayoutGraph {
         let mut lg = LayoutGraph::default();
+
+        // 实体可能仅由关系隐式定义（如 `A ||--o{ B`），未在 entities 块中出现。
+        // 补齐为节点，保证边不因节点缺失而丢失。顺序：已声明实体在前（源码序），
+        // 隐式实体按关系出现顺序追加——与渲染层遍历顺序保持一致。
+        let mut id_to_idx: HashMap<String, usize> = HashMap::new();
+        let mut nodes: Vec<(String, lievisual::geometry::Size)> = Vec::new();
         for e in &self.entities {
+            let sz = measure_er_entity(e.name.as_str(), &e.attributes);
+            let idx = nodes.len();
+            id_to_idx.insert(e.name.clone(), idx);
+            nodes.push((e.name.clone(), sz));
+        }
+        for r in &self.relationships {
+            for name in [&r.first_entity, &r.second_entity] {
+                if !id_to_idx.contains_key(name) {
+                    let sz = measure_er_entity(name, &[]);
+                    let idx = nodes.len();
+                    id_to_idx.insert(name.clone(), idx);
+                    nodes.push((name.clone(), sz));
+                }
+            }
+        }
+
+        for (id, sz) in nodes {
             lg.nodes.push(LNode {
-                id: e.name.clone(),
-                size: Size::new(120.0, 60.0),
+                id,
+                size: sz,
                 shape_hint: ShapeHint::Rect,
             });
         }
-        let id_to_idx: HashMap<String, usize> = lg
-            .nodes
-            .iter()
-            .enumerate()
-            .map(|(i, n)| (n.id.clone(), i))
-            .collect();
+
         for r in &self.relationships {
             if let (Some(&s), Some(&t)) = (
                 id_to_idx.get(&r.first_entity),
@@ -365,6 +475,50 @@ impl ToLayoutGraph for ErDiagram {
         let _ = measure;
         lg
     }
+}
+
+/// 测量 ER 实体框尺寸：名称行 + 属性行，最小宽高。
+fn measure_er_entity(name: &str, attrs: &[crate::ast::ErAttribute]) -> lievisual::geometry::Size {
+    use lievisual::text::{RichSpan, layout_text};
+    use crate::builder::theme;
+    use crate::vir::{TextAlign, TextBaseline, TextStyle};
+
+    const PAD: f64 = 14.0;
+    const MIN_W: f64 = 160.0;
+    const SMALL_FONT: f64 = 12.0;
+    const ATTR_LINE_H: f64 = 18.0;
+
+    let name_style = TextStyle::new(
+        theme::TEXT_COLOR,
+        theme::FONT_SIZE,
+        theme::FONT_FAMILY.to_string(),
+    )
+    .with_align(TextAlign::Center)
+    .with_baseline(TextBaseline::Middle);
+    let n = layout_text(&[RichSpan::new(name.to_string(), name_style.clone())], None);
+    let name_w = n.width + PAD * 2.0;
+
+    let mut max_w = name_w;
+    for attr in attrs {
+        let line = format!("{} {}", attr.type_, attr.name);
+        let l = layout_text(
+            &[RichSpan::new(
+                line,
+                TextStyle::new(
+                    theme::TEXT_COLOR,
+                    SMALL_FONT,
+                    theme::FONT_FAMILY.to_string(),
+                ),
+            )],
+            None,
+        );
+        max_w = max_w.max(l.width + PAD * 2.0);
+    }
+    let header_h = n.height + 10.0;
+    // 无属性时 body 仍保留最小占位，与渲染层 er.rs 保持一致。
+    const MIN_BODY_H: f64 = 20.0;
+    let attr_h = (attrs.len() as f64 * ATTR_LINE_H).max(MIN_BODY_H);
+    lievisual::geometry::Size::new(max_w.max(MIN_W), header_h + attr_h)
 }
 
 impl ToLayoutGraph for SequenceDiagram {

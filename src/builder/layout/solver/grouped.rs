@@ -12,8 +12,9 @@ use std::collections::{HashMap, HashSet};
 use lievisual::geometry::{Point, Rect, Size};
 
 use super::super::config::LayoutConfig;
-use super::super::ir::{GroupChild, LEdge, LGroup, LNode, LayoutGraph, PlacedGraph, PortHint};
+use super::super::ir::{GroupChild, LEdge, LGroup, LNode, LayoutGraph, LineKind, PlacedGraph, PortHint};
 use super::directed::DirectedSolver;
+use super::LayoutSolver;
 
 /// 子图容器标题区高度（额外计入容器尺寸）。
 const SUBGRAPH_TITLE_H: f64 = 22.0;
@@ -36,6 +37,7 @@ impl GroupedDirected {
                 sub_placed.push(PlacedGraph {
                     positions: vec![],
                     edge_routes: vec![],
+                    edge_kinds: vec![],
                     group_bounds: vec![],
                     size: Size::new(0.0, 0.0),
                 });
@@ -46,7 +48,7 @@ impl GroupedDirected {
                 ));
                 continue;
             }
-            let placed = DirectedSolver::solve(&sub, config);
+            let placed = DirectedSolver.solve(&sub, config);
             // 容器尺寸需计入节点实际宽高（节点中心跨度不含 size）
             let (_min_x, _min_y, w, h) = bbox_with_node_sizes(&placed, lg, &member_list);
             let container = Size::new(
@@ -141,7 +143,7 @@ impl GroupedDirected {
         }
 
         // 3. 外部求解（此时外部图无组，DirectedSolver 不会递归到 GroupedDirected）
-        let external_placed = DirectedSolver::solve(&external, config);
+        let external_placed = DirectedSolver.solve(&external, config);
 
         // 4. 平移回贴：把每个子图平移到对应 super-node
         // 计算每个组 super-node 在 external_placed 中的中心
@@ -245,9 +247,17 @@ impl GroupedDirected {
 
         // 先算 size（借用），再 move 进结构体
         let size = compute_total_size(&positions, &final_edges, &group_bounds);
+        // 边线型：组内/顶层边在前，跨组边在后，与 final_edges 顺序一致
+        let edge_kinds: Vec<LineKind> = lg
+            .edges
+            .iter()
+            .chain(lg.cross_group_edges.iter())
+            .map(|e| e.line_kind)
+            .collect();
         let mut placed = PlacedGraph {
             positions,
             edge_routes: final_edges,
+            edge_kinds,
             group_bounds,
             size,
         };

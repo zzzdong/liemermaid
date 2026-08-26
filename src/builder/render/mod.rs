@@ -54,7 +54,7 @@ pub fn render_placed(
 ) -> Vec<SceneNode> {
     match solver_for(diagram) {
         SolverKind::Directed => DirectedRenderer::render(placed, diagram, config),
-        SolverKind::Grid => GridRenderer::render(diagram, config),
+        SolverKind::Grid => GridRenderer::render(placed, diagram, config),
         SolverKind::Linear => LinearRenderer::render(diagram, config),
         SolverKind::Simple => SimpleRenderer::render(diagram, config),
     }

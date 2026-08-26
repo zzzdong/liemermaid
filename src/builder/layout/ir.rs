@@ -79,6 +79,10 @@ pub enum LineKind {
     Solid,
     /// 虚线（渲染层采样成 dash）。
     Dashed,
+    /// 无箭头实线（`---`，渲染层不画箭头）。
+    NoArrow,
+    /// 粗实线（`==>`，渲染层使用更粗的 stroke）。
+    Thick,
     /// 自环（求解器在节点一侧生成小环）。
     SelfLoop,
     /// 双向（路由时错开两条线）。
@@ -124,6 +128,8 @@ pub struct PlacedGraph {
     pub positions: Vec<Point>,
     /// 边路径（折线 / 贝塞尔采样点），与 `LayoutGraph.edges` 同序。
     pub edge_routes: Vec<Vec<Point>>,
+    /// 每条边的线型类别，与 `edge_routes` 同序（供渲染层区分虚线 / 粗线等）。
+    pub edge_kinds: Vec<LineKind>,
     /// 组包围盒，与 `LayoutGraph.groups` 同序。
     pub group_bounds: Vec<Rect>,
     /// 整体画布尺寸（内容实际占据的 bbox）。

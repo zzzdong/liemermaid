@@ -2,6 +2,7 @@
 
 *.svg
 *.png
+*.html
 # 但 golden 测试基线（官方 + 自比）必须纳入版本控制，供 CI 回归比对
 !tests/golden/**/*.svg
 

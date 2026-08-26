@@ -4,12 +4,13 @@ use lievisual::geometry::{Point, Size};
 
 use super::super::config::LayoutConfig;
 use super::super::ir::{LayoutGraph, PlacedGraph};
+use super::LayoutSolver;
 
 /// `SimpleSolver`：无节点排布（饼图）或简单线性（gitgraph 分支列）。
 pub struct SimpleSolver;
 
-impl SimpleSolver {
-    pub fn solve(lg: &LayoutGraph, config: &LayoutConfig) -> PlacedGraph {
+impl LayoutSolver for SimpleSolver {
+    fn solve(&self, lg: &LayoutGraph, config: &LayoutConfig) -> PlacedGraph {
         // pie：无节点排布，仅标题（节点为空）。
         // gitgraph：按提交顺序线性排布。
         let mut positions = Vec::with_capacity(lg.nodes.len());
@@ -24,6 +25,7 @@ impl SimpleSolver {
         PlacedGraph {
             positions,
             edge_routes: vec![],
+            edge_kinds: vec![],
             group_bounds: vec![],
             size: Size::new(0.0, 0.0),
         }

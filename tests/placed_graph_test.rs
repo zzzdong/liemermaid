@@ -4,7 +4,7 @@ use lievisual::geometry::Size;
 
 use liemermaid::builder::layout::config::LayoutConfig;
 use liemermaid::builder::layout::ir::{LEdge, LNode, LayoutGraph, LineKind, PortHint, ShapeHint};
-use liemermaid::builder::layout::solver::DirectedSolver;
+use liemermaid::builder::layout::solver::{DirectedSolver, LayoutSolver};
 
 fn simple_graph(nodes: usize, edges: &[(usize, usize)]) -> LayoutGraph {
     let mut lg = LayoutGraph::default();
@@ -30,7 +30,7 @@ fn simple_graph(nodes: usize, edges: &[(usize, usize)]) -> LayoutGraph {
 #[test]
 fn positions_len_matches_nodes() {
     let lg = simple_graph(4, &[(0, 1), (1, 2), (0, 3)]);
-    let placed = DirectedSolver::solve(&lg, &LayoutConfig::default());
+    let placed = DirectedSolver.solve(&lg, &LayoutConfig::default());
     assert_eq!(
         placed.positions.len(),
         lg.nodes.len(),
@@ -41,7 +41,7 @@ fn positions_len_matches_nodes() {
 #[test]
 fn edge_routes_len_matches_edges() {
     let lg = simple_graph(4, &[(0, 1), (1, 2), (0, 3)]);
-    let placed = DirectedSolver::solve(&lg, &LayoutConfig::default());
+    let placed = DirectedSolver.solve(&lg, &LayoutConfig::default());
     assert_eq!(
         placed.edge_routes.len(),
         lg.edges.len(),
@@ -57,7 +57,7 @@ fn edge_routes_len_matches_edges() {
 fn directed_layering_tb() {
     // A->B->C：B 应在 A 下方，C 在 B 下方（TB，y 递增）
     let lg = simple_graph(3, &[(0, 1), (1, 2)]);
-    let placed = DirectedSolver::solve(&lg, &LayoutConfig::default());
+    let placed = DirectedSolver.solve(&lg, &LayoutConfig::default());
     assert!(placed.positions[1].y > placed.positions[0].y, "B 在 A 下方");
     assert!(placed.positions[2].y > placed.positions[1].y, "C 在 B 下方");
     // 同层 Y 对齐（A 只有一层，验证 A、B、C 不同层）
@@ -70,7 +70,7 @@ fn directed_layering_tb() {
 #[test]
 fn normalized_min_is_zero() {
     let lg = simple_graph(3, &[(0, 1), (1, 2)]);
-    let mut placed = DirectedSolver::solve(&lg, &LayoutConfig::default());
+    let mut placed = DirectedSolver.solve(&lg, &LayoutConfig::default());
     placed.normalize();
     let min_x = placed
         .positions
@@ -99,7 +99,7 @@ fn lr_direction_swaps_axes() {
         direction: liemermaid::ast::Direction::LR,
         ..Default::default()
     };
-    let placed = DirectedSolver::solve(&lg, &cfg);
+    let placed = DirectedSolver.solve(&lg, &cfg);
     // LR 下：B 应在 A 右侧（x 递增）
     assert!(
         placed.positions[1].x > placed.positions[0].x,

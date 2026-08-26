@@ -16,12 +16,9 @@ use std::fs;
 
 fn main() {
     let input = r#"flowchart TB
-    A[A]
-    B[B]
-    C[C]
-    A --> B
-    B --> B
-    B --> C
+    A[Start] -->|init| B[Process]
+    B -->|done| C[End]
+    C -->|finish| D[Final]
 "#;
 
     let _diagram = MermaidParser::parse_mermaid(input).expect("parse failed");

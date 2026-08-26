@@ -3,13 +3,14 @@
 use lievisual::geometry::{Point, Size};
 
 use super::super::config::LayoutConfig;
-use super::super::ir::{LayoutGraph, PlacedGraph};
+use super::super::ir::{LayoutGraph, LineKind, PlacedGraph};
+use super::LayoutSolver;
 
 /// `LinearSolver`：节点沿主轴线性排布。
 pub struct LinearSolver;
 
-impl LinearSolver {
-    pub fn solve(lg: &LayoutGraph, config: &LayoutConfig) -> PlacedGraph {
+impl LayoutSolver for LinearSolver {
+    fn solve(&self, lg: &LayoutGraph, config: &LayoutConfig) -> PlacedGraph {
         let mut positions = Vec::with_capacity(lg.nodes.len());
         let mut cur = 0.0;
         for node in &lg.nodes {
@@ -30,9 +31,11 @@ impl LinearSolver {
                 }
             })
             .collect();
+        let edge_kinds: Vec<LineKind> = lg.edges.iter().map(|e| e.line_kind).collect();
         PlacedGraph {
             positions,
             edge_routes,
+            edge_kinds,
             group_bounds: vec![],
             size: Size::new(0.0, 0.0),
         }

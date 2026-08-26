@@ -8,6 +8,7 @@ pub mod ir;
 pub mod measure;
 pub mod recognize;
 pub mod solver;
+pub mod state_nodes;
 pub mod sugiyama;
 pub mod types;
 
@@ -35,9 +36,9 @@ pub fn layout_diagram(
     let measure = Measure::new(output_config);
     let graph = diagram.to_layout_graph(&measure);
     match solver_for(diagram) {
-        SolverKind::Directed => DirectedSolver::solve(&graph, layout_config),
-        SolverKind::Grid => GridSolver::solve(&graph, layout_config),
-        SolverKind::Linear => LinearSolver::solve(&graph, layout_config),
-        SolverKind::Simple => SimpleSolver::solve(&graph, layout_config),
+        SolverKind::Directed => DirectedSolver.solve(&graph, layout_config),
+        SolverKind::Grid => GridSolver.solve(&graph, layout_config),
+        SolverKind::Linear => LinearSolver.solve(&graph, layout_config),
+        SolverKind::Simple => SimpleSolver.solve(&graph, layout_config),
     }
 }

@@ -8,9 +8,10 @@ use lievisual::scene::SceneNode;
 use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
 use crate::ast::{Diagram, Flowchart, NodeShape, StateDiagram};
-use crate::builder::layout::ir::PlacedGraph;
+use crate::builder::layout::ir::{LineKind, PlacedGraph, ShapeHint};
 use crate::builder::layout::measure::measure_nodes;
 use crate::builder::layout::recognize::all_flowchart_nodes;
+use crate::builder::layout::state_nodes::collect_state_nodes;
 use crate::builder::types::OutputConfig;
 use crate::vir::{
     self, Color, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, Z_SUBGRAPH, draw_arrow_head,
@@ -283,6 +284,51 @@ fn draw_node_label(elements: &mut Vec<SceneNode>, center: Point, text: &str, max
     ));
 }
 
+/// 绘制边标签（`A -->|label| B`）：白色背景 + 居中文本。
+fn draw_edge_label(elements: &mut Vec<SceneNode>, center: Point, text: &str) {
+    let ts = vir::TextStyle::new(
+        theme::flowchart::TEXT,
+        theme::FONT_SIZE,
+        theme::FONT_FAMILY.to_string(),
+    )
+    .with_align(TextAlign::Center)
+    .with_baseline(TextBaseline::Middle);
+    let layout = layout_text(&[RichSpan::new(text.to_string(), ts.clone())], None);
+    let pad_x = 4.0;
+    let pad_y = 2.0;
+    let bg = Rect::new(
+        center.x - layout.width / 2.0 - pad_x,
+        center.y - layout.height / 2.0 - pad_y,
+        center.x + layout.width / 2.0 + pad_x,
+        center.y + layout.height / 2.0 + pad_y,
+    );
+    elements.push(vir::rect_node(
+        bg,
+        None,
+        vir::fs_both(Color::new(1.0, 1.0, 1.0, 1.0), theme::flowchart::TEXT, 1.0),
+        Z_AXIS,
+    ));
+    let (x_off, y_off) = compute_text_offset(&layout, TextAlign::Center, TextBaseline::Middle);
+    elements.push(vir::text_node(
+        text.to_string(),
+        Point::new(center.x + x_off, center.y + y_off),
+        ts.with_align(TextAlign::Left).with_baseline(TextBaseline::Top),
+        0.0,
+        None,
+        Z_LABEL,
+    ));
+}
+
+/// 把布局 `ShapeHint` 映射为渲染 `NodeShape`（state 图：Rect → 圆角矩形，Circle → 圆）。
+fn state_node_shape(hint: ShapeHint) -> Option<NodeShape> {
+    match hint {
+        ShapeHint::Rect | ShapeHint::Rounded => Some(NodeShape::Rounded),
+        ShapeHint::Circle => Some(NodeShape::Circle),
+        ShapeHint::Diamond => Some(NodeShape::Diamond),
+        ShapeHint::Bar => None,
+    }
+}
+
 /// `DirectedRenderer`。
 pub struct DirectedRenderer;
 
@@ -317,24 +363,61 @@ impl DirectedRenderer {
         // 边：遍历 `placed.edge_routes`（布局层的权威边输出，含子图跨组边）。
         // 注意：`fc.edges` 顺序与 `edge_routes` 不一定一致（subgraph 时 GroupedDirected
         // 会把组内边 + 跨组边合并），故直接按 edge_routes 绘制。
-        for route in &placed.edge_routes {
-            if route.len() >= 2 {
-                let stroke = vir::stroke(theme::flowchart::EDGE, theme::EDGE_WIDTH);
-                // 4 点（起、控制1、控制2、终）：直接用三次贝塞尔形成平滑 S 曲线
-                // （避免 Catmull-Rom 对 4 点折线的摆动/阶梯圆角问题）
-                if route.len() == 4 {
-                    elements.push(vir::cubic_bezier_edge(
-                        route[0],
-                        route[1],
-                        route[2],
-                        route[3],
-                        stroke.clone(),
-                        Z_AXIS,
-                    ));
-                } else {
-                    elements.push(vir::curved_edge_node(route.clone(), stroke.clone(), Z_AXIS));
-                }
-                // 箭头：终点附近（取最后一个折点的方向）
+        // 线型（虚线 / 不可见）取自与 edge_routes 同序的 `placed.edge_kinds`。
+        for (ei, route) in placed.edge_routes.iter().enumerate() {
+            if route.len() < 2 {
+                continue;
+            }
+            // 不可见边（`~~~`）：占位，不绘制
+            let is_invisible = placed
+                .edge_kinds
+                .get(ei)
+                .map(|k| *k == LineKind::Invisible)
+                .unwrap_or(false);
+            if is_invisible {
+                continue;
+            }
+            let is_dashed = placed
+                .edge_kinds
+                .get(ei)
+                .map(|k| *k == LineKind::Dashed)
+                .unwrap_or(false);
+            let is_no_arrow = placed
+                .edge_kinds
+                .get(ei)
+                .map(|k| *k == LineKind::NoArrow)
+                .unwrap_or(false);
+            let is_thick = placed
+                .edge_kinds
+                .get(ei)
+                .map(|k| *k == LineKind::Thick)
+                .unwrap_or(false);
+            let width = if is_thick {
+                theme::EDGE_WIDTH * 2.5
+            } else {
+                theme::EDGE_WIDTH
+            };
+            let stroke = if is_dashed {
+                vir::dashed_stroke(theme::flowchart::EDGE, width, vec![6.0, 4.0])
+            } else {
+                vir::stroke(theme::flowchart::EDGE, width)
+            };
+            // 4 点（起、控制1、控制2、终）：直接用三次贝塞尔形成平滑 S 曲线
+            // （避免 Catmull-Rom 对 4 点折线的摆动/阶梯圆角问题）
+            if route.len() == 4 {
+                elements.push(vir::cubic_bezier_edge(
+                    route[0],
+                    route[1],
+                    route[2],
+                    route[3],
+                    stroke.clone(),
+                    Z_AXIS,
+                ));
+            } else {
+                elements.push(vir::curved_edge_node(route.clone(), stroke.clone(), Z_AXIS));
+            }
+            // 箭头：终点附近（取最后一个折点的方向）；无箭头边（`---`）跳过
+            if !is_no_arrow {
                 let last = route.len() - 1;
                 let tip = route[last];
                 let prev = route[last - 1];
@@ -343,6 +426,15 @@ impl DirectedRenderer {
                 let len = (dx * dx + dy * dy).sqrt().max(1e-6);
                 let dir = Point::new(dx / len, dy / len);
                 draw_arrow_head(&mut elements, &tip, &dir, &stroke, false);
+            }
+            // 边标签：`A -->|label| B`，画在边路径中点（白底）
+            if let Some(label) = fc.edges.get(ei).and_then(|e| e.label.as_deref()) {
+                if !label.is_empty() {
+                    let mid = route[route.len() / 2];
+                    let mid2 = route[(route.len() - 1) / 2];
+                    let lm = Point::new((mid.x + mid2.x) / 2.0, (mid.y + mid2.y) / 2.0 - 8.0);
+                    draw_edge_label(&mut elements, lm, label);
+                }
             }
         }
 
@@ -367,7 +459,7 @@ impl DirectedRenderer {
     /// 渲染 state diagram（基础版：节点 + 边）。
     pub fn render_state(
         placed: &PlacedGraph,
-        _sd: &StateDiagram,
+        sd: &StateDiagram,
         _config: &OutputConfig,
     ) -> Vec<SceneNode> {
         let mut elements = Vec::new();
@@ -392,20 +484,73 @@ impl DirectedRenderer {
             }
         }
 
-        // 节点
-        for center in &placed.positions {
-            let style = NodeRenderStyle {
-                fill: theme::state::FILL,
-                stroke: theme::state::STROKE,
-                stroke_width: 2.0,
-            };
-            draw_node_shape(
-                &mut elements,
-                *center,
-                Size::new(120.0, 60.0),
-                Some(NodeShape::Rounded),
-                &style,
-            );
+        // 节点：元数据（顺序 = `PlacedGraph.positions`）来自 `collect_state_nodes`，
+        // 与 convert 的 `LayoutGraph.nodes` 一致，含 label / 形状 / 尺寸。
+        // 按官方 state 样式区分：start 实心圆 / end 空心双层圆 / fork-join 横条 / 其余圆角矩形。
+        let nodes = collect_state_nodes(sd);
+        let style = NodeRenderStyle {
+            fill: theme::state::FILL,
+            stroke: theme::state::STROKE,
+            stroke_width: 2.0,
+        };
+        let edge_color = theme::state::STROKE;
+        for (i, center) in placed.positions.iter().enumerate() {
+            let Some(info) = nodes.get(i) else { continue };
+            if info.id == "__start__" {
+                // 开始：实心圆
+                let r = info.size.width / 2.0;
+                elements.push(vir::circle_node(
+                    *center,
+                    r,
+                    vir::fs_both(edge_color, edge_color, 1.5),
+                    Z_SERIES,
+                ));
+                continue;
+            }
+            if info.id == "__end__" {
+                // 结束：空心双层圆（外圈描边 + 内实心小圆）
+                let outer_r = info.size.width / 2.0;
+                elements.push(vir::circle_node(
+                    *center,
+                    outer_r,
+                    vir::fs_stroke(edge_color, 2.0),
+                    Z_SERIES,
+                ));
+                let inner_r = outer_r * 0.6;
+                elements.push(vir::circle_node(
+                    *center,
+                    inner_r,
+                    vir::fs_both(edge_color, edge_color, 1.5),
+                    Z_SERIES,
+                ));
+                continue;
+            }
+            if info.shape == ShapeHint::Bar {
+                // fork / join：水平横条
+                let rect = Rect::new(
+                    center.x - info.size.width / 2.0,
+                    center.y - info.size.height / 2.0,
+                    center.x + info.size.width / 2.0,
+                    center.y + info.size.height / 2.0,
+                );
+                elements.push(vir::rect_node(
+                    rect,
+                    None,
+                    vir::fs_both(edge_color, edge_color, 1.5),
+                    Z_SERIES,
+                ));
+                continue;
+            }
+            // 普通状态：圆角矩形 + label
+            let shape = state_node_shape(info.shape);
+            draw_node_shape(&mut elements, *center, info.size, shape, &style);
+            let text = info
+                .label
+                .as_deref()
+                .unwrap_or_else(|| info.id.as_str());
+            if !text.is_empty() {
+                draw_node_label(&mut elements, *center, text, info.size.width - 10.0);
+            }
         }
         elements
     }

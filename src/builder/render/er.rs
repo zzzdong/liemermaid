@@ -1,69 +1,84 @@
-use std::collections::{HashMap, HashSet};
+//! ER 渲染器：消费 `GridSolver` 产出的 `PlacedGraph` 几何，绘制实体框与关系线。
+//!
+//! 职责边界：坐标（节点中心、边路由）全部来自 `placed`，本模块只负责——
+//! - 用 `placed.positions[i]` + 实体尺寸画实体框（header + body + 属性文本）
+//! - 用 `placed.edge_routes[i]` 画关系线 + 端点基数 + 中点标签
+//! 尺寸仍需从 AST 测量（`layout_text`），但位置与路由只读 `placed`。
 
-use lievisual::geometry::{Point, Rect};
+use std::collections::HashSet;
+
+use lievisual::geometry::{BezPath, Point, Rect};
+use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
 use crate::{
-    ast::{Cardinality, ErDiagram, ErRelationship},
+    ast::{Cardinality, ErDiagram},
+    builder::layout::ir::PlacedGraph,
     builder::types::OutputConfig,
     error::DiagramResult,
-    vir::{
-        self, Color, Element, SceneNode, Stroke, TextAlign, TextBaseline, TextStyle, Z_AXIS,
-        Z_LABEL, Z_SERIES, theme,
-    },
+    vir::{self, Color, SceneNode, Stroke, TextAlign, TextBaseline, TextStyle, Z_AXIS, Z_LABEL, Z_SERIES, theme},
 };
-use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
 const FONT_SIZE: f64 = theme::FONT_SIZE;
 const SMALL_FONT: f64 = 12.0;
 const ENTITY_MIN_W: f64 = 160.0;
 const ENTITY_PAD: f64 = 14.0;
-const ENTITY_MARGIN_X: f64 = 110.0;
 const ATTR_LINE_H: f64 = 18.0;
 
-/// Render an ER diagram to scene nodes.
-///
-/// This is part of the **Grid family** (class + er) and is invoked by
-/// `GridRenderer`. The layout/geometry (BFS entity grouping + relationship
-/// routing) is domain-specific, so it lives here rather than in the generic
-/// grid solver.
-pub fn render_er(diagram: &ErDiagram, _config: &OutputConfig) -> DiagramResult<Vec<SceneNode>> {
-    Ok(build_er_elements(diagram, _config))
+/// Render an ER diagram to scene nodes, consuming `PlacedGraph` geometry.
+pub fn render_er(
+    placed: &PlacedGraph,
+    diagram: &ErDiagram,
+    _config: &OutputConfig,
+) -> DiagramResult<Vec<SceneNode>> {
+    Ok(build_er_elements(placed, diagram))
 }
 
-pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<SceneNode> {
-    let mut elements: Vec<SceneNode> = Vec::new();
-
-    // 实体可能仅由关系隐式定义（如 `A ||--o{ B : r`，无显式 `A {...}` 块）。
-    // 始终从关系两端补齐未在 `entities` 中出现过的实体（属性为空），保证渲染出实体框。
-    let mut entities = diagram.entities.clone();
-    let mut existing: std::collections::HashSet<String> =
-        entities.iter().map(|e| e.name.clone()).collect();
-    for rel in &diagram.relationships {
-        for name in [&rel.first_entity, &rel.second_entity] {
-            if !existing.contains(name) {
-                entities.push(crate::ast::ErEntity {
-                    name: name.clone(),
-                    attributes: Vec::new(),
-                });
-                existing.insert(name.clone());
+/// 与 `convert::ToLayoutGraph for ErDiagram` 保持一致的有序实体列表
+/// （已声明实体在前 + 关系隐含实体按出现顺序追加）。
+fn entity_order(diagram: &ErDiagram) -> Vec<String> {
+    let mut order: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    for e in &diagram.entities {
+        if !seen.contains(&e.name) {
+            order.push(e.name.clone());
+            seen.insert(e.name.clone());
+        }
+    }
+    for r in &diagram.relationships {
+        for name in [&r.first_entity, &r.second_entity] {
+            if !seen.contains(name) {
+                order.push(name.clone());
+                seen.insert(name.clone());
             }
         }
     }
+    order
+}
 
+pub fn build_er_elements(placed: &PlacedGraph, diagram: &ErDiagram) -> Vec<SceneNode> {
+    let mut elements: Vec<SceneNode> = Vec::new();
+
+    let entities = entity_order(diagram);
     if entities.is_empty() {
         return elements;
     }
 
-    // ---- Measure each entity ----
+    // ---- 测量每个实体框尺寸 ----
     struct EntityLayout {
-        name: String,
         width: f64,
         height: f64,
         attrs: Vec<String>,
     }
-
-    let mut layouts: HashMap<String, EntityLayout> = HashMap::new();
-    for ent in &diagram.entities {
+    let mut layouts: Vec<EntityLayout> = Vec::with_capacity(entities.len());
+    for name in &entities {
+        let ent = diagram
+            .entities
+            .iter()
+            .find(|e| &e.name == name);
+        let attrs: Vec<String> = match ent {
+            Some(e) => e.attributes.iter().map(|a| format!("{} {}", a.type_, a.name)).collect(),
+            None => Vec::new(),
+        };
         let name_style = TextStyle::new(
             theme::TEXT_COLOR,
             FONT_SIZE,
@@ -71,20 +86,14 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
         )
         .with_align(TextAlign::Center)
         .with_baseline(TextBaseline::Middle);
-        let n_layout = layout_text(&[RichSpan::new(ent.name.clone(), name_style.clone())], None);
+        let n_layout = layout_text(&[RichSpan::new(name.clone(), name_style.clone())], None);
         let name_w = n_layout.width + ENTITY_PAD * 2.0;
 
-        let mut attr_lines = Vec::new();
-        for attr in &ent.attributes {
-            let line = format!("{} {}", attr.type_, attr.name);
-            attr_lines.push(line);
-        }
-
         let mut max_w = name_w;
-        for line in &attr_lines {
+        for line in &attrs {
             let l = layout_text(
                 &[RichSpan::new(
-                    line.to_string(),
+                    line.clone(),
                     TextStyle::new(
                         theme::TEXT_COLOR,
                         SMALL_FONT,
@@ -95,121 +104,45 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
             );
             max_w = max_w.max(l.width + ENTITY_PAD * 2.0);
         }
-
         let header_h = n_layout.height + 10.0;
-        let attr_h = attr_lines.len() as f64 * ATTR_LINE_H;
-        let height = header_h + attr_h;
-
-        layouts.insert(
-            ent.name.clone(),
-            EntityLayout {
-                name: ent.name.clone(),
-                width: max_w.max(ENTITY_MIN_W),
-                height,
-                attrs: attr_lines,
-            },
-        );
+        // 即使无属性，body 也保留最小占位高度（与官方一致，header 与 body 始终区分）。
+        const MIN_BODY_H: f64 = 20.0;
+        let attr_h = (attrs.len() as f64 * ATTR_LINE_H).max(MIN_BODY_H);
+        layouts.push(EntityLayout {
+            width: max_w.max(ENTITY_MIN_W),
+            height: header_h + attr_h,
+            attrs,
+        });
     }
 
-    // ---- Group entities by connected components ----
-    let mut adj: HashMap<String, Vec<String>> = HashMap::new();
-    for ent in &entities {
-        adj.entry(ent.name.clone()).or_default();
-    }
-    for rel in &diagram.relationships {
-        adj.entry(rel.first_entity.clone())
-            .or_default()
-            .push(rel.second_entity.clone());
-        adj.entry(rel.second_entity.clone())
-            .or_default()
-            .push(rel.first_entity.clone());
-    }
-
-    let mut visited: HashSet<String> = HashSet::new();
-    let mut groups: Vec<Vec<String>> = Vec::new();
-    for ent in &entities {
-        if visited.contains(&ent.name) {
+    // ---- 画关系线（几何来自 placed.edge_routes） ----
+    for (ri, rel) in diagram.relationships.iter().enumerate() {
+        let Some(route) = placed.edge_routes.get(ri) else { continue };
+        if route.len() < 2 {
             continue;
         }
-        let mut group = Vec::new();
-        let mut stack = vec![ent.name.clone()];
-        while let Some(n) = stack.pop() {
-            if visited.contains(&n) {
-                continue;
-            }
-            visited.insert(n.clone());
-            group.push(n.clone());
-            if let Some(ns) = adj.get(&n) {
-                for m in ns {
-                    if !visited.contains(m) {
-                        stack.push(m.clone());
-                    }
-                }
-            }
-        }
-        group.sort();
-        groups.push(group);
-    }
-
-    // ---- Compute positions per group (horizontal line, centered) ----
-    let start_x = 40.0;
-    let start_y = 40.0;
-    let mut positions: HashMap<String, Point> = HashMap::new();
-    let mut entity_rects: HashMap<String, Rect> = HashMap::new();
-
-    let mut cur_x = start_x;
-    for (gi, group) in groups.iter().enumerate() {
-        // 只考虑已在 layouts 中完成测量的实体，跳过名称不匹配（异常输入）的节点
-        let group: Vec<&String> = group.iter().filter(|n| layouts.contains_key(*n)).collect();
-        let group_w: f64 = group
-            .iter()
-            .map(|n| layouts[*n].width)
-            .sum::<f64>()
-            + (group.len().saturating_sub(1)) as f64 * ENTITY_MARGIN_X;
-        let group_left = cur_x;
-        let group_center_x = group_left + group_w / 2.0;
-        let mut cx = group_left;
-        for name in group {
-            let layout = &layouts[name];
-            let cy = start_y;
-            let x = cx;
-            positions.insert(name.clone(), Point::new(x + layout.width / 2.0, cy + layout.height / 2.0));
-            entity_rects.insert(
-                name.clone(),
-                Rect::new(x, cy, x + layout.width, cy + layout.height),
-            );
-            cx += layout.width + ENTITY_MARGIN_X;
-        }
-        cur_x = group_left + group_w + 150.0; // gap between groups
-        if gi < groups.len() - 1 {
-            cur_x = group_center_x + group_w / 2.0 + 150.0;
-        }
-    }
-
-    // ---- Draw relationships ----
-    for rel in &diagram.relationships {
-        let r1 = match entity_rects.get(&rel.first_entity) {
-            Some(r) => r,
-            None => continue, // 实体未参与布局（异常输入），跳过该关系
-        };
-        let r2 = match entity_rects.get(&rel.second_entity) {
-            Some(r) => r,
-            None => continue,
-        };
-
-        // Connection points (left/right middle)
-        let p1 = Point::new(r1.max_x(), r1.min_y() + r1.height() / 2.0);
-        let p2 = Point::new(r2.min_x(), r2.min_y() + r2.height() / 2.0);
-
+        let p1 = route[0];
+        let p2 = *route.last().unwrap();
         let stroke = vir::stroke(theme::TEXT_COLOR, 1.5);
+        // 沿边方向与垂直方向单位向量（用于基数符号朝向）
+        let first_dir = Point::new(route[1].x - p1.x, route[1].y - p1.y);
+        let last_dir = Point::new(p2.x - route[route.len() - 2].x, p2.y - route[route.len() - 2].y);
+        let fl = (first_dir.x * first_dir.x + first_dir.y * first_dir.y).sqrt().max(1e-9);
+        let ll = (last_dir.x * last_dir.x + last_dir.y * last_dir.y).sqrt().max(1e-9);
+        let first_ud = Point::new(first_dir.x / fl, first_dir.y / fl);
+        let last_ud = Point::new(last_dir.x / ll, last_dir.y / ll);
+        let first_perp = Point::new(-first_ud.y, first_ud.x);
+        let last_perp = Point::new(-last_ud.y, last_ud.x);
+        // 中间段（若有绕行点）
+        for w in route.windows(2) {
+            elements.push(vir::line_node(w[0], w[1], stroke.clone(), Z_AXIS));
+        }
+        // 基数符号在端点处沿「远离节点」方向延伸
+        let first_away = first_ud;  // first端：从 source 指向 target，离开 source
+        let second_away = Point::new(-last_ud.x, -last_ud.y);  // second端：从 target 指向 source，离开 target
+        draw_cardinality(&mut elements, &p1, &rel.cardinality_first, &first_away, &first_perp, &stroke);
+        draw_cardinality(&mut elements, &p2, &rel.cardinality_second, &second_away, &last_perp, &stroke);
 
-        elements.push(vir::line_node(p1, p2, stroke.clone(), Z_AXIS));
-
-        // Cardinality markers at both ends
-        draw_cardinality(&mut elements, &p1, &rel.cardinality_first, EndSide::Right);
-        draw_cardinality(&mut elements, &p2, &rel.cardinality_second, EndSide::Left);
-
-        // Relationship label (middle)
         if let Some(lbl) = &rel.label {
             if !lbl.is_empty() {
                 let mid = Point::new((p1.x + p2.x) / 2.0, (p1.y + p2.y) / 2.0 - 8.0);
@@ -245,16 +178,16 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
         }
     }
 
-    // ---- Draw entity boxes ----
-    for ent in &entities {
-        let layout = match layouts.get(&ent.name) {
-            Some(l) => l,
-            None => continue,
-        };
-        let rect = match entity_rects.get(&ent.name) {
-            Some(r) => *r,
-            None => continue,
-        };
+    // ---- 画实体框（位置来自 placed.positions[i]） ----
+    for (i, name) in entities.iter().enumerate() {
+        let layout = &layouts[i];
+        let Some(&center) = placed.positions.get(i) else { continue };
+        let rect = Rect::new(
+            center.x - layout.width / 2.0,
+            center.y - layout.height / 2.0,
+            center.x + layout.width / 2.0,
+            center.y + layout.height / 2.0,
+        );
 
         // Header
         let header_rect = Rect::new(rect.min_x(), rect.min_y(), rect.max_x(), rect.min_y() + 30.0);
@@ -287,12 +220,12 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
         .with_align(TextAlign::Center)
         .with_baseline(TextBaseline::Middle);
         let nl = layout_text(
-            &[RichSpan::new(ent.name.clone(), ts.clone())],
+            &[RichSpan::new(name.clone(), ts.clone())],
             Some(layout.width - ENTITY_PAD),
         );
         let (x_off, y_off) = compute_text_offset(&nl, TextAlign::Center, TextBaseline::Middle);
         elements.push(vir::text_node(
-            ent.name.clone(),
+            name.clone(),
             Point::new(rect.min_x() + layout.width / 2.0 + x_off, rect.min_y() + 15.0 + y_off),
             vir::text_style(
                 theme::TEXT_COLOR,
@@ -342,52 +275,109 @@ pub fn build_er_elements(diagram: &ErDiagram, _config: &OutputConfig) -> Vec<Sce
     elements
 }
 
-#[derive(Clone, Copy)]
-enum EndSide {
-    Left,
-    Right,
-}
+/// 在关系端点处绘制基数符号（与官方 Mermaid 一致的图形表示）。
+///
+/// - `ExactlyOne` → `||`（两条平行短线）
+/// - `ZeroOrOne`  → `|o`（短线 + 空心圆）
+/// - `OneOrMany`  → `}|`（大括号 + 短线）
+/// - `ZeroOrMany` → `}o`（大括号 + 空心圆）
+///
+/// `away` = 从端点远离节点方向的单位向量；符号沿 `away` 方向从端点向外排列。
+/// `perp` = 垂直于连接线的单位向量；短线沿 `perp` 方向绘制，大括号顶/底也在 `perp` 方向。
+fn draw_cardinality(
+    elements: &mut Vec<SceneNode>,
+    p: &Point,
+    card: &Cardinality,
+    away: &Point,
+    perp: &Point,
+    stroke: &Stroke,
+) {
+    use Cardinality::*;
+    const SHORT_HALF: f64 = 4.0; // 短线沿 perp 方向的半长
+    const STEP: f64 = 6.0;       // 沿 away 方向相邻符号的间距
+    let c = theme::TEXT_COLOR;
 
-fn draw_cardinality(elements: &mut Vec<SceneNode>, p: &Point, card: &Cardinality, side: EndSide) {
-    let text = format_cardinality(card);
-    if text.is_empty() {
-        return;
-    }
-    let ts = TextStyle::new(
-        theme::TEXT_COLOR,
-        SMALL_FONT,
-        theme::FONT_FAMILY.to_string(),
-    )
-    .with_align(TextAlign::Center)
-    .with_baseline(TextBaseline::Middle);
-    let tl = layout_text(&[RichSpan::new(text.clone(), ts.clone())], None);
-    let (ox, oy) = compute_text_offset(&tl, TextAlign::Center, TextBaseline::Middle);
-
-    let dx = match side {
-        EndSide::Left => -24.0,
-        EndSide::Right => 24.0,
+    // 沿 perp 方向、中心 `center` 的短线（与连接线垂直）。
+    let short_at = |elements: &mut Vec<SceneNode>, center: &Point| {
+        let s = Point::new(
+            center.x - perp.x * SHORT_HALF,
+            center.y - perp.y * SHORT_HALF,
+        );
+        let e = Point::new(
+            center.x + perp.x * SHORT_HALF,
+            center.y + perp.y * SHORT_HALF,
+        );
+        elements.push(vir::line_node(s, e, stroke.clone(), Z_AXIS));
     };
-    elements.push(vir::text_node(
-        text,
-        Point::new(p.x + dx + ox, p.y + oy),
-        vir::text_style(
-            theme::TEXT_COLOR,
-            SMALL_FONT,
-            theme::FONT_FAMILY,
-            TextAlign::Left,
-            TextBaseline::Top,
-        ),
-        0.0,
-        None,
-        Z_LABEL,
-    ));
+
+    // 中心 `center`、半径 3 的空心圆。
+    let circle_at = |elements: &mut Vec<SceneNode>, center: &Point| {
+        elements.push(vir::circle_node(
+            *center,
+            3.0,
+            vir::fs_both(Color::rgb(255, 255, 255), c, 1.5),
+            Z_AXIS,
+        ));
+    };
+
+    // 沿 away 方向偏移 idx*STEP 得到第 idx 个符号的位置。
+    let at = |idx: f64| {
+        Point::new(p.x + away.x * idx * STEP, p.y + away.y * idx * STEP)
+    };
+
+    match card {
+        ExactlyOne => {
+            // `||` 两条平行短线，沿 away 方向前后排列（与连接线同向延伸）。
+            let c1 = at(0.0);
+            let c2 = at(1.0);
+            short_at(elements, &c1);
+            short_at(elements, &c2);
+        }
+        ZeroOrOne => {
+            // `|o` 短线在前（靠近节点），圆在后（远离节点）
+            short_at(elements, &at(0.0));
+            circle_at(elements, &at(1.0));
+        }
+        OneOrMany => {
+            // `}|` 短线 (one) 靠近节点，大括号 (many) 远离节点
+            short_at(elements, &at(0.0));
+            draw_brace(elements, &at(1.0), away, perp, stroke);
+        }
+        ZeroOrMany => {
+            // `}o` 圆 (zero) 靠近节点，大括号 (many) 远离节点
+            circle_at(elements, &at(0.0));
+            draw_brace(elements, &at(1.0), away, perp, stroke);
+        }
+    }
 }
 
-fn format_cardinality(card: &Cardinality) -> String {
-    match card {
-        Cardinality::ExactlyOne => "1".to_string(),
-        Cardinality::ZeroOrOne => "0..1".to_string(),
-        Cardinality::OneOrMany => "1..N".to_string(),
-        Cardinality::ZeroOrMany => "0..N".to_string(),
-    }
+/// 画一个 `}` 形大括号：顶/底沿 perp 方向分置两侧，中点沿 away 方向凸出。
+/// 形成 `{` 形（开口朝向 away 反方向，即端点一侧）。
+fn draw_brace(
+    elements: &mut Vec<SceneNode>,
+    center: &Point,
+    away: &Point,
+    perp: &Point,
+    stroke: &Stroke,
+) {
+    const H: f64 = 4.0; // 沿 perp 方向的半宽
+    const W: f64 = 3.5; // 沿 away 方向的凸出
+    let top = Point::new(
+        center.x + perp.x * -H,
+        center.y + perp.y * -H,
+    );
+    let mid = Point::new(center.x + away.x * W, center.y + away.y * W);
+    let bot = Point::new(
+        center.x + perp.x * H,
+        center.y + perp.y * H,
+    );
+    let mut path = BezPath::new();
+    path.move_to(Point::new(top.x, top.y));
+    path.line_to(Point::new(mid.x, mid.y));
+    path.line_to(Point::new(bot.x, bot.y));
+    elements.push(vir::path_node(
+        path,
+        vir::fs_both(Color::rgb(255, 255, 255), stroke.color, stroke.width),
+        Z_AXIS,
+    ));
 }

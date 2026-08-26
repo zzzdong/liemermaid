@@ -18,7 +18,7 @@ use crate::ast::Direction;
 
 use super::super::analyze::{GraphAnalysis, analyze};
 use super::super::config::LayoutConfig;
-use super::super::ir::{LNode, LayoutGraph, PlacedGraph};
+use super::super::ir::{LNode, LayoutGraph, LineKind, PlacedGraph, ShapeHint};
 use super::super::sugiyama::{NodeSize, SugiyamaConfig, SugiyamaLayout};
 
 /// `DirectedSolver`：无子图的有向图分层布局。
@@ -113,9 +113,9 @@ fn heuristic_order(lg: &LayoutGraph, analysis: &GraphAnalysis) -> Vec<usize> {
     result
 }
 
-impl DirectedSolver {
+impl super::LayoutSolver for DirectedSolver {
     /// 把 `LayoutGraph` 求解为 `PlacedGraph`。
-    pub fn solve(lg: &LayoutGraph, config: &LayoutConfig) -> PlacedGraph {
+    fn solve(&self, lg: &LayoutGraph, config: &LayoutConfig) -> PlacedGraph {
         // 有组 → 交给 GroupedDirected
         if !lg.groups.is_empty() {
             return super::grouped::GroupedDirected::solve(lg, config);
@@ -179,11 +179,13 @@ impl DirectedSolver {
                 positions[e.source],
                 positions[e.target],
                 &lg.nodes[e.source].size,
+                lg.nodes[e.source].shape_hint,
             );
             let end = clip_to_border(
                 positions[e.target],
                 positions[e.source],
                 &lg.nodes[e.target].size,
+                lg.nodes[e.target].shape_hint,
             );
             if is_feedback {
                 // 回边：绕到反侧（远离正向边一侧）的 S 曲线
@@ -203,9 +205,11 @@ impl DirectedSolver {
 
         let size = compute_bbox_size(&positions, &edge_routes);
 
+        let edge_kinds: Vec<LineKind> = lg.edges.iter().map(|e| e.line_kind).collect();
         let mut placed = PlacedGraph {
             positions,
             edge_routes,
+            edge_kinds,
             group_bounds: vec![],
             size,
         };
@@ -237,27 +241,67 @@ fn feedback_s_curve(start: Point, end: Point, src_size: &Size, tgt_size: &Size) 
 
 /// 把 `from`（节点中心）沿 `toward` 方向裁剪到节点边框。
 ///
-/// 返回 `from + t*(toward-from)`，`t` 为最小正参数使点落在矩形边框上。
-fn clip_to_border(from: Point, toward: Point, size: &Size) -> Point {
+/// 返回 `from + t*(toward-from)`，`t` 为最小正参数使点落在节点边框上。
+/// 按形状区分裁剪几何：矩形边框 / 菱形（内切菱形边界）/ 圆形（内切圆）。
+fn clip_to_border(from: Point, toward: Point, size: &Size, shape: ShapeHint) -> Point {
     let half_w = size.width / 2.0;
     let half_h = size.height / 2.0;
     let vx = toward.x - from.x;
     let vy = toward.y - from.y;
-    let tx = if vx.abs() > 1e-9 {
-        half_w / vx.abs()
-    } else {
-        f64::INFINITY
-    };
-    let ty = if vy.abs() > 1e-9 {
-        half_h / vy.abs()
-    } else {
-        f64::INFINITY
-    };
-    let t = tx.min(ty);
-    if !t.is_finite() {
-        return from;
+
+    match shape {
+        // 菱形：|x|/hw + |y|/hh = 1，从中心沿单位方向 (ux,uy) 的交点距离 = 1/(|ux|/hw+|uy|/hh)。
+        // 返回 `from + u*dist`（沿单位方向），而非整向量缩放，否则斜向连接会错位。
+        ShapeHint::Diamond => {
+            let len = (vx * vx + vy * vy).sqrt();
+            let (ux, uy) = if len > 1e-9 {
+                (vx / len, vy / len)
+            } else {
+                (0.0, 0.0)
+            };
+            let denom = ux.abs() / half_w + uy.abs() / half_h;
+            let dist = if denom > 1e-9 {
+                1.0 / denom
+            } else {
+                f64::INFINITY
+            };
+            if !dist.is_finite() {
+                return from;
+            }
+            Point::new(from.x + ux * dist, from.y + uy * dist)
+        }
+        // 圆：半径取 min 半宽/半高（内切圆），交点距离 = r（沿单位方向）。
+        ShapeHint::Circle => {
+            let r = half_w.min(half_h);
+            let len = (vx * vx + vy * vy).sqrt();
+            if len < 1e-9 {
+                return from;
+            }
+            let dist = r;
+            Point::new(
+                from.x + vx / len * dist,
+                from.y + vy / len * dist,
+            )
+        }
+        // 其余按矩形边框：参数 t = min(hw/|vx|, hh/|vy|)，返回 from + v*t。
+        _ => {
+            let tx = if vx.abs() > 1e-9 {
+                half_w / vx.abs()
+            } else {
+                f64::INFINITY
+            };
+            let ty = if vy.abs() > 1e-9 {
+                half_h / vy.abs()
+            } else {
+                f64::INFINITY
+            };
+            let t = tx.min(ty);
+            if !t.is_finite() {
+                return from;
+            }
+            Point::new(from.x + vx * t, from.y + vy * t)
+        }
     }
-    Point::new(from.x + vx * t, from.y + vy * t)
 }
 
 /// 正向边路由：两点边，若穿过中间节点矩形则加绕行点。

@@ -1,45 +1,46 @@
-use std::collections::{HashMap, VecDeque};
+//! Class 渲染器：消费 `GridSolver` 产出的 `PlacedGraph` 几何，绘制类框与关系线。
+//!
+//! 职责边界：坐标（节点中心、边路由）全部来自 `placed`，本模块只负责——
+//! - 用 `placed.positions[i]` + 类框尺寸画类框（header / attrs / methods / 注解）
+//! - 用 `placed.edge_routes[i]` 画关系线 + 箭头 + 标签 + 基数
+//! 尺寸从 AST 测量（`layout_text`），位置与路由只读 `placed`。
 
-use lievisual::geometry::BezPath;
-use lievisual::geometry::{Point, Rect};
-use petgraph::Direction;
-use petgraph::graph::NodeIndex;
+use lievisual::geometry::{BezPath, Point, Rect};
+use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
 use crate::{
     ast::{ClassDiagram, RelationKind, Visibility},
+    builder::layout::ir::PlacedGraph,
     builder::types::OutputConfig,
     error::DiagramResult,
     vir::{
-        self, Color, Element, SceneNode, Stroke, TextAlign, TextBaseline, TextStyle, Z_AXIS,
-        Z_LABEL, Z_SERIES, theme,
+        self, Color, SceneNode, Stroke, TextAlign, TextBaseline, TextStyle, Z_AXIS, Z_LABEL,
+        Z_SERIES, theme,
     },
 };
-use lievisual::text::{RichSpan, compute_text_offset, layout_text};
 
 const FONT_SIZE: f64 = theme::FONT_SIZE;
 const SMALL_FONT: f64 = 11.0;
 const CLASS_MIN_W: f64 = 140.0;
 const CLASS_PAD: f64 = 12.0;
-const CLASS_MARGIN_X: f64 = 80.0;
 
-/// Render a class diagram to scene nodes.
-///
-/// This is part of the **Grid family** (class + er) and is invoked by
-/// `GridRenderer`. The layout/geometry (layered placement of class boxes and
-/// relation routing) is domain-specific, so it lives here rather than in the
-/// generic grid solver.
-pub fn render_class(diagram: &ClassDiagram, _config: &OutputConfig) -> DiagramResult<Vec<SceneNode>> {
-    Ok(build_class_elements(diagram, _config))
+/// Render a class diagram to scene nodes, consuming `PlacedGraph` geometry.
+pub fn render_class(
+    placed: &PlacedGraph,
+    diagram: &ClassDiagram,
+    _config: &OutputConfig,
+) -> DiagramResult<Vec<SceneNode>> {
+    Ok(build_class_elements(placed, diagram))
 }
 
-pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> Vec<SceneNode> {
+pub fn build_class_elements(placed: &PlacedGraph, diagram: &ClassDiagram) -> Vec<SceneNode> {
     let mut elements = Vec::new();
 
     if diagram.classes.is_empty() {
         return elements;
     }
 
-    // ---- Measure each class ----
+    // ---- 测量每个类框（顺序 = diagram.classes 源码序，与 convert 一致）----
     struct ClassLayout {
         name: String,
         width: f64,
@@ -49,7 +50,7 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
         methods: Vec<String>,
     }
 
-    let mut layouts: HashMap<String, ClassLayout> = HashMap::new();
+    let mut layouts: Vec<ClassLayout> = Vec::with_capacity(diagram.classes.len());
     for cls in &diagram.classes {
         let display_name = match &cls.generic {
             Some(g) => format!("{}<{}>", cls.name, g),
@@ -93,8 +94,7 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
             }
         }
 
-        let col_w = name_w;
-        let mut max_w = col_w;
+        let mut max_w = name_w;
         for line in attr_lines.iter().chain(method_lines.iter()) {
             let l = layout_text(
                 &[RichSpan::new(
@@ -111,9 +111,10 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
         }
 
         let header_h = name_layout.height + 12.0;
-        // 官方 mermaid 的 class 默认显示 3 格（类名 / 属性区 / 方法区），
-        // 即使无成员也保留空区域 + 分隔线。
-        const SECTION_MIN_H: f64 = 16.0; // 空区域最小高度
+        // 三栏：名称栏（header）+ 属性栏 + 方法栏。按官方行为恒定三栏，
+        // 即使某栏为空也保留占位高度与分隔线。
+        // 空栏占位高度与"一行内容"一致（行高 18 + 上下留白 8），保证三栏高度均匀。
+        const SECTION_MIN_H: f64 = 18.0 + 8.0;
         let attr_h = if attr_lines.is_empty() {
             SECTION_MIN_H
         } else {
@@ -126,355 +127,97 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
         };
         let height = header_h + attr_h + method_h;
 
-        layouts.insert(
-            cls.name.clone(),
-            ClassLayout {
-                name: display_name.clone(),
-                width: max_w.max(CLASS_MIN_W),
-                height,
-                header_h,
-                attrs: attr_lines,
-                methods: method_lines,
-            },
-        );
+        layouts.push(ClassLayout {
+            name: display_name.clone(),
+            width: max_w.max(CLASS_MIN_W),
+            height,
+            header_h,
+            attrs: attr_lines,
+            methods: method_lines,
+        });
     }
 
-    // ---- Compute positions via petgraph layered layout ----
-    let mut positions: HashMap<String, Point> = HashMap::new();
-    let mut class_rects: HashMap<String, Rect> = HashMap::new();
-
-    let class_names: Vec<String> = diagram.classes.iter().map(|c| c.name.clone()).collect();
-
-    // Build inheritance graph using petgraph
-    let mut graph = petgraph::graph::DiGraph::new();
-    let mut node_indices: HashMap<String, NodeIndex> = HashMap::new();
-    for name in &class_names {
-        let idx = graph.add_node(name.clone());
-        node_indices.insert(name.clone(), idx);
-    }
-    for rel in &diagram.relations {
-        if let (Some(&from), Some(&to)) =
-            (node_indices.get(&rel.source), node_indices.get(&rel.target))
-        {
-            graph.add_edge(from, to, ());
-        }
-    }
-
-    // BFS from roots (nodes with no incoming edges) to assign layers
-    let roots: Vec<NodeIndex> = graph
-        .node_indices()
-        .filter(|&idx| graph.neighbors_directed(idx, Direction::Incoming).count() == 0)
-        .collect();
-    let roots = if roots.is_empty() {
-        vec![graph.node_indices().next().unwrap()]
-    } else {
-        roots
-    };
-
-    let mut layers: HashMap<NodeIndex, usize> = HashMap::new();
-    let mut queue = VecDeque::new();
-    for root in &roots {
-        layers.insert(*root, 0);
-        queue.push_back(*root);
-    }
-    while let Some(node) = queue.pop_front() {
-        let cur_layer = layers[&node];
-        for target in graph.neighbors_directed(node, Direction::Outgoing) {
-            let new_layer = cur_layer + 1;
-            let existing = layers.get(&target).copied().unwrap_or(usize::MAX);
-            if new_layer < existing {
-                layers.insert(target, new_layer);
-                queue.push_back(target);
-            }
-        }
-    }
-
-    // Ensure all class nodes have a layer (disconnected nodes go to layer 0)
-    let _next_layer = layers.values().copied().max().unwrap_or(0) + 1;
-    for name in &class_names {
-        if let std::collections::hash_map::Entry::Vacant(e) = layers.entry(node_indices[name]) {
-            e.insert(0);
-        }
-    }
-
-    // Group nodes by layer, sort by name for deterministic layout
-    let mut max_layer = 0usize;
-    let mut layer_nodes: Vec<Vec<String>> = Vec::new();
-    for (idx, &layer) in &layers {
-        let name = graph.node_weight(*idx).unwrap().clone();
-        while layer_nodes.len() <= layer {
-            layer_nodes.push(Vec::new());
-        }
-        layer_nodes[layer].push(name);
-        max_layer = max_layer.max(layer);
-    }
-    for nodes in &mut layer_nodes {
-        nodes.sort();
-    }
-
-    // 计算每层总宽度，用于跨层居中
-    let mut layer_total_width: HashMap<usize, f64> = HashMap::new();
-    for (layer, nodes) in layer_nodes.iter().enumerate() {
-        let total: f64 = nodes.iter().map(|n| layouts[n].width).sum::<f64>()
-            + (nodes.len().saturating_sub(1)) as f64 * CLASS_MARGIN_X;
-        layer_total_width.insert(layer, total);
-    }
-    let max_layer_width = layer_total_width
-        .values()
-        .cloned()
-        .max_by(|a, b| a.partial_cmp(b).unwrap())
-        .unwrap_or(0.0);
-
-    // Compute positions per layer
-    let start_x = 40.0;
-    let start_y = 40.0;
-    let mut current_y = start_y;
-
-    for layer in 0..=max_layer {
-        let nodes = &layer_nodes[layer];
-        if nodes.is_empty() {
+    // ---- 画关系线（几何来自 placed.edge_routes）----
+    for (ri, rel) in diagram.relations.iter().enumerate() {
+        let Some(route) = placed.edge_routes.get(ri) else { continue };
+        if route.len() < 2 {
             continue;
         }
-        let mut max_h: f64 = 0.0;
-        for name in nodes {
-            max_h = max_h.max(layouts[name].height);
-        }
-        // 居中：该层总宽度相对于最宽层的偏移
-        let layer_width = layer_total_width[&layer];
-        let offset = ((max_layer_width - layer_width) / 2.0).max(0.0);
-        let mut cur_x = start_x + offset;
-        for name in nodes {
-            let layout = &layouts[name];
-            let cx = cur_x + layout.width / 2.0;
-            let cy = current_y + layout.height / 2.0;
-            positions.insert(name.clone(), Point::new(cx, cy));
-            class_rects.insert(
-                name.clone(),
-                Rect::new(
-                    cur_x,
-                    current_y,
-                    cur_x + layout.width,
-                    current_y + layout.height,
-                ),
-            );
-            cur_x += layout.width + CLASS_MARGIN_X;
-        }
-        current_y += max_h + 30.0;
-    }
+        let start = route[0];
+        let end = *route.last().unwrap();
+        let stroke = vir::stroke(theme::class::EDGE, 1.5);
 
-    // ---- Draw relations ----
-    for rel in &diagram.relations {
-        let from_pos = positions.get(&rel.source);
-        let to_pos = positions.get(&rel.target);
-        if let (Some(fp), Some(tp)) = (from_pos, to_pos) {
-            let from_r = class_rects[&rel.source];
-            let to_r = class_rects[&rel.target];
-            let is_from_left = from_r.min_x() < to_r.min_x();
-            let is_from_top = from_r.min_y() < to_r.min_y();
-
-            let start = if (from_r.min_y() - to_r.min_y()).abs() < 10.0 {
-                if is_from_left {
-                    Point::new(from_r.max_x(), fp.y)
-                } else {
-                    Point::new(from_r.min_x(), fp.y)
-                }
-            } else if is_from_top {
-                Point::new(fp.x, from_r.max_y())
+        // 路由中点之间画线段（若只有一个直段）
+        for w in route.windows(2) {
+            let is_dashed = rel.kind == RelationKind::Dependency;
+            if is_dashed {
+                draw_dashed_line(&mut elements, &w[0], &w[1], &stroke);
             } else {
-                Point::new(fp.x, from_r.min_y())
-            };
-
-            let end = if (from_r.min_y() - to_r.min_y()).abs() < 10.0 {
-                if is_from_left {
-                    Point::new(to_r.min_x(), tp.y)
-                } else {
-                    Point::new(to_r.max_x(), tp.y)
-                }
-            } else {
-                Point::new(tp.x, to_r.min_y())
-            };
-
-            let stroke = vir::stroke(theme::class::EDGE, 1.5);
-
-            // 检查同层水平边是否有中间节点需要绕行
-            let is_same_row_horizontal =
-                is_from_left && (from_r.min_y() - to_r.min_y()).abs() < 10.0;
-            let has_intermediate = if is_same_row_horizontal {
-                class_rects.iter().any(|(n, r)| {
-                    n.as_str() != rel.source
-                        && n.as_str() != rel.target
-                        && (r.min_y() - from_r.min_y()).abs() < 10.0
-                        && r.min_x() > from_r.max_x()
-                        && r.min_x() < to_r.min_x()
-                })
-            } else {
-                false
-            };
-
-            if has_intermediate {
-                // 三段正交绕行：从源右侧向上 → 水平越过中间节点 → 向下到目标左侧
-                let route_y = from_r.min_y() - 14.0;
-                let segs: Vec<(Point, Point)> = vec![
-                    (start, Point::new(start.x, route_y)),
-                    (Point::new(start.x, route_y), Point::new(end.x, route_y)),
-                    (Point::new(end.x, route_y), end),
-                ];
-
-                let is_dashed = rel.kind == RelationKind::Dependency;
-                for (seg_start, seg_end) in &segs {
-                    if is_dashed {
-                        draw_dashed_line(&mut elements, seg_start, seg_end, &stroke);
-                    } else {
-                        elements.push(vir::line_node(*seg_start, *seg_end, stroke.clone(), Z_AXIS));
-                    }
-                }
-
-                // 箭头/菱形头：分别处理起点端和终点端
-                let first_seg_dir =
-                    Point::new(segs[0].1.x - segs[0].0.x, segs[0].1.y - segs[0].0.y);
-                let first_len =
-                    (first_seg_dir.x * first_seg_dir.x + first_seg_dir.y * first_seg_dir.y).sqrt();
-                let first_ud = Point::new(first_seg_dir.x / first_len, first_seg_dir.y / first_len);
-                let last_seg_dir = Point::new(segs[2].1.x - segs[2].0.x, segs[2].1.y - segs[2].0.y);
-                let last_len =
-                    (last_seg_dir.x * last_seg_dir.x + last_seg_dir.y * last_seg_dir.y).sqrt();
-                let last_ud = Point::new(last_seg_dir.x / last_len, last_seg_dir.y / last_len);
-
-                match rel.kind {
-                    RelationKind::Inheritance => {
-                        draw_triangle_head(&mut elements, &end, &last_ud, false, &stroke);
-                    }
-                    RelationKind::Composition => {
-                        draw_diamond_head(&mut elements, &start, &first_ud, true, &stroke);
-                    }
-                    RelationKind::Aggregation => {
-                        draw_diamond_head(&mut elements, &start, &first_ud, false, &stroke);
-                    }
-                    RelationKind::Association => {
-                        draw_triangle_head(&mut elements, &end, &last_ud, true, &stroke);
-                    }
-                    RelationKind::Dependency => {
-                        draw_triangle_head(&mut elements, &end, &last_ud, true, &stroke);
-                    }
-                }
-            } else {
-                // 直接连接
-                let is_dashed = rel.kind == RelationKind::Dependency;
-                if is_dashed {
-                    draw_dashed_line(&mut elements, &start, &end, &stroke);
-                } else {
-                    elements.push(vir::line_node(start, end, stroke.clone(), Z_AXIS));
-                }
-
-                let dir = Point::new(end.x - start.x, end.y - start.y);
-                let len = (dir.x * dir.x + dir.y * dir.y).sqrt();
-                let ud = Point::new(dir.x / len, dir.y / len);
-
-                match rel.kind {
-                    RelationKind::Inheritance => {
-                        draw_triangle_head(&mut elements, &end, &ud, false, &stroke);
-                    }
-                    RelationKind::Composition => {
-                        draw_diamond_head(&mut elements, &start, &ud, true, &stroke);
-                    }
-                    RelationKind::Aggregation => {
-                        draw_diamond_head(&mut elements, &start, &ud, false, &stroke);
-                    }
-                    RelationKind::Association => {
-                        draw_triangle_head(&mut elements, &end, &ud, true, &stroke);
-                    }
-                    RelationKind::Dependency => {
-                        draw_triangle_head(&mut elements, &end, &ud, true, &stroke);
-                    }
-                }
+                elements.push(vir::line_node(w[0], w[1], stroke.clone(), Z_AXIS));
             }
+        }
 
-            // 关系标签（边中点上方）
-            if let Some(lbl) = &rel.label {
-                if !lbl.is_empty() {
-                    let mid = Point::new((start.x + end.x) / 2.0, (start.y + end.y) / 2.0 - 6.0);
-                    let tl = layout_text(
-                        &[RichSpan::new(
-                            lbl.clone(),
-                            TextStyle::new(
-                                theme::class::EDGE,
-                                SMALL_FONT,
-                                theme::FONT_FAMILY.to_string(),
-                            )
-                            .with_align(TextAlign::Center)
-                            .with_baseline(TextBaseline::Middle),
-                        )],
-                        None,
-                    );
-                    let (ox, oy) =
-                        compute_text_offset(&tl, TextAlign::Center, TextBaseline::Middle);
-                    elements.push(vir::text_node(
+        // 箭头方向：起点端取首段方向，终点端取末段方向
+        let last_dir = Point::new(
+            route[route.len() - 1].x - route[route.len() - 2].x,
+            route[route.len() - 1].y - route[route.len() - 2].y,
+        );
+        let last_len = (last_dir.x * last_dir.x + last_dir.y * last_dir.y).sqrt();
+        let last_ud = if last_len > 1e-9 {
+            Point::new(last_dir.x / last_len, last_dir.y / last_len)
+        } else {
+            Point::new(0.0, 0.0)
+        };
+        let first_dir = Point::new(route[1].x - route[0].x, route[1].y - route[0].y);
+        let first_len = (first_dir.x * first_dir.x + first_dir.y * first_dir.y).sqrt();
+        let first_ud = if first_len > 1e-9 {
+            Point::new(first_dir.x / first_len, first_dir.y / first_len)
+        } else {
+            Point::new(0.0, 0.0)
+        };
+
+        match rel.kind {
+            // 官方：`A <|-- B` 空心三角在 A（source）端，表示 B 继承 A，指向父类。
+            // 三角尖端朝向 source 内部（沿 first_ud 反向）。
+            RelationKind::Inheritance => {
+                let src_dir = Point::new(-first_ud.x, -first_ud.y);
+                draw_triangle_head(&mut elements, &start, &src_dir, false, &stroke);
+            }
+            // 官方：`A *-- B` 组合 / `A o-- B` 聚合的菱形在 A（source）端。
+            RelationKind::Composition => {
+                draw_diamond_head(&mut elements, &start, &first_ud, true, &stroke);
+            }
+            RelationKind::Aggregation => {
+                draw_diamond_head(&mut elements, &start, &first_ud, false, &stroke);
+            }
+            // 官方：`A --> B` 关联 / `A ..> B` 依赖的箭头在 B（target）端。
+            RelationKind::Association | RelationKind::Dependency => {
+                draw_triangle_head(&mut elements, &end, &last_ud, true, &stroke);
+            }
+        }
+
+        // 关系标签（边中点上方）
+        if let Some(lbl) = &rel.label {
+            if !lbl.is_empty() {
+                let mid = Point::new((start.x + end.x) / 2.0, (start.y + end.y) / 2.0 - 6.0);
+                let tl = layout_text(
+                    &[RichSpan::new(
                         lbl.clone(),
-                        Point::new(mid.x + ox, mid.y + oy),
-                        vir::text_style(
-                            theme::class::EDGE,
-                            SMALL_FONT,
-                            theme::FONT_FAMILY,
-                            TextAlign::Left,
-                            TextBaseline::Top,
-                        ),
-                        0.0,
-                        None,
-                        Z_LABEL,
-                    ));
-                }
-            }
-            // 基数（端点附近）
-            if let Some(cf) = &rel.cardinality_first {
-                let p = Point::new(start.x + 3.0, start.y - 2.0);
-                let tl = layout_text(
-                    &[RichSpan::new(
-                        cf.clone(),
                         TextStyle::new(
                             theme::class::EDGE,
                             SMALL_FONT,
                             theme::FONT_FAMILY.to_string(),
                         )
-                        .with_align(TextAlign::Left)
+                        .with_align(TextAlign::Center)
                         .with_baseline(TextBaseline::Middle),
                     )],
                     None,
                 );
-                let (ox, oy) = compute_text_offset(&tl, TextAlign::Left, TextBaseline::Middle);
+                let (ox, oy) =
+                    compute_text_offset(&tl, TextAlign::Center, TextBaseline::Middle);
                 elements.push(vir::text_node(
-                    cf.clone(),
-                    Point::new(p.x + ox, p.y + oy),
-                    vir::text_style(
-                        theme::class::EDGE,
-                        SMALL_FONT,
-                        theme::FONT_FAMILY,
-                        TextAlign::Left,
-                        TextBaseline::Top,
-                    ),
-                    0.0,
-                    None,
-                    Z_LABEL,
-                ));
-            }
-            if let Some(cs) = &rel.cardinality_second {
-                let p = Point::new(end.x - 3.0, end.y - 2.0);
-                let tl = layout_text(
-                    &[RichSpan::new(
-                        cs.clone(),
-                        TextStyle::new(
-                            theme::class::EDGE,
-                            SMALL_FONT,
-                            theme::FONT_FAMILY.to_string(),
-                        )
-                        .with_align(TextAlign::Right)
-                        .with_baseline(TextBaseline::Middle),
-                    )],
-                    None,
-                );
-                let (ox, oy) = compute_text_offset(&tl, TextAlign::Right, TextBaseline::Middle);
-                elements.push(vir::text_node(
-                    cs.clone(),
-                    Point::new(p.x + ox, p.y + oy),
+                    lbl.clone(),
+                    Point::new(mid.x + ox, mid.y + oy),
                     vir::text_style(
                         theme::class::EDGE,
                         SMALL_FONT,
@@ -488,17 +231,82 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
                 ));
             }
         }
+        // 基数（端点附近）
+        if let Some(cf) = &rel.cardinality_first {
+            let p = Point::new(start.x + 3.0, start.y - 2.0);
+            let tl = layout_text(
+                &[RichSpan::new(
+                    cf.clone(),
+                    TextStyle::new(
+                        theme::class::EDGE,
+                        SMALL_FONT,
+                        theme::FONT_FAMILY.to_string(),
+                    )
+                    .with_align(TextAlign::Left)
+                    .with_baseline(TextBaseline::Middle),
+                )],
+                None,
+            );
+            let (ox, oy) = compute_text_offset(&tl, TextAlign::Left, TextBaseline::Middle);
+            elements.push(vir::text_node(
+                cf.clone(),
+                Point::new(p.x + ox, p.y + oy),
+                vir::text_style(
+                    theme::class::EDGE,
+                    SMALL_FONT,
+                    theme::FONT_FAMILY,
+                    TextAlign::Left,
+                    TextBaseline::Top,
+                ),
+                0.0,
+                None,
+                Z_LABEL,
+            ));
+        }
+        if let Some(cs) = &rel.cardinality_second {
+            let p = Point::new(end.x - 3.0, end.y - 2.0);
+            let tl = layout_text(
+                &[RichSpan::new(
+                    cs.clone(),
+                    TextStyle::new(
+                        theme::class::EDGE,
+                        SMALL_FONT,
+                        theme::FONT_FAMILY.to_string(),
+                    )
+                    .with_align(TextAlign::Right)
+                    .with_baseline(TextBaseline::Middle),
+                )],
+                None,
+            );
+            let (ox, oy) = compute_text_offset(&tl, TextAlign::Right, TextBaseline::Middle);
+            elements.push(vir::text_node(
+                cs.clone(),
+                Point::new(p.x + ox, p.y + oy),
+                vir::text_style(
+                    theme::class::EDGE,
+                    SMALL_FONT,
+                    theme::FONT_FAMILY,
+                    TextAlign::Left,
+                    TextBaseline::Top,
+                ),
+                0.0,
+                None,
+                Z_LABEL,
+            ));
+        }
     }
 
-    // ---- Draw class boxes ----
-    for name in &class_names {
-        let layout = &layouts[name];
-        let rect = class_rects[name];
-        let ann = diagram
-            .classes
-            .iter()
-            .find(|c| &c.name == name)
-            .and_then(|c| c.annotation.clone());
+    // ---- 画类框（位置来自 placed.positions[i]）----
+    for (i, cls) in diagram.classes.iter().enumerate() {
+        let layout = &layouts[i];
+        let Some(&center) = placed.positions.get(i) else { continue };
+        let rect = Rect::new(
+            center.x - layout.width / 2.0,
+            center.y - layout.height / 2.0,
+            center.x + layout.width / 2.0,
+            center.y + layout.height / 2.0,
+        );
+        let ann = cls.annotation.clone();
 
         // Background
         elements.push(vir::rect_node(
@@ -556,7 +364,7 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
             ));
         }
 
-        // Class name text (bold via slightly bigger size)
+        // Class name text
         let name_y = if ann.is_some() {
             rect.min_y() + layout.header_h / 2.0 + 7.0
         } else {
@@ -590,7 +398,7 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
             Z_LABEL,
         ));
 
-        // Separator under header
+        // Separator under header（名称栏与内容栏的分界，始终画）
         elements.push(vir::line_node(
             Point::new(rect.min_x(), rect.min_y() + layout.header_h),
             Point::new(rect.max_x(), rect.min_y() + layout.header_h),
@@ -598,8 +406,13 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
             Z_AXIS,
         ));
 
-        // Attributes
-        let mut line_y = rect.min_y() + layout.header_h + 4.0;
+        // 三栏恒定显示：属性栏、方法栏即使为空也保留占位与分隔线。
+        // 空栏占位高度与"一行内容"一致（行高 18 + 上下留白 8），保证三栏高度均匀。
+        const SECTION_MIN_H: f64 = 18.0 + 8.0;
+        let mut line_y = rect.min_y() + layout.header_h;
+
+        // 属性栏
+        line_y += 4.0;
         for attr in &layout.attrs {
             let ts = TextStyle::new(
                 theme::class::TEXT,
@@ -629,8 +442,11 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
             ));
             line_y += 18.0;
         }
+        if layout.attrs.is_empty() {
+            line_y += SECTION_MIN_H;
+        }
 
-        // Separator before methods (always present — official mermaid shows 3 sections)
+        // 属性栏与方法栏的分隔线（恒画）
         elements.push(vir::line_node(
             Point::new(rect.min_x() + 4.0, line_y),
             Point::new(rect.max_x() - 4.0, line_y),
@@ -638,7 +454,8 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
             Z_AXIS,
         ));
 
-        // Methods
+        // 方法栏
+        line_y += 4.0;
         for method in &layout.methods {
             let ts = TextStyle::new(
                 theme::class::TEXT,
@@ -667,6 +484,9 @@ pub fn build_class_elements(diagram: &ClassDiagram, _config: &OutputConfig) -> V
                 Z_LABEL,
             ));
             line_y += 18.0;
+        }
+        if layout.methods.is_empty() {
+            line_y += SECTION_MIN_H;
         }
     }
 
