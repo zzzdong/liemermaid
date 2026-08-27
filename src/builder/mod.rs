@@ -1,4 +1,9 @@
+pub mod extract;
+pub mod ir;
 pub mod layout;
+pub mod materialize;
+pub mod measure;
+pub mod paint;
 pub mod render;
 pub mod theme;
 pub mod types;
