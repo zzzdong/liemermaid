@@ -5,8 +5,7 @@
 //! 不比对像素（视觉细节留 P2/P4 收敛），只断言「全 ShapeKind 都能贯通 + 边箭头多节点」。
 
 use lievisual::geometry::{Point, Size};
-use lievisual::scene::Element;
-use liemermaid::builder::ir::common::{ArrowKind, ArrowSpec, ContainerKind};
+use liemermaid::builder::ir::common::{ArrowKind, ArrowSpec};
 use liemermaid::builder::ir::geograph::{GGContainer, GGEdge, GGNode, Geograph};
 use liemermaid::builder::ir::scenegraph::{SceneItem, StyleIntent};
 use liemermaid::builder::ir::shape::{EdgeEnds, ShapeGeometry, ShapeKind};

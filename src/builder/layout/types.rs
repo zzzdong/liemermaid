@@ -7,10 +7,7 @@
 use lievisual::geometry::{Point, Rect};
 
 use crate::ast::{Direction, NodeShape};
-use crate::builder::types::OutputConfig;
-use crate::error::DiagramResult;
 use lievisual::geometry::Color;
-use lievisual::scene::SceneNode;
 
 use super::coord::NodeAnchors;
 

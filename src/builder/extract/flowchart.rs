@@ -7,7 +7,7 @@ use crate::{
     ast::{ArrowType, Flowchart, NodeShape},
     builder::ir::{
         self,
-        common::{ArrowKind, ArrowSpec, EdgePriority, LabelOrMeasured, LabelSpec, PortHint, PortSet, SizeHint, StyleRef},
+        common::{ArrowKind, ArrowSpec, EdgePriority, LabelSpec, PortHint, PortSet, SizeHint, StyleRef},
         shape::ShapeKind,
         unigraph::{EdgeKind, UGEdge, UGNode, Unigraph},
     },

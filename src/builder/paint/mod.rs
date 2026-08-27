@@ -36,14 +36,14 @@ pub fn run(sg: &SceneGraph) -> Scene {
             SceneItem::Edge { path, stroke, ends, z } => {
                 // P1.3：多段折线 + 起止标记（箭头/圆/叉）。
                 let nodes = run_edge_nodes(path, stroke, ends, *z);
-                let node = if nodes.is_empty() {
+                
+                if nodes.is_empty() {
                     continue;
                 } else if nodes.len() == 1 {
                     nodes.into_iter().next().unwrap()
                 } else {
                     SceneNode::group(nodes).with_z(*z)
-                };
-                node
+                }
             }
             SceneItem::Label {
                 text,
@@ -58,10 +58,7 @@ pub fn run(sg: &SceneGraph) -> Scene {
             SceneItem::Group { children, z } => {
                 let children: Vec<SceneNode> = children
                     .iter()
-                    .filter_map(|c| match run_item(c) {
-                        Some(n) => Some(n),
-                        None => None,
-                    })
+                    .filter_map(|c| run_item(c))
                     .collect();
                 SceneNode::group(children).with_z(*z)
             }

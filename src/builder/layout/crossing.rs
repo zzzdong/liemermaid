@@ -59,12 +59,12 @@ pub fn minimize_crossings(layers: &[Vec<NodeId>], edges: &[LayerEdge]) -> Vec<Ve
         if r % 2 == 0 {
             // 自上而下
             for i in 1..n_layers {
-                reorder_by_neighbors(&mut cur, i, i - 1, &edges, &appearance);
+                reorder_by_neighbors(&mut cur, i, i - 1, edges, &appearance);
             }
         } else {
             // 自下而上
             for i in (0..n_layers - 1).rev() {
-                reorder_by_neighbors(&mut cur, i, i + 1, &edges, &appearance);
+                reorder_by_neighbors(&mut cur, i, i + 1, edges, &appearance);
             }
         }
     }
@@ -176,7 +176,7 @@ mod tests {
         let out = minimize_crossings(&layers, &edges);
         let mut flat: Vec<String> = out.iter().flat_map(|l| l.iter().cloned()).collect();
         flat.sort();
-        let mut expect = vec!["A", "B", "C", "D", "E"].iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let mut expect = ["A", "B", "C", "D", "E"].iter().map(|s| s.to_string()).collect::<Vec<_>>();
         expect.sort();
         assert_eq!(flat, expect);
     }

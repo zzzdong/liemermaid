@@ -27,7 +27,7 @@ pub fn timeline_diagram<'i>(input: &mut &'i str) -> PResult<'i, TimelineDiagram>
     .parse_next(input)
     {
         direction = Some(dir);
-        let _ = consume_line(input)?;
+        consume_line(input)?;
     }
 
     let mut title = None;
@@ -53,7 +53,7 @@ pub fn timeline_diagram<'i>(input: &mut &'i str) -> PResult<'i, TimelineDiagram>
                     events: Vec::new(),
                 });
             }
-        } else if trimmed.len() >= 5 && trimmed[..5].to_ascii_lowercase() == "title" {
+        } else if trimmed.len() >= 5 && trimmed[..5].eq_ignore_ascii_case("title") {
             let t = trimmed[5..].trim();
             if !t.is_empty() {
                 title = Some(t.to_string());

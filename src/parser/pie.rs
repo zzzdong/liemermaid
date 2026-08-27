@@ -44,7 +44,7 @@ pub fn pie_diagram<'i>(input: &mut &'i str) -> PResult<'i, PieDiagram> {
             continue;
         }
         // 跳过未知行
-        let _ = skip_line(input)?;
+        skip_line(input)?;
     }
 
     Ok(PieDiagram {
@@ -69,7 +69,7 @@ fn data_row<'i>(input: &mut &'i str) -> PResult<'i, PieData> {
     ))
     .parse_next(input)?;
 
-    let _ = consume_line(input)?;
+    consume_line(input)?;
 
     Ok(PieData { label, value })
 }

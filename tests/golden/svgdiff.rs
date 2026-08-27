@@ -333,12 +333,11 @@ pub fn parse(svg: &str) -> Vec<El> {
                     el.kind = Kind::RoundedRect;
                 }
                 // 本元素自身的 transform 平移叠加（已含祖先累加）
-                if let Some(t) = attr_str(e.attributes(), "transform") {
-                    if let Some((tx, ty)) = parse_translate(&t) {
+                if let Some(t) = attr_str(e.attributes(), "transform")
+                    && let Some((tx, ty)) = parse_translate(&t) {
                         el.x += tx;
                         el.y += ty;
                     }
-                }
                 // 线状几何端点（line/polyline/path）：用于几何等价比对。
                 if kind == Kind::Line {
                     if let (Some(x1), Some(y1), Some(x2), Some(y2)) = (
@@ -350,18 +349,15 @@ pub fn parse(svg: &str) -> Vec<El> {
                         el.endpoints = Some(((x1 + px, y1 + py), (x2 + px, y2 + py)));
                     }
                 } else if kind == Kind::Polyline {
-                    if let Some(pts) = attr_str(e.attributes(), "points") {
-                        if let Some(ep) = parse_points_endpoints(&pts, px, py) {
+                    if let Some(pts) = attr_str(e.attributes(), "points")
+                        && let Some(ep) = parse_points_endpoints(&pts, px, py) {
                             el.endpoints = Some(ep);
                         }
-                    }
-                } else if kind == Kind::Path {
-                    if let Some(d) = attr_str(e.attributes(), "d") {
-                        if let Some(ep) = parse_path_endpoints(&d, px, py) {
+                } else if kind == Kind::Path
+                    && let Some(d) = attr_str(e.attributes(), "d")
+                        && let Some(ep) = parse_path_endpoints(&d, px, py) {
                             el.endpoints = Some(ep);
                         }
-                    }
-                }
                 els.push(el);
             }
             Ok(Event::End(e)) => {
@@ -433,9 +429,7 @@ fn collect_text(reader: &mut quick_xml::Reader<&[u8]>) -> String {
                 if tag == "text" && depth == 0 {
                     break;
                 }
-                if depth > 0 {
-                    depth -= 1;
-                }
+                depth = depth.saturating_sub(1);
                 prev = Prev::Tag;
             }
             Ok(Event::Empty(_)) => {}
@@ -454,11 +448,10 @@ fn attr_str<'a>(
     name: &str,
 ) -> Option<String> {
     for a in attrs {
-        if let Ok(a) = a {
-            if a.key == quick_xml::name::QName(name) {
+        if let Ok(a) = a
+            && a.key == quick_xml::name::QName(name) {
                 return Some(a.value.into_owned().to_string());
             }
-        }
     }
     None
 }
@@ -748,8 +741,8 @@ pub fn summarize(els: &[El]) -> Summary {
         if key == "node" {
             s.node_centers.push((el.x + el.w / 2.0, el.y + el.h / 2.0));
         }
-        if key == "edge" {
-            if let Some((a, b)) = el.endpoints {
+        if key == "edge"
+            && let Some((a, b)) = el.endpoints {
                 let dx = b.0 - a.0;
                 let dy = b.1 - a.1;
                 // 跳过过短的线（如自绘箭头头 path），仅保留真正的边连线。
@@ -757,7 +750,6 @@ pub fn summarize(els: &[El]) -> Summary {
                     s.edge_endpoints.push((a, b));
                 }
             }
-        }
     }
     s
 }

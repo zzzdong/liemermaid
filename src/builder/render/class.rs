@@ -197,8 +197,8 @@ pub fn build_class_elements(placed: &PlacedGraph, diagram: &ClassDiagram) -> Vec
         }
 
         // 关系标签（边中点上方）
-        if let Some(lbl) = &rel.label {
-            if !lbl.is_empty() {
+        if let Some(lbl) = &rel.label
+            && !lbl.is_empty() {
                 let mid = Point::new((start.x + end.x) / 2.0, (start.y + end.y) / 2.0 - 6.0);
                 let tl = layout_text(
                     &[RichSpan::new(
@@ -230,7 +230,6 @@ pub fn build_class_elements(placed: &PlacedGraph, diagram: &ClassDiagram) -> Vec
                     Z_LABEL,
                 ));
             }
-        }
         // 基数（端点附近）
         if let Some(cf) = &rel.cardinality_first {
             let p = Point::new(start.x + 3.0, start.y - 2.0);

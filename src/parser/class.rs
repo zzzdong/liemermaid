@@ -38,7 +38,7 @@ pub fn class_diagram<'i>(input: &mut &'i str) -> PResult<'i, ClassDiagram> {
             continue;
         }
         // 跳过未知行
-        let _ = skip_line(input)?;
+        skip_line(input)?;
     }
 
     Ok(ClassDiagram { classes, relations })
@@ -96,7 +96,7 @@ fn class_decl<'i>(input: &mut &'i str) -> PResult<'i, Class> {
     }
 
     // 消费行尾
-    let _ = consume_line(input)?;
+    consume_line(input)?;
 
     Ok(Class {
         name,
@@ -176,7 +176,7 @@ fn member<'i>(input: &mut &'i str) -> PResult<'i, ClassMember> {
     }
 
     // 消费行尾
-    let _ = consume_line(input)?;
+    consume_line(input)?;
 
     Ok(ClassMember {
         visibility,
@@ -223,7 +223,7 @@ fn relation<'i>(input: &mut &'i str) -> PResult<'i, Relation> {
         let _ = ':'.parse_next(input)?;
         skip_ws_and_comments(input)?;
         let l = rest_of_line.parse_next(input)?.trim().to_string();
-        let _ = consume_line(input)?;
+        consume_line(input)?;
         Some(l)
     } else {
         None

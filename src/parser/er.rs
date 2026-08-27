@@ -37,7 +37,7 @@ pub fn er_diagram<'i>(input: &mut &'i str) -> PResult<'i, ErDiagram> {
             continue;
         }
         // 跳过未知行
-        let _ = skip_line(input)?;
+        skip_line(input)?;
     }
 
     Ok(ErDiagram {
@@ -70,14 +70,14 @@ fn entity<'i>(input: &mut &'i str) -> PResult<'i, ErEntity> {
             let _ =
                 take_while(0.., |c: char| c != '\n' && c != '}' && c != '\r').parse_next(input)?;
             attributes.push(ErAttribute {
-                type_: type_,
+                type_,
                 name: attr_name,
             });
         }
         let _ = '}'.parse_next(input)?;
     }
 
-    let _ = consume_line(input)?;
+    consume_line(input)?;
 
     Ok(ErEntity { name, attributes })
 }
@@ -124,7 +124,7 @@ fn relationship<'i>(input: &mut &'i str) -> PResult<'i, ErRelationship> {
     let label = opt(preceded(':', rest_of_line))
         .parse_next(input)?
         .map(|s| s.trim().to_string());
-    let _ = consume_line(input)?;
+    consume_line(input)?;
 
     Ok(ErRelationship {
         first_entity,

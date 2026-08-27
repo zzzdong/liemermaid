@@ -26,7 +26,7 @@ pub fn gitgraph_diagram<'i>(input: &mut &'i str) -> PResult<'i, GitGraphDiagram>
         let _ = ':'.parse_next(input)?;
         skip_ws_and_comments(input)?;
         let _ = opt(quoted_string).parse_next(input)?;
-        let _ = consume_line(input)?;
+        consume_line(input)?;
     }
 
     let mut statements = Vec::new();
@@ -57,7 +57,7 @@ pub fn gitgraph_diagram<'i>(input: &mut &'i str) -> PResult<'i, GitGraphDiagram>
             continue;
         }
         // 跳过未知行
-        let _ = skip_line(input)?;
+        skip_line(input)?;
     }
 
     Ok(GitGraphDiagram { statements })
@@ -66,7 +66,7 @@ pub fn gitgraph_diagram<'i>(input: &mut &'i str) -> PResult<'i, GitGraphDiagram>
 /// 解析一组 `key: value` 属性对，返回映射。
 fn attr_map<'i>(input: &mut &'i str) -> PResult<'i, std::collections::HashMap<String, String>> {
     let mut map = std::collections::HashMap::new();
-    let _ = separated(0.., attr_pair, take_while(1.., |c: char| c.is_whitespace()))
+    separated(0.., attr_pair, take_while(1.., |c: char| c.is_whitespace()))
         .map(|pairs: Vec<(String, String)>| {
             for (k, v) in pairs {
                 map.insert(k, v);
@@ -91,7 +91,7 @@ fn commit_stmt<'i>(input: &mut &'i str) -> PResult<'i, GitGraphStatement> {
     keyword("commit").parse_next(input)?;
     inline_ws(input)?;
     let map = attr_map(input)?;
-    let _ = consume_line.parse_next(input)?;
+    consume_line.parse_next(input)?;
     Ok(GitGraphStatement::Commit {
         id: map.get("id").cloned(),
         commit_type: map.get("type").cloned(),
@@ -103,7 +103,7 @@ fn branch_stmt<'i>(input: &mut &'i str) -> PResult<'i, GitGraphStatement> {
     keyword("branch").parse_next(input)?;
     inline_ws(input)?;
     let name = alt((quoted_string, identifier)).parse_next(input)?;
-    let _ = consume_line.parse_next(input)?;
+    consume_line.parse_next(input)?;
     Ok(GitGraphStatement::Branch { name })
 }
 
@@ -111,7 +111,7 @@ fn checkout_stmt<'i>(input: &mut &'i str) -> PResult<'i, GitGraphStatement> {
     keyword("checkout").parse_next(input)?;
     inline_ws(input)?;
     let branch = alt((quoted_string, identifier)).parse_next(input)?;
-    let _ = consume_line.parse_next(input)?;
+    consume_line.parse_next(input)?;
     Ok(GitGraphStatement::Checkout { branch })
 }
 
@@ -121,7 +121,7 @@ fn merge_stmt<'i>(input: &mut &'i str) -> PResult<'i, GitGraphStatement> {
     let branch = alt((quoted_string, identifier)).parse_next(input)?;
     inline_ws(input)?;
     let map = attr_map(input)?;
-    let _ = consume_line.parse_next(input)?;
+    consume_line.parse_next(input)?;
     Ok(GitGraphStatement::Merge {
         branch,
         id: map.get("id").cloned(),
@@ -134,7 +134,7 @@ fn cherry_pick_stmt<'i>(input: &mut &'i str) -> PResult<'i, GitGraphStatement> {
     keyword("cherry-pick").parse_next(input)?;
     inline_ws(input)?;
     let map = attr_map(input)?;
-    let _ = consume_line.parse_next(input)?;
+    consume_line.parse_next(input)?;
     Ok(GitGraphStatement::CherryPick {
         id: map.get("id").cloned(),
         parent: map.get("parent").cloned(),

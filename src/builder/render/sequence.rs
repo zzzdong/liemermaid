@@ -11,7 +11,6 @@ use crate::{
         SequenceDiagram, SequenceItem, SequenceStatement,
     },
     builder::types::OutputConfig,
-    error::DiagramResult,
     vir::{self, Element, SceneNode, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, Z_SUBGRAPH, theme},
 };
 
@@ -333,8 +332,8 @@ pub fn render_sequence(seq: &SequenceDiagram, config: &OutputConfig) -> Vec<Scen
                 act_stack.entry(r.ti).or_default().push(y);
             }
             Some(MessageActivation::Deactivate) => {
-                if let Some(stack) = act_stack.get_mut(&r.fi) {
-                    if let Some(start) = stack.pop() {
+                if let Some(stack) = act_stack.get_mut(&r.fi)
+                    && let Some(start) = stack.pop() {
                         let h = y - start;
                         if h > 0.0 {
                             let cx = col_centers[r.fi] + r.depth as f64 * BLOCK_INDENT;
@@ -358,7 +357,6 @@ pub fn render_sequence(seq: &SequenceDiagram, config: &OutputConfig) -> Vec<Scen
                             );
                         }
                     }
-                }
             }
             None => {}
         }

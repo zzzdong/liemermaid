@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use lievisual::geometry::{Point, Rect};
 
-use crate::builder::ir::geograph::{GGEdge, GGNode, Geograph};
+use crate::builder::ir::geograph::{GGNode, Geograph};
 
 use super::spatial::{SpatialGrid, segment_intersects_rect};
 
@@ -224,7 +224,7 @@ mod tests {
     use crate::builder::ir::shape::ShapeKind;
     use crate::builder::ir::unigraph::EdgeKind;
     use crate::builder::ir::common::{
-        ArrowSpec, NodeId, NodeRole, ResolvedPorts, RoutingHint,
+        ArrowSpec, NodeRole, ResolvedPorts, RoutingHint,
     };
 
     fn mk_node(id: &str, x: f64, y: f64, w: f64, h: f64) -> GGNode {

@@ -55,7 +55,7 @@ fn assign_layers(ug: &Unigraph) -> Vec<Vec<NodeId>> {
 ///
 /// `direction` 为 `BT` / `RL` 时，将分层整体反转（首层 ↔ 末层），使主轴方向正确。
 pub fn sugiyama_layers(ug: &Unigraph) -> Vec<Vec<NodeId>> {
-    let mut layers = assign_layers(ug);
+    let layers = assign_layers(ug);
 
     // 组装跨相邻层边对（供 crossing 原语使用）
     let layer_of: HashMap<&NodeId, usize> = layers

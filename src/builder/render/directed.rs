@@ -428,14 +428,13 @@ impl DirectedRenderer {
                 draw_arrow_head(&mut elements, &tip, &dir, &stroke, false);
             }
             // 边标签：`A -->|label| B`，画在边路径中点（白底）
-            if let Some(label) = fc.edges.get(ei).and_then(|e| e.label.as_deref()) {
-                if !label.is_empty() {
+            if let Some(label) = fc.edges.get(ei).and_then(|e| e.label.as_deref())
+                && !label.is_empty() {
                     let mid = route[route.len() / 2];
                     let mid2 = route[(route.len() - 1) / 2];
                     let lm = Point::new((mid.x + mid2.x) / 2.0, (mid.y + mid2.y) / 2.0 - 8.0);
                     draw_edge_label(&mut elements, lm, label);
                 }
-            }
         }
 
         // 子图框
@@ -547,7 +546,7 @@ impl DirectedRenderer {
             let text = info
                 .label
                 .as_deref()
-                .unwrap_or_else(|| info.id.as_str());
+                .unwrap_or(info.id.as_str());
             if !text.is_empty() {
                 draw_node_label(&mut elements, *center, text, info.size.width - 10.0);
             }

@@ -12,7 +12,7 @@ use crate::{
     ast::{GitGraphDiagram, GitGraphStatement},
     builder::types::OutputConfig,
     error::DiagramResult,
-    vir::{self, Color, SceneNode, TextAlign, TextBaseline, TextStyle, Z_AXIS, Z_LABEL, Z_SERIES, theme},
+    vir::{self, Color, SceneNode, TextAlign, TextBaseline, Z_AXIS, Z_LABEL, Z_SERIES, theme},
 };
 
 // 所有尺寸/颜色来自 theme::gitgraph
@@ -319,9 +319,7 @@ pub fn render_gitgraph(graph: &GitGraphDiagram, _config: &OutputConfig) -> Diagr
         ));
 
         let last_in_branch = commit_positions
-            .iter()
-            .filter(|cp| cp.branch_name == *branch_name)
-            .last();
+            .iter().rfind(|cp| cp.branch_name == *branch_name);
         if let Some(last) = last_in_branch {
             elements.push(vir::line_node(
                 Point::new(last.position.x + COMMIT_RADIUS + 4.0, y),

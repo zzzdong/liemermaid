@@ -19,11 +19,11 @@ pub fn keyword<'i>(kw: &'static str) -> impl Parser<&'i str, &'i str, InputError
         let lower = kw.to_ascii_lowercase();
         // 使用 `get` 安全切片：当 input 以多字节字符（如 BOM/中文）开头时，
         // 直接返回 None 而非 panic（字节边界不安全）。
-        if let Some(candidate) = input.get(..lower.len()) {
-            if candidate.to_ascii_lowercase() == lower {
+        if let Some(candidate) = input.get(..lower.len())
+            && candidate.to_ascii_lowercase() == lower {
                 // 关键字后必须是空白、行尾或常见分隔符，避免误吞前缀
                 let after = input[lower.len()..].chars().next();
-                if after.map_or(true, |c| {
+                if after.is_none_or(|c| {
                     c.is_whitespace() || c == ':' || c == '\n' || c == '\r' || c == '{'
                 }) {
                     let matched = &input[..lower.len()];
@@ -31,7 +31,6 @@ pub fn keyword<'i>(kw: &'static str) -> impl Parser<&'i str, &'i str, InputError
                     return Ok(matched);
                 }
             }
-        }
         Err(InputError::at(*input))
     }
 }
@@ -124,7 +123,7 @@ pub fn skip_ws_and_comments<'i>(input: &mut &'i str) -> PResult<'i, ()> {
 }
 
 /// 是否还有剩余输入（未到达 EOF）
-pub fn has_input<'i>(input: &mut &'i str) -> bool {
+pub fn has_input(input: &mut &str) -> bool {
     !input.is_empty()
 }
 

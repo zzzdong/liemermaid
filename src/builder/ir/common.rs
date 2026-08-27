@@ -106,25 +106,24 @@ pub enum NodeKind {
 
 /// 节点尺寸约束。
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Default)]
 pub enum NodeConstraint {
     /// 最小尺寸，可压缩到该值以下则报错。
     Min(Size),
     /// 固定尺寸，不可压缩。
     Fixed(Size),
     /// 无约束。
+    #[default]
     Free,
 }
 
-impl Default for NodeConstraint {
-    fn default() -> Self {
-        NodeConstraint::Free
-    }
-}
 
 /// 尺寸提示：决定布局阶段如何确定节点包围盒。
 #[derive(Debug, Clone, PartialEq)]
+#[derive(Default)]
 pub enum SizeHint {
     /// 由文本测量 + 形状几何推算（多数节点）。
+    #[default]
     ByText,
     /// 固定尺寸。
     Fixed(Size),
@@ -132,11 +131,6 @@ pub enum SizeHint {
     FromChildren,
 }
 
-impl Default for SizeHint {
-    fn default() -> Self {
-        SizeHint::ByText
-    }
-}
 
 /// 样式引用：指向 Theme 中某条样式规则，materialize 阶段据此查具体颜色/线型。
 ///

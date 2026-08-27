@@ -540,9 +540,9 @@ dependencies = [
 
 [[package]]
 name = "lievisual"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "333f52719a9aae1788bc0401be0f20cdd6c293f393d6a30ab24424aafcd4fbe2"
+checksum = "8d9648f24c921f5fde9a6484a56fbbaff71fa5f8e039719b31d8658bd193539c"
 dependencies = [
  "kurbo",
  "parley",

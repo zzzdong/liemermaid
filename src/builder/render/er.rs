@@ -143,8 +143,8 @@ pub fn build_er_elements(placed: &PlacedGraph, diagram: &ErDiagram) -> Vec<Scene
         draw_cardinality(&mut elements, &p1, &rel.cardinality_first, &first_away, &first_perp, &stroke);
         draw_cardinality(&mut elements, &p2, &rel.cardinality_second, &second_away, &last_perp, &stroke);
 
-        if let Some(lbl) = &rel.label {
-            if !lbl.is_empty() {
+        if let Some(lbl) = &rel.label
+            && !lbl.is_empty() {
                 let mid = Point::new((p1.x + p2.x) / 2.0, (p1.y + p2.y) / 2.0 - 8.0);
                 let tl = layout_text(
                     &[RichSpan::new(
@@ -175,7 +175,6 @@ pub fn build_er_elements(placed: &PlacedGraph, diagram: &ErDiagram) -> Vec<Scene
                     Z_LABEL,
                 ));
             }
-        }
     }
 
     // ---- 画实体框（位置来自 placed.positions[i]） ----

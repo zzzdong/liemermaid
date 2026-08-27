@@ -60,7 +60,7 @@ fn parse_body<'i>(input: &mut &'i str) -> PResult<'i, StateDiagram> {
         }
         *input = cp;
         // 跳过未知行
-        let _ = skip_line(input)?;
+        skip_line(input)?;
     }
 
     Ok(StateDiagram {
@@ -181,7 +181,7 @@ fn transition<'i>(input: &mut &'i str) -> PResult<'i, Transition> {
     let label = opt(preceded(':', rest_of_line))
         .parse_next(input)?
         .map(|s| s.trim().to_string());
-    let _ = consume_line(input)?;
+    consume_line(input)?;
 
     Ok(Transition { from, to, label })
 }

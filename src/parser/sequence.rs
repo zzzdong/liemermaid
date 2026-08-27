@@ -55,7 +55,7 @@ pub fn sequence_diagram<'i>(input: &mut &'i str) -> PResult<'i, SequenceDiagram>
             continue;
         }
         // 跳过无法识别的行
-        let _ = skip_line(input)?;
+        skip_line(input)?;
     }
 
     Ok(SequenceDiagram {
@@ -248,12 +248,12 @@ fn block_statement<'i>(input: &mut &'i str) -> PResult<'i, SequenceStatement> {
             continue;
         }
         // 跳过未知行
-        let _ = skip_line(input)?;
+        skip_line(input)?;
     }
 
     // 消费 `end`
     keyword("end").parse_next(input)?;
-    let _ = consume_line(input)?;
+    consume_line(input)?;
 
     Ok(SequenceStatement::Block(SequenceBlock {
         kind,

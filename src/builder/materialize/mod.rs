@@ -5,7 +5,7 @@
 //!
 //! P0.3：仅实现 flowchart 的矩形/菱形/圆 + 直线边 + 节点文本；其余形状/线型细化留 P1.3。
 
-use lievisual::geometry::{Point, Rect, Size};
+use lievisual::geometry::{Point, Size};
 use lievisual::scene::{Fill, LineCap, LineJoin, Stroke};
 
 use crate::builder::ir::{
