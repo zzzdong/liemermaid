@@ -10,6 +10,7 @@ use lievisual::geometry::{Point, Rect, Vec2};
 use lievisual::scene::{Element, FillStrokeStyle, Scene, SceneNode, Stroke};
 
 use crate::builder::ir::{
+    geograph::{RoutePath, RouteSegment},
     scenegraph::{SceneGraph, SceneItem},
     shape::{EdgeEnds, ShapeGeometry},
 };
@@ -24,6 +25,7 @@ pub fn run(sg: &SceneGraph) -> Scene {
                 geometry,
                 fill,
                 stroke,
+                name,
                 z,
             } => {
                 let style = FillStrokeStyle {
@@ -31,7 +33,12 @@ pub fn run(sg: &SceneGraph) -> Scene {
                     stroke: stroke.clone(),
                 };
                 let element = geometry_to_element(geometry, style);
-                SceneNode::new(element).with_z(*z)
+                let node = SceneNode::new(element).with_z(*z);
+                if let Some(n) = name {
+                    node.with_name(n)
+                } else {
+                    node
+                }
             }
             SceneItem::Edge { path, stroke, ends, z } => {
                 // P1.3：多段折线 + 起止标记（箭头/圆/叉）。
@@ -76,13 +83,15 @@ fn run_item(item: &SceneItem) -> Option<SceneNode> {
             geometry,
             fill,
             stroke,
+            name,
             z,
         } => {
             let style = FillStrokeStyle {
                 fill: fill.clone(),
                 stroke: stroke.clone(),
             };
-            Some(SceneNode::new(geometry_to_element(geometry, style)).with_z(*z))
+            let node = SceneNode::new(geometry_to_element(geometry, style)).with_z(*z);
+            Some(if let Some(n) = name { node.with_name(n) } else { node })
         }
         SceneItem::Edge { path, stroke, ends, z } => {
             let nodes = run_edge_nodes(path, stroke, ends, *z);
@@ -167,26 +176,80 @@ fn geometry_to_element(geometry: &ShapeGeometry, style: FillStrokeStyle) -> Elem
     }
 }
 
-/// 把一条已路由边翻译为若干 SceneNode（折线 + 起止标记）。
-fn run_edge_nodes(path: &[Point], stroke: &Stroke, ends: &EdgeEnds, z: i32) -> Vec<SceneNode> {
+/// 把一条已路由边翻译为若干 SceneNode（贝塞尔曲线 + 起止标记）。
+///
+/// `ends: (start, end)`：起、终两端各自的标记类型；普通 flowchart 边起点为 None，
+/// 只在有箭头语义的一端画标记（修复"普通 `-->` 边出现双向箭头"的问题）。
+///
+/// `path` 为路由段序列（直线/贝塞尔段），**按段类型直接描边**（不做折线→弧线的
+/// 后处理）。箭头方向取自路由首/末段的**端切线**，与曲线切向严格对齐
+/// （修复"箭头看不完整/方向错位"）。
+fn run_edge_nodes(
+    path: &RoutePath,
+    stroke: &Stroke,
+    ends: &(EdgeEnds, EdgeEnds),
+    z: i32,
+) -> Vec<SceneNode> {
     let mut nodes = Vec::new();
-    if path.len() < 2 {
+    if path.is_empty() {
         return nodes;
     }
-    // 折线本体（正交/样条统一用 polyline，paint 不做二次平滑）。
-    nodes.push(SceneNode::new(Element::poly(path.to_vec(), stroke.clone())).with_z(z));
+    // 曲线本体：把路由段翻译成 BezPath（Line→line_to, CubicBezier→curve_to）。
+    nodes.push(
+        SceneNode::new(Element::Path {
+            path: path_to_bezpath(path),
+            style: FillStrokeStyle {
+                fill: None,
+                stroke: Some(stroke.clone()),
+            },
+            closed: false,
+        })
+        .with_z(z),
+    );
 
-    // 终点标记（基于最后一段方向）。
-    let last = path[path.len() - 1];
-    let prev = path[path.len() - 2];
-    nodes.extend(arrow_element(prev, last, ends, stroke, z));
-
-    // 起点标记（基于第一段方向，反向）。
-    let first = path[0];
-    let next = path[1];
-    nodes.extend(arrow_element(next, first, ends, stroke, z));
+    // 终点标记：末段方向（指向端口）。
+    let (start_ends, end_ends) = *ends;
+    if end_ends != EdgeEnds::None {
+        let d = path.last_direction();
+        let tip = path.end();
+        let from = Point::new(tip.x - d.x * 16.0, tip.y - d.y * 16.0);
+        nodes.extend(arrow_element(from, tip, &end_ends, stroke, z));
+    }
+    // 起点标记：首段方向反向（从起点向外）。
+    if start_ends != EdgeEnds::None {
+        let d = path.first_direction();
+        let tip = path.start();
+        let from = Point::new(tip.x + d.x * 16.0, tip.y + d.y * 16.0);
+        nodes.extend(arrow_element(from, tip, &start_ends, stroke, z));
+    }
 
     nodes
+}
+
+/// 把路由段序列（Line/CubicBezier）翻译成连续 `BezPath`。
+fn path_to_bezpath(path: &RoutePath) -> lievisual::geometry::BezPath {
+    use lievisual::geometry::BezPath;
+    let mut bp = BezPath::new();
+    let mut pen_set = false;
+    for seg in path.iter() {
+        match seg {
+            RouteSegment::Line { from, to } => {
+                if !pen_set {
+                    bp.move_to((from.x, from.y));
+                    pen_set = true;
+                }
+                bp.line_to((to.x, to.y));
+            }
+            RouteSegment::CubicBezier { p0, p1, p2, p3 } => {
+                if !pen_set {
+                    bp.move_to((p0.x, p0.y));
+                    pen_set = true;
+                }
+                bp.curve_to((p1.x, p1.y), (p2.x, p2.y), (p3.x, p3.y));
+            }
+        }
+    }
+    bp
 }
 
 /// 在 `tip` 处、沿 `from→tip` 方向画一个标记（Arrow/Circle/Cross）。

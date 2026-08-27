@@ -67,6 +67,18 @@ pub enum RoutingHint {
     Inherit,
 }
 
+/// 连线线型（视觉样式，materialize 据此设 dash / 宽度 / 透明度）。
+/// 由 extract 从箭头语法（`-->` / `-.->` / `==>` / `~~~`）解析，贯穿到 GG。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LineKind {
+    #[default]
+    Solid,
+    Dotted,
+    Thick,
+    /// 不可见连线（`~~~`）：仍参与布局，但不渲染（透明）。
+    Invisible,
+}
+
 /// 箭头规格（起止各自的标记类型），纯枚举，paint 阶段查表生成标记原语。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ArrowSpec {

@@ -9,6 +9,7 @@ use lievisual::scene::{Fill, Stroke};
 use lievisual::text::{RichSpan, TextStyle};
 
 use super::common::*;
+use super::geograph::RoutePath;
 use super::shape::*;
 use super::unigraph::EdgeKind;
 
@@ -29,13 +30,18 @@ pub enum SceneItem {
         geometry: ShapeGeometry,
         fill: Option<Fill>,
         stroke: Option<Stroke>,
+        /// 语义名（如 `edge-label`），用于 SVG 端标记（`<g id>`），
+        /// 供测试 / 宿主识别特定几何；节点形状通常为 None。
+        name: Option<String>,
         z: i32,
     },
     /// 连线（已含箭头标记作为 ends 描述）。
+    /// `ends: (start_ends, end_ends)`：起、终两端各自的标记类型（多数边起点为 None）。
+    /// `path` 为路由段序列（直线/贝塞尔段），paint 按段类型画折线或曲线。
     Edge {
-        path: Vec<Point>,
+        path: RoutePath,
         stroke: Stroke,
-        ends: EdgeEnds,
+        ends: (EdgeEnds, EdgeEnds),
         z: i32,
     },
     /// 文本（已测量，含布局）。

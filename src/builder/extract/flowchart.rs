@@ -7,7 +7,7 @@ use crate::{
     ast::{ArrowType, Flowchart, NodeShape},
     builder::ir::{
         self,
-        common::{ArrowKind, ArrowSpec, EdgePriority, LabelSpec, PortHint, PortSet, SizeHint, StyleRef},
+        common::{ArrowKind, ArrowSpec, EdgePriority, LabelSpec, LineKind, PortHint, PortSet, SizeHint, StyleRef},
         shape::ShapeKind,
         unigraph::{EdgeKind, UGEdge, UGNode, Unigraph},
     },
@@ -34,33 +34,77 @@ pub fn map_shape(shape: &Option<NodeShape>) -> ShapeKind {
     }
 }
 
-/// 把 ast 的 ArrowType 映射到 IR 的 ArrowSpec（终点标记；起点暂统一 None）。
-/// Dotted/Thick 仅影响线型，线型细化留 P1.3（此处统一画实线箭头）。
+/// 把 ast 的 ArrowType 映射到 IR 的 ArrowSpec（起点 / 终点各自的标记类型）。
 pub fn map_arrow(arrow: &ArrowType) -> ArrowSpec {
-    let end = match arrow {
-        ArrowType::Solid | ArrowType::Thick | ArrowType::Dotted => ArrowKind::Arrow,
-        ArrowType::Labeled(_) => ArrowKind::Arrow,
-        ArrowType::NoArrow | ArrowType::Invisible => ArrowKind::None,
-        ArrowType::Both => ArrowKind::Circle, // 近似：Both 用 Circle 表示双向，P1.3 细化
-        ArrowType::Circle => ArrowKind::Circle,
-        ArrowType::Cross => ArrowKind::Cross,
-        ArrowType::MultiCircle => ArrowKind::Circle,
-        ArrowType::MultiCross => ArrowKind::Cross,
+    let (start, end) = match arrow {
+        ArrowType::Solid | ArrowType::Thick | ArrowType::Dotted => {
+            (ArrowKind::None, ArrowKind::Arrow)
+        }
+        ArrowType::Labeled(_) => (ArrowKind::None, ArrowKind::Arrow),
+        ArrowType::NoArrow => (ArrowKind::None, ArrowKind::None),
+        ArrowType::Invisible => (ArrowKind::None, ArrowKind::None),
+        ArrowType::Both => (ArrowKind::Arrow, ArrowKind::Arrow),
+        ArrowType::Circle => (ArrowKind::None, ArrowKind::Circle),
+        ArrowType::Cross => (ArrowKind::None, ArrowKind::Cross),
+        ArrowType::MultiCircle => (ArrowKind::Circle, ArrowKind::Circle),
+        ArrowType::MultiCross => (ArrowKind::Cross, ArrowKind::Cross),
     };
-    ArrowSpec { start: ArrowKind::None, end }
+    ArrowSpec { start, end }
+}
+
+/// 把 ast 的 ArrowType 映射到 IR 的 LineKind（实线 / 虚线 / 粗线 / 不可见）。
+pub fn map_line(arrow: &ArrowType) -> LineKind {
+    match arrow {
+        ArrowType::Solid | ArrowType::NoArrow | ArrowType::Both | ArrowType::Circle
+        | ArrowType::Cross | ArrowType::MultiCircle | ArrowType::MultiCross | ArrowType::Labeled(_) => {
+            LineKind::Solid
+        }
+        ArrowType::Dotted => LineKind::Dotted,
+        ArrowType::Thick => LineKind::Thick,
+        ArrowType::Invisible => LineKind::Invisible,
+    }
 }
 
 /// 提取 flowchart 为统一拓扑图。
 pub fn extract_flowchart(fc: &Flowchart) -> Unigraph {
-    let mut nodes = Vec::new();
+    // 节点形状/文本真相源：顶层 fc.nodes + 所有 subgraph 内部节点（按 id 合并）。
+    // parser 把 subgraph 内部节点只放进 subgraph.nodes，顶层 fc.nodes 仅由边端点补充
+    // （shape 信息会丢失），因此必须合并 subgraph.nodes 才能保住 `C{Decision}` 的菱形等。
+    use std::collections::HashMap;
+    // subgraph 内部节点声明更完整（含 shape/text，如 `C{Decision}`），先填；
+    // 顶层 fc.nodes 的补充节点（shape=None）用 or_insert 不覆盖 subgraph 的声明。
+    let mut shape_of: HashMap<&str, &Option<NodeShape>> = HashMap::new();
+    let mut text_of: HashMap<&str, &Option<String>> = HashMap::new();
+    for sg in &fc.subgraphs {
+        for n in &sg.nodes {
+            shape_of.entry(n.id.as_str()).or_insert(&n.shape);
+            text_of.entry(n.id.as_str()).or_insert(&n.text);
+        }
+    }
     for n in &fc.nodes {
-        let shape = map_shape(&n.shape);
+        shape_of.entry(n.id.as_str()).or_insert(&n.shape);
+        text_of.entry(n.id.as_str()).or_insert(&n.text);
+    }
+
+    let mut nodes = Vec::new();
+    // 按 fc.nodes + subgraph 内部节点都纳入，去重构建。
+    let mut seen = std::collections::HashSet::new();
+    let mut emit_node = |nodes: &mut Vec<UGNode>, id: &str, shape_of: &HashMap<&str, &Option<NodeShape>>, text_of: &HashMap<&str, &Option<String>>| {
+        if seen.contains(id) {
+            return;
+        }
+        seen.insert(id.to_string());
+        let shape = map_shape(shape_of.get(id).copied().unwrap_or(&None));
         let label = LabelSpec {
-            text: n.text.clone().unwrap_or_else(|| n.id.clone()),
+            text: text_of
+                .get(id)
+                .and_then(|o| o.as_ref())
+                .cloned()
+                .unwrap_or_else(|| id.to_string()),
             spans: Vec::new(), // measure 阶段填充 RichSpan
         };
         nodes.push(UGNode {
-            id: n.id.clone(),
+            id: id.to_string(),
             kind: ir::common::NodeKind::Atom,
             role: ir::common::NodeRole::Atom,
             shape,
@@ -70,6 +114,14 @@ pub fn extract_flowchart(fc: &Flowchart) -> Unigraph {
             style_ref: StyleRef::NodeDefault,
             constraint: ir::common::NodeConstraint::Free,
         });
+    };
+    for n in &fc.nodes {
+        emit_node(&mut nodes, &n.id, &shape_of, &text_of);
+    }
+    for sg in &fc.subgraphs {
+        for n in &sg.nodes {
+            emit_node(&mut nodes, &n.id, &shape_of, &text_of);
+        }
     }
 
     let mut edges = Vec::new();
@@ -88,19 +140,34 @@ pub fn extract_flowchart(fc: &Flowchart) -> Unigraph {
             source_port: src_port,
             target_port: tgt_port,
             kind: EdgeKind::Flow,
+            label_text: e.label.clone(),
             label: None,
             priority: EdgePriority::Primary,
-            routing_hint: ir::common::RoutingHint::Orthogonal,
+            routing_hint: ir::common::RoutingHint::Spline,
             arrow: map_arrow(&e.arrow_type),
+            line_kind: map_line(&e.arrow_type),
             repulsion: 1.0,
         });
     }
+
+    // 子图：收集每个 subgraph 的成员节点 id（含嵌套 subgraph 展平后的节点）。
+    let subgraphs: Vec<ir::unigraph::UGSubgraph> = fc
+        .subgraphs
+        .iter()
+        .enumerate()
+        .map(|(i, sg)| ir::unigraph::UGSubgraph {
+            id: format!("sub{}", i),
+            title: sg.title.clone(),
+            member_ids: sg.nodes.iter().map(|n| n.id.clone()).collect(),
+        })
+        .collect();
 
     Unigraph {
         family: ir::unigraph::GraphFamily::Directed,
         direction: fc.direction.clone().unwrap_or(crate::ast::Direction::TB),
         nodes,
         edges,
+        subgraphs,
         meta: ir::common::DiagramMeta { title: None },
     }
 }

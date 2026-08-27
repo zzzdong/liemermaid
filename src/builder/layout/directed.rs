@@ -17,31 +17,101 @@ use super::crossing::{LayerEdge, minimize_crossings};
 #[allow(unused_imports)]
 use crate::builder::ir::common::*;
 
+/// 反馈边（back edge）检测：用 DFS 找环，指向「当前 DFS 栈中的祖先」的边即为 back edge。
+///
+/// 保留非反馈边（forward edges）构成 DAG，分层时跳过反馈边（避免环把层号推高）。
+/// 反馈边（如 cycle 中的 `C→B`，其反向 `B→C` 保留）由路由单独画跨层绕行曲线。
+fn detect_back_edges(ug: &Unigraph) -> std::collections::HashSet<(NodeId, NodeId)> {
+    // 邻接表
+    let mut adj: std::collections::HashMap<NodeId, Vec<NodeId>> = std::collections::HashMap::new();
+    for n in &ug.nodes {
+        adj.entry(n.id.clone()).or_default();
+    }
+    for e in &ug.edges {
+        adj.entry(e.source.clone()).or_default().push(e.target.clone());
+    }
+    let mut back: std::collections::HashSet<(NodeId, NodeId)> = std::collections::HashSet::new();
+    // 三色标记：0=未访问，1=在栈中，2=已结束。
+    let mut color: std::collections::HashMap<NodeId, u8> = std::collections::HashMap::new();
+    for n in &ug.nodes {
+        color.insert(n.id.clone(), 0u8);
+    }
+
+    // 迭代 DFS（显式栈模拟递归，避免大图栈溢出）。
+    // stack 元素：node。同时用 iter_idx 记录每个节点的下一条邻接边。
+    let mut stack: Vec<NodeId> = Vec::new();
+    let mut iter_idx: std::collections::HashMap<NodeId, usize> = std::collections::HashMap::new();
+    // 从每个未访问节点开始。
+    let ids: Vec<NodeId> = ug.nodes.iter().map(|n| n.id.clone()).collect();
+    for start in &ids {
+        if color.get(start).copied().unwrap_or(0) != 0 {
+            continue;
+        }
+        color.insert(start.clone(), 1);
+        stack.push(start.clone());
+        while let Some(top) = stack.last() {
+            let top_node = top.clone();
+            let idx = iter_idx.entry(top_node.clone()).or_insert(0);
+            let neighbors = adj.get(top).cloned().unwrap_or_default();
+            if *idx >= neighbors.len() {
+                // 完成节点 top。
+                color.insert(top_node.clone(), 2);
+                stack.pop();
+                continue;
+            }
+            let v = neighbors[*idx].clone();
+            *idx += 1;
+            match color.get(&v).copied().unwrap_or(0) {
+                1 => {
+                    // v 在栈中 → top→v 是 back edge。
+                    back.insert((top_node.clone(), v.clone()));
+                }
+                0 => {
+                    color.insert(v.clone(), 1);
+                    stack.push(v.clone());
+                }
+                _ => {} // 2 = 已结束，跳过
+            }
+        }
+    }
+    back
+}
+
 /// 对 DAG 做最长路径分层：层号 = 沿有向边的最大前驱层 + 1。
 ///
-/// 返回 `Vec<Vec<NodeId>>`：index = 层号，元素 = 该层节点（按 UG 原始节点顺序）。
+/// 关键约束：
+/// 1. 构图反向边（u↔v 同时存在）跳过，不参与分层（避免环膨胀）。
+/// 2. 层号上限 = 节点数 - 1，兜底防止其他长链把层号推到过高。
 fn assign_layers(ug: &Unigraph) -> Vec<Vec<NodeId>> {
     let ids: Vec<NodeId> = ug.nodes.iter().map(|n| n.id.clone()).collect();
+    let back_edges = detect_back_edges(ug);
+    let max_allowed = ids.len().saturating_sub(1).max(1);
     let mut layer_of: HashMap<NodeId, usize> = HashMap::new();
     for id in &ids {
         layer_of.insert(id.clone(), 0);
     }
-    // 松弛：反复提升直到稳定（或达到节点数+1 次上限，避免环导致死循环）
+    // 松弛：仅对非 back edge 做最长路径抬升，层号上限截断。
     let mut changed = true;
     let mut guard = 0;
     while changed && guard < ids.len() + 1 {
         changed = false;
         guard += 1;
         for e in &ug.edges {
+            if back_edges.contains(&(e.source.clone(), e.target.clone())) {
+                continue;
+            }
             let sl = *layer_of.get(&e.source).unwrap_or(&0);
             let tl = *layer_of.get(&e.target).unwrap_or(&0);
             if tl <= sl {
-                layer_of.insert(e.target.clone(), sl + 1);
-                changed = true;
+                let new_tl = (sl + 1).min(max_allowed);
+                if new_tl > tl {
+                    layer_of.insert(e.target.clone(), new_tl);
+                    changed = true;
+                }
             }
         }
     }
-    // 按层收集（保持节点原始顺序，作为 tie-breaker）
+    // 按层收集（保留空层，跨层边路由距离正确）。
     let max_layer = layer_of.values().cloned().max().unwrap_or(0);
     let mut layers: Vec<Vec<NodeId>> = vec![Vec::new(); max_layer + 1];
     for id in &ids {
@@ -118,10 +188,12 @@ mod tests {
             source_port: PortHint::Bottom,
             target_port: PortHint::Top,
             kind: EdgeKind::Flow,
+            label_text: None,
             label: None,
             priority: EdgePriority::Primary,
             routing_hint: RoutingHint::Orthogonal,
             arrow: ArrowSpec { start: ArrowKind::None, end: ArrowKind::Arrow },
+            line_kind: LineKind::Solid,
             repulsion: 1.0,
         }
     }

@@ -3,9 +3,10 @@
 //! 每个图类型一个 `extract_*` 文件，把 [`crate::ast::Diagram`] 的语义拓扑
 //! 翻译成 [`crate::builder::ir::Unigraph`]。本阶段不碰任何坐标 / 尺寸 / 颜色。
 //!
-//! 进度：P0.1 仅建骨架；`run` 将在 P0.3 实现（flowchart 最小子集先行）。
+//! 进度：P0.3 实现 flowchart；state 已接入（复用 Directed family）。
 
 pub mod flowchart;
+pub mod state;
 
 use crate::builder::ir;
 use crate::error::DiagramError;
@@ -19,6 +20,7 @@ pub fn run(diagram: &crate::ast::Diagram) -> crate::error::DiagramResult<ir::Uni
         crate::ast::Diagram::Flowchart(fc) => {
             Ok(crate::builder::extract::flowchart::extract_flowchart(fc))
         }
+        crate::ast::Diagram::State(sd) => Ok(crate::builder::extract::state::extract_state(sd)),
         other => Err(DiagramError::UnsupportedType(format!(
             "extract not yet implemented for {}",
             std::any::type_name_of_val(other)

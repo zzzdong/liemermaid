@@ -125,11 +125,11 @@ fn flowchart_with_two_nodes_renders_elements() {
         "Flowchart with 2 nodes should have background rect + node rects, got {rect_count}"
     );
 
-    // 3. 语义：1 条边。边渲染为贝塞尔曲线 <path>（每条边 = 1 曲线 + 1 箭头 = 2 个 path）。
+    // 3. 语义：1 条边。新管线边渲染为贝塞尔曲线 <path>（每条边 = 1 个 path）。
     let edge_path_count = svg.matches("<path ").count();
     assert_eq!(
-        edge_path_count, 2,
-        "Flowchart with 1 edge should have 2 path (curve + arrow), got {edge_path_count}"
+        edge_path_count, 1,
+        "Flowchart with 1 edge should have 1 path (bezier), got {edge_path_count}"
     );
 
     // 4. 语义：节点文本存在
@@ -149,11 +149,11 @@ fn flowchart_with_three_chain_nodes() {
         "Chain of 3 nodes should have background rect + 3 node rects, got {rect_count}"
     );
 
-    // 语义：2 条边（每条 = 1 曲线 + 1 箭头 = 2 个 path）
+    // 语义：2 条边（新管线：每条边 = 1 个贝塞尔曲线 <path>）
     let edge_path_count = svg.matches("<path ").count();
     assert_eq!(
-        edge_path_count, 4,
-        "Chain of 3 nodes should have 4 path (2 edges × curve+arrow), got {edge_path_count}"
+        edge_path_count, 2,
+        "Chain of 3 nodes should have 2 path (bezier), got {edge_path_count}"
     );
 
     // 验证文本

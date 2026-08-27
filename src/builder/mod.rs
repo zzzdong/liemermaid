@@ -30,13 +30,32 @@ pub fn build_diagram_with_config(
     diagram: &Diagram,
     config: &OutputConfig,
 ) -> DiagramResult<lievisual::Scene> {
-    let layout_config = layout::LayoutConfig::default();
-    let placed = layout::layout_diagram(diagram, &layout_config, config);
-    let nodes = render::render_placed(&placed, diagram, config);
-    let mut scene = lievisual::Scene::new(config.width, config.height);
-    scene.background = config.background;
-    scene.nodes.extend(fit_to_canvas(nodes, config));
-    Ok(scene)
+    // 新四阶段管线：flowchart / state 走 extract → measure → layout → materialize → paint。
+    // 其余图类型（extract 暂未实现）降级到旧管线，保证不破坏既有 golden。
+    match extract::run(diagram) {
+        Ok(ug) => {
+            let ug = measure::measure_all(ug);
+            let (gg, style) = layout::engine::run(&ug).map_err(|e| {
+                crate::error::DiagramError::RenderError(format!("layout failed: {e}"))
+            })?;
+            let sg = materialize::run(&gg, &style);
+            let scene = paint::run(&sg);
+            let mut out = lievisual::Scene::new(config.width, config.height);
+            out.background = config.background;
+            out.nodes.extend(fit_to_canvas(scene.nodes, config));
+            Ok(out)
+        }
+        Err(_) => {
+            // 降级：旧管线（PlacedGraph + render）。
+            let layout_config = layout::LayoutConfig::default();
+            let placed = layout::layout_diagram(diagram, &layout_config, config);
+            let nodes = render::render_placed(&placed, diagram, config);
+            let mut scene = lievisual::Scene::new(config.width, config.height);
+            scene.background = config.background;
+            scene.nodes.extend(fit_to_canvas(nodes, config));
+            Ok(scene)
+        }
+    }
 }
 
 /// 计算所有 SceneNode 的外包矩形（画布无关的近似外包）

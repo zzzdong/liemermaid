@@ -36,6 +36,8 @@ pub struct Unigraph {
     pub direction: Direction,
     pub nodes: Vec<UGNode>,
     pub edges: Vec<UGEdge>,
+    /// 子图（subgraph / 泳道 / 类框）成员关系：layout 据此计算容器包围盒。
+    pub subgraphs: Vec<UGSubgraph>,
     pub meta: DiagramMeta,
 }
 
@@ -46,9 +48,20 @@ impl Default for Unigraph {
             direction: Direction::TB,
             nodes: Vec::new(),
             edges: Vec::new(),
+            subgraphs: Vec::new(),
             meta: DiagramMeta::default(),
         }
     }
+}
+
+/// 子图（subgraph）规格：容器 id / 标题 / 成员节点 id 列表。
+///
+/// 仅描述"哪些节点属于哪个容器"，几何包围盒由 layout 阶段据成员节点坐标计算。
+#[derive(Debug, Clone)]
+pub struct UGSubgraph {
+    pub id: String,
+    pub title: Option<String>,
+    pub member_ids: Vec<NodeId>,
 }
 
 /// UG 节点（语义拓扑，未含颜色）。
@@ -76,11 +89,15 @@ pub struct UGEdge {
     pub source_port: PortHint,
     pub target_port: PortHint,
     pub kind: EdgeKind,
+    /// 边标签文本（Stage 1 extract 填原文，Stage 1.5 measure 据此测量出 [`MeasuredLabel`]）。
+    pub label_text: Option<String>,
     /// 边标签（Stage 1.5 测量后填充）。
     pub label: Option<MeasuredLabel>,
     pub priority: EdgePriority,
     pub routing_hint: RoutingHint,
     pub arrow: ArrowSpec,
+    /// 线型（实线 / 虚线 / 粗线 / 不可见），来自箭头语法，materialize 据此设样式。
+    pub line_kind: LineKind,
     /// 与其他边 / 节点的排斥强度（默认 1.0）。
     pub repulsion: f64,
 }

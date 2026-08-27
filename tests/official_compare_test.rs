@@ -98,11 +98,14 @@ fn official_semantic_compare() {
 
         // 结构回归门槛：核心实体（节点/边）若官方有而 liemermaid 完全未渲染
         // （几何数量 = 0），视为结构性回归，硬失败。基于几何推断而非 class 命名。
+        // 注意：官方用「辅助边」给无边的孤立形状图（如 flowchart__shapes）定位，
+        // liemermaid 用坐标直接定位、无需辅助边。因此「源图不含边」的 case 不判 edge 回归。
+        let src_has_edges = src.contains("-->");
         let mut struct_missing = Vec::new();
         if !golden_sum.node_centers.is_empty() && ours_sum.node_centers.is_empty() {
             struct_missing.push("node");
         }
-        if !golden_sum.edge_endpoints.is_empty() && ours_sum.edge_endpoints.is_empty() {
+        if src_has_edges && !golden_sum.edge_endpoints.is_empty() && ours_sum.edge_endpoints.is_empty() {
             struct_missing.push("edge");
         }
         if !struct_missing.is_empty() {

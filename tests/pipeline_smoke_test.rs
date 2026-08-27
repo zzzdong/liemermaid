@@ -55,9 +55,10 @@ fn flowchart_pipeline_smoke() {
 
 #[test]
 fn flowchart_pipeline_unsupported_diagram_errors() {
-    // P0.3 仅 flowchart 支持；其他图类型应返回错误而非 panic。
+    // 目前 extract 仅 flowchart / state 走新管线；其他图类型应返回错误而非 panic。
+    // （生产入口会对未实现的类型降级到旧管线，但 extract::run 本身保持报错。）
     let src = "sequenceDiagram\nA->>B: hi";
     let diagram = MermaidParser::parse_mermaid(src).expect("parse failed");
     let res = extract::run(&diagram);
-    assert!(res.is_err(), "非 flowchart 图类型在 P0.3 应返回 UnsupportedDiagram 错误");
+    assert!(res.is_err(), "未实现的图类型应返回 UnsupportedDiagram 错误");
 }

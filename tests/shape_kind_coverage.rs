@@ -6,7 +6,7 @@
 
 use lievisual::geometry::{Point, Size};
 use liemermaid::builder::ir::common::{ArrowKind, ArrowSpec};
-use liemermaid::builder::ir::geograph::{GGContainer, GGEdge, GGNode, Geograph};
+use liemermaid::builder::ir::geograph::{GGEdge, GGNode, Geograph};
 use liemermaid::builder::ir::scenegraph::{SceneItem, StyleIntent};
 use liemermaid::builder::ir::shape::{EdgeEnds, ShapeGeometry, ShapeKind};
 use liemermaid::builder::ir::unigraph::EdgeKind;
@@ -33,23 +33,23 @@ fn gg_with(shape: ShapeKind) -> Geograph {
         id: "e1".to_string(),
         source: "n1".to_string(),
         target: "n1".to_string(),
-        route: vec![Point::new(10.0, 50.0), Point::new(90.0, 50.0)],
+        route: liemermaid::builder::ir::geograph::line_route(&[
+            Point::new(10.0, 50.0),
+            Point::new(90.0, 50.0),
+        ]),
+        label_text: None,
         label_anchor: None,
         kind: EdgeKind::Flow,
         arrow: ArrowSpec { start: ArrowKind::None, end: ArrowKind::Arrow },
         routing_hint: liemermaid::builder::ir::common::RoutingHint::Orthogonal,
+        line_kind: liemermaid::builder::ir::common::LineKind::Solid,
     };
     liemermaid::builder::ir::geograph::Geograph {
         size: Size::new(100.0, 100.0),
         background: lievisual::geometry::Color::WHITE,
         nodes: vec![node],
         edges: vec![edge],
-        containers: vec![GGContainer {
-            id: "c1".to_string(),
-            bounds: lievisual::geometry::Rect::new(0.0, 0.0, 100.0, 100.0),
-            title: None,
-            kind: liemermaid::builder::ir::common::ContainerKind::Subgraph,
-        }],
+        containers: vec![],
     }
 }
 
@@ -80,7 +80,9 @@ fn all_shape_kinds_materialize_and_paint_without_panic() {
         // materialize 不 panic，且产出 1 形状项 + 1 边项。
         let sg = materialize::run(&gg, &StyleIntent::default());
         let shapes = sg.items.iter().filter(|i| matches!(i, SceneItem::Shape { .. })).count();
-        assert_eq!(shapes, 1, "ShapeKind::{:?} 应产出 1 个形状项", kind);
+        // EndDot / DoubleCircle 双环 = 外圈 + 内圈 2 个形状；其余 1 个。
+        let expected = if matches!(kind, ShapeKind::EndDot | ShapeKind::DoubleCircle) { 2 } else { 1 };
+        assert_eq!(shapes, expected, "ShapeKind::{:?} 应产出 {expected} 个形状项", kind);
 
         // paint 不 panic，且图元树能成功构建。
         let scene = paint::run(&sg);
@@ -98,9 +100,9 @@ fn edge_with_arrow_yields_polyline_plus_marker() {
     // 形状（1）+ 带箭头边（被 Group 包裹，算 1 个节点）= 2。
     assert_eq!(scene.nodes.len(), 2, "带箭头边应被 group 包裹为 1 节点 + 1 形状节点");
 
-    // 验证 SG 里存在 ends == Arrow 的 Edge 项（materialize 已把 ArrowSpec 映射为 EdgeEnds）。
-    let has_arrow_edge = sg.items.iter().any(|i| matches!(i, SceneItem::Edge { ends, .. } if *ends == EdgeEnds::Arrow));
-    assert!(has_arrow_edge, "带箭头边应映射为 EdgeEnds::Arrow");
+    // 验证 SG 里存在「终点=Arrow、起点=None」的 Edge 项（materialize 已把 ArrowSpec 映射为 (start,end) 二元组）。
+    let has_arrow_edge = sg.items.iter().any(|i| matches!(i, SceneItem::Edge { ends, .. } if *ends == (EdgeEnds::None, EdgeEnds::Arrow)));
+    assert!(has_arrow_edge, "带箭头边应映射为 (None, Arrow) 终点标记");
 }
 
 #[test]

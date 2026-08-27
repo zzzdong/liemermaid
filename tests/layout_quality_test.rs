@@ -133,10 +133,19 @@ fn parse_svg(svg: &str) -> (Vec<Rect>, Vec<(f64, f64, f64, f64)>) {
     // lievisual 会输出一个铺满画布的背景 <rect>，需排除，避免被当作节点矩形。
     let canvas = parse_canvas_size(svg);
 
+    // 边标签白底框：新管线用 <g id="edge-label"> 包裹。当处于该 <g> 内时，
+    // 其 <rect> 是边的一部分，边从其上穿过是正常行为，不应判为"边穿过节点"。
+    let mut in_edge_label = false;
+
     for line in svg.lines() {
-        // 排除边标签白底框（class="edge-label"）：它是边的一部分，
-        // 边从其上穿过是正常行为，不应判为"边穿过节点"。
+        if line.contains(r#"<g id="edge-label">"#) {
+            in_edge_label = true;
+        } else if line.starts_with("</g>") {
+            in_edge_label = false;
+        }
+        // 排除边标签白底框：处于 edge-label <g> 内，或行内含 edge-label。
         if line.contains("<rect ")
+            && !in_edge_label
             && !line.contains("edge-label")
             && let (Some(x), Some(y), Some(w), Some(h)) = (
                 parse_attr(line, " x=\""),
