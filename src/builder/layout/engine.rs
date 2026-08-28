@@ -201,7 +201,7 @@ pub fn run(ug: &ir::Unigraph) -> Result<(Geograph, StyleIntent), String> {
         edges: gg_edges,
         containers: Vec::<GGContainer>::new(),
     };
-    route_edges(&mut gg);
+    route_edges(&mut gg, ug.direction);
 
     // —— 子图容器：据成员节点包围盒计算容器框（subgraph / 泳道）——
     gg.containers = compute_containers(&ug, &gg.nodes);

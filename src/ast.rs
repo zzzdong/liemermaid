@@ -20,7 +20,7 @@ pub struct Flowchart {
     pub subgraphs: Vec<Subgraph>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Direction {
     TB,
     TD,

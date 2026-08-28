@@ -32,7 +32,7 @@ const OFFSET_STEP: f64 = 12.0;
 const MAX_OFFSET_TRIES: usize = 8;
 
 /// 为 GG 中所有边生成正交路由。
-pub fn route_edges(gg: &mut Geograph) {
+pub fn route_edges(gg: &mut Geograph, direction: crate::ast::Direction) {
     // 节点索引
     let node_map: HashMap<&String, &GGNode> = gg.nodes.iter().map(|n| (&n.id, n)).collect();
 
@@ -62,11 +62,31 @@ pub fn route_edges(gg: &mut Geograph) {
         let (Some(s), Some(t)) = (node_map.get(&e.source), node_map.get(&e.target)) else {
             continue;
         };
-        let sp = pick_port(s.center, t.center, true);
-        let tp = pick_port(t.center, s.center, false);
+        let sp = pick_port(s.center, t.center, true, direction);
+        let tp = pick_port(t.center, s.center, false, direction);
         src_count.entry((e.source.clone(), sp)).and_modify(|c| *c += 1).or_insert(1);
         tgt_count.entry((e.target.clone(), tp)).and_modify(|c| *c += 1).or_insert(1);
     }
+    // 计算所有节点 top 的最小 y（最高节点的顶），用于 back edge 绕行在所有节点之上。
+    let all_nodes_min_y = gg
+        .nodes
+        .iter()
+        .map(|n| n.center.y - n.size.height / 2.0)
+        .fold(f64::INFINITY, f64::min);
+
+    // mutual 对（u↔v）的绕行侧分配记录：key = (source, target)，value = ±1。
+    let mut mutual_side: std::collections::HashMap<(String, String), f64> =
+        std::collections::HashMap::new();
+
+    // 预计算 mutual 对集合（u↔v 与 v↔u 同时存在）：两条相对边都走"垂直双线"。
+    let mut mutual_pairs: std::collections::HashSet<(String, String)> =
+        std::collections::HashSet::new();
+    for e in &gg.edges {
+        if gg.edges.iter().any(|o| o.source == e.target && o.target == e.source) {
+            mutual_pairs.insert((e.source.clone(), e.target.clone()));
+        }
+    }
+
     // 分配槽位并路由。
     for e in gg.edges.iter_mut() {
         let (Some(s), Some(t)) = (node_map.get(&e.source), node_map.get(&e.target)) else {
@@ -74,8 +94,8 @@ pub fn route_edges(gg: &mut Geograph) {
         };
         let s = *s;
         let t = *t;
-        let sp = pick_port(s.center, t.center, true);
-        let tp = pick_port(t.center, s.center, false);
+        let sp = pick_port(s.center, t.center, true, direction);
+        let tp = pick_port(t.center, s.center, false, direction);
         let s_total = src_count[&(e.source.clone(), sp)];
         let t_total = tgt_count[&(e.target.clone(), tp)];
         let s_i = src_idx.entry((e.source.clone(), sp)).or_insert(0);
@@ -85,11 +105,30 @@ pub fn route_edges(gg: &mut Geograph) {
         *s_i += 1;
         *t_i += 1;
 
-        // back edge 检测：source 节点在 target 节点的「下游」（TB 布局 source.y > target.y）
-        // 说明这是反向边（source→target 逆向跨越层级），走专用绕行路由避免与普通边重叠。
-        let is_back_edge = s.center.y > t.center.y;
-        let route = if is_back_edge {
-            back_edge_route(s, t, &(sp, s_slot), &(tp, t_slot))
+        // 是否属于 mutual 对。
+        let is_mutual = mutual_pairs.contains(&(e.source.clone(), e.target.clone()));
+        // back edge 检测：source 节点在主轴方向上位于 target 「下游」（逆主轴）。
+        // - TB/BT 主轴 = y：source.y > t.y 表示 source 在 target 下方（下游）。
+        // - LR/RL 主轴 = x：source.x > t.x 表示 source 在 target 右侧（下游）。
+        use crate::ast::Direction;
+        let is_back_edge = match direction {
+            // TB/TD：主轴向下，source 在 target 下方（y 更大）是下游 → back。
+            Direction::TB | Direction::TD => s.center.y > t.center.y,
+            // BT：主轴向上，source 在 target 上方（y 更小）是下游 → back。
+            Direction::BT => s.center.y < t.center.y,
+            // LR：主轴向右，source 在 target 右侧（x 更大）是下游 → back。
+            Direction::LR => s.center.x > t.center.x,
+            // RL：主轴向左，source 在 target 左侧（x 更小）是下游 → back。
+            Direction::RL => s.center.x < t.center.x,
+        };
+
+        let route = if is_mutual {
+            // mutual 对分配侧：u→v 先遇到 +1（右侧），v→u 后遇到 -1（左侧）。
+            let side = mutual_side_for(&e.source, &e.target, &mut mutual_side);
+            mutual_dual_route(s, t, side)
+        } else if is_back_edge {
+            let side = mutual_side_for(&e.source, &e.target, &mut mutual_side);
+            back_edge_route(s, t, &(sp, s_slot), &(tp, t_slot), all_nodes_min_y, side, direction)
         } else {
             match e.routing_hint {
                 crate::builder::ir::common::RoutingHint::Spline => {
@@ -103,6 +142,30 @@ pub fn route_edges(gg: &mut Geograph) {
         if e.label_text.is_some() {
             e.label_anchor = Some(e.route.midpoint());
         }
+    }
+}
+
+/// 检测 mutual 对并为每条边分配绕行侧。
+/// `side`: +1 = 从 source 右出（左绕），-1 = 从 source 左出（右绕）。
+/// mutual 对（u↔v）两条相对边：先遇到的 +1，后遇到的 -1，形成左右对称。
+fn mutual_side_for(
+    source: &String,
+    target: &String,
+    seen: &mut std::collections::HashMap<(String, String), f64>,
+) -> f64 {
+    let key = (source.clone(), target.clone());
+    if let Some(&s) = seen.get(&key) {
+        return s;
+    }
+    let reverse_key = (target.clone(), source.clone());
+    // 若反向边已分配，则本条分配相反侧。
+    if let Some(&rev) = seen.get(&reverse_key) {
+        let side = -rev;
+        seen.insert(key, side);
+        side
+    } else {
+        seen.insert(key, 1.0);
+        1.0
     }
 }
 
@@ -141,8 +204,46 @@ fn spline_route(
     r
 }
 
-/// Back edge 路由：从源节点**侧边**出发，向上（目标方向）绕行一个大幅弧线，
-/// 到目标节点**对侧边**入。避免与正向边（中间垂直）重叠，视觉上形成 U 形绕行。
+/// Mutual 对（u↔v）的双线路由：两条相对边从 source/target 的**左右两侧端口**
+/// 分别出发/进入，形成官方 mermaid 的"双出"风格——两条线都垂直（沿主轴），
+/// x 偏移 = side * off（一条偏左、一条偏右），在 source/target 之间平行分开。
+///
+/// 关键：端口点取在节点边界的水平偏移位置（而非节点中点），使两条线不穿过节点。
+fn mutual_dual_route(s: &GGNode, t: &GGNode, side: f64) -> RoutePath {
+    // 水平偏移：节点半宽的 0.4（约 24px），双线在节点宽度内平行分开。
+    let off = s.size.width.min(t.size.width) * 0.4;
+    // source 侧：side>0 → source 从底边偏右出；side<0 → source 从底边偏左出。
+    // （TB 布局下 mutual 对两条边方向相反：一条向下、一条向上。）
+    let p0 = if s.center.y < t.center.y {
+        // source 在上（forward 边，B→C）：从 source 底边出（向下）。
+        Point::new(s.center.x + side * off, s.center.y + s.size.height / 2.0)
+    } else {
+        // source 在下（back 边，C→B）：从 source 顶边出（向上）。
+        Point::new(s.center.x + side * off, s.center.y - s.size.height / 2.0)
+    };
+    let p3 = if t.center.y > s.center.y {
+        // target 在下（C）：从 target 顶边入（从上进入）。
+        Point::new(t.center.x + side * off, t.center.y - t.size.height / 2.0)
+    } else {
+        // target 在上（B）：从 target 底边入（从下进入）。
+        Point::new(t.center.x + side * off, t.center.y + t.size.height / 2.0)
+    };
+    // 轻微弧线（沿主轴小幅延伸），保持柔和视觉但不横向摆动（非 S 形）。
+    let dy = (p3.y - p0.y).abs();
+    let ext = dy * 0.3 + 10.0;
+    let p1 = Point::new(p0.x, p0.y + if p3.y >= p0.y { ext } else { -ext });
+    let p2 = Point::new(p3.x, p3.y + if p3.y >= p0.y { -ext } else { ext });
+
+    let mut r = RoutePath::new();
+    r.push(RouteSegment::CubicBezier { p0, p1, p2, p3 });
+    r
+}
+
+/// Back edge 路由：源节点**侧边**出，目标节点**对侧边**入，
+/// 控制点大幅**水平偏移**，让弧线整体在 source/target 之间的空白区域走（侧向绕行）。
+///
+/// 视觉上呈现"侧向 U 形"（类似官方 mermaid 的 back edge 双线紧贴风格），不绕到
+/// 最高节点顶部之上（避免占用过多垂直空间）。
 ///
 /// 适用：TB 布局下 source.center.y > target.center.y（source 在 target 下游）。
 fn back_edge_route(
@@ -150,29 +251,34 @@ fn back_edge_route(
     t: &GGNode,
     _s_slot: &(Port, Slot),
     _t_slot: &(Port, Slot),
+    _all_nodes_min_y: f64,
+    side: f64,
+    direction: crate::ast::Direction,
 ) -> RoutePath {
-    // 选择绕行侧：若 target 在 source 右侧则 source 走右、target 走左；反之 source 走左、target 走右。
-    // （TB 布局 source 在下方，target 在上方；水平方向决定绕哪侧。）
-    let source_right = t.center.x >= s.center.x;
-    let (sp, tp) = if source_right {
-        (Port::Right, Port::Left)
-    } else {
-        (Port::Left, Port::Right)
+    use crate::ast::Direction;
+    let (sp, tp) = match direction {
+        Direction::TB | Direction::TD => (Port::Top, Port::Bottom),
+        Direction::BT => (Port::Bottom, Port::Top),
+        Direction::LR => (Port::Right, Port::Left),
+        Direction::RL => (Port::Left, Port::Right),
     };
-    // 端口锚点（用该边在该端口的槽位分散，但 back edge 的槽位是 Bottom/Top 分配，
-    // 这里取槽位中位数近似避免越界；简单起见不分散）。
-    let p0 = port_point_at(s, sp, Slot { idx: 0, total: 1 });
-    let p3 = port_point_at(t, tp, Slot { idx: 0, total: 1 });
+    // 垂直方向的"相对双弧"：source 从顶边出（向上），target 从底边入（向下）。
+    // 控制点 x 小幅偏移（±节点半宽*0.5），让 mutual 对（u↔v）两条相对边
+    // 在 source/target 之间一左一右小幅分开，形成官方 mermaid 的"双线紧贴"风格。
+    let p0 = port_point_at(s, Port::Top, Slot { idx: 0, total: 1 });
+    let p3 = port_point_at(t, Port::Bottom, Slot { idx: 0, total: 1 });
 
-    // 绕行弧度：与 source/target 的垂直距离（跨层数）成比例，clamp 到合理范围。
-    let span = ((p3.x - p0.x).abs()).max((p3.y - p0.y).abs());
-    let arc = (span * 0.6).clamp(40.0, 140.0);
+    // 垂直跨度：source 顶到 target 底的垂直距离。
+    let dy = (p3.y - p0.y).abs();
+    // x 偏移：节点半宽的 0.5（小幅左右分开），确保两条相对边不重合但也不远离。
+    let x_off = s.size.width.max(t.size.width) * 0.5 * 0.5;
+    // y 延伸：向上绕过 target 一点（dy 的小比例），让弧线在 source/target 之间弯曲。
+    let y_ext = dy * 0.4 + 20.0;
 
-    // 控制点：源侧沿法向延伸 arc（远离节点），目标侧沿法向延伸 arc。
-    let (ox, oy) = port_normal(sp);
-    let (ix, iy) = port_normal(tp);
-    let p1 = Point::new(p0.x + ox * arc, p0.y + oy * arc);
-    let p2 = Point::new(p3.x + ix * arc, p3.y + iy * arc);
+    // 控制点：source 侧向上延伸（y 更小），target 侧向下延伸（y 更大），
+    // 且一左一右错开（side 决定 x 方向）。
+    let p1 = Point::new(p0.x + side * x_off, p0.y - y_ext);
+    let p2 = Point::new(p3.x - side * x_off, p3.y + y_ext);
 
     let mut r = RoutePath::new();
     r.push(RouteSegment::CubicBezier { p0, p1, p2, p3 });
@@ -254,20 +360,30 @@ fn orthogonal_route(
 /// 端口选择偏向**垂直方向**（dy 主导）：让 fan-out 节点的多条出边都从 Bottom/Top 出，
 /// 沿底边/顶边均匀分散，避免折线或斜向出口。仅当水平距离显著大于垂直距离（1.5x）
 /// 时才选水平端口（Left/Right）。
-fn pick_port(from: Point, toward: Point, is_source: bool) -> Port {
+/// 选端口：朝 `toward` 方向。is_source=true 表示这是起点（出端口），
+/// false 表示终点（入端口，朝向 source 方向即「反向」）。
+///
+/// 端口选择根据**布局方向**（TB/BT vs LR/RL）：
+/// - TB/BT：优先垂直端口（Top/Bottom），让 fan-out/fan-in 节点从底/顶边出边分散；
+/// - LR/RL：优先水平端口（Left/Right），让节点从侧边出边到对侧节点。
+/// 这样 LR 布局的边走水平方向（左右流动），TB 布局走垂直方向（上下流动），
+/// 不会出现 LR 图"上下端面进出"的诡异画法。
+fn pick_port(
+    from: Point,
+    toward: Point,
+    is_source: bool,
+    direction: crate::ast::Direction,
+) -> Port {
     let dx = toward.x - from.x;
     let dy = toward.y - from.y;
-    // 垂直方向优先：只要垂直距离 >= 0.3 * 水平距离，就选垂直端口（Bottom/Top）。
-    // 让 fan-out 节点的多条出边都从底边/顶边出，沿该边均匀分散。
-    let vertical_dominant = dy.abs() >= dx.abs() * 0.3;
-    if vertical_dominant {
+    use crate::ast::Direction;
+    let main_axis_vertical = matches!(direction, Direction::TB | Direction::BT);
+    if main_axis_vertical {
+        // TB/BT：垂直端口优先。
         if dy >= 0.0 { Port::Bottom } else { Port::Top }
-    } else if is_source {
-        // 源端水平主导：朝 toward 方向的边
-        if dx >= 0.0 { Port::Right } else { Port::Left }
     } else {
-        // 目标端水平主导：朝 from 反向的边（source 在 toward 的哪一侧，入口选对侧）
-        if dx >= 0.0 { Port::Left } else { Port::Right }
+        // LR/RL：水平端口优先。
+        if dx >= 0.0 { Port::Right } else { Port::Left }
     }
 }
 
@@ -513,7 +629,7 @@ mod tests {
             edges: vec![mk_edge("A", "B")],
             containers: vec![],
         };
-        route_edges(&mut gg);
+        route_edges(&mut gg, crate::ast::Direction::TB);
         let route = &gg.edges[0].route;
         // 正交折线应 >= 3 个段（含 stub + 中间拐点）
         assert!(route.len() >= 3, "正交路由段过少: {:?}", route);
@@ -543,7 +659,7 @@ mod tests {
             edges: vec![mk_edge("A", "B")],
             containers: vec![],
         };
-        route_edges(&mut gg);
+        route_edges(&mut gg, crate::ast::Direction::TB);
         let route = &gg.edges[0].route;
         // 垂直主导：A 出 Bottom 端口(0,20)，B 入 Top 端口(0,130)
         let start = route.start();
