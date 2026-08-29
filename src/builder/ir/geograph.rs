@@ -143,6 +143,10 @@ pub struct Geograph {
     pub nodes: Vec<GGNode>,
     pub edges: Vec<GGEdge>,
     pub containers: Vec<GGContainer>,
+    /// 图级标题（timeline / pie 的标题等游离文本）。
+    pub title: Option<String>,
+    /// pie 图是否显示数据值（`showData`）。
+    pub show_data: bool,
 }
 
 /// GG 节点（几何）。
@@ -156,6 +160,8 @@ pub struct GGNode {
     pub ports: ResolvedPorts,
     /// 节点标签（measure 阶段已测量），materialize 据此绘制文本。
     pub label: Option<super::common::MeasuredLabel>,
+    /// 结构化节点详情（类框 / 实体框等），None 为普通单栏节点。
+    pub detail: NodeDetail,
 }
 
 /// GG 边（已路由折线）。
@@ -176,6 +182,10 @@ pub struct GGEdge {
     pub routing_hint: RoutingHint,
     /// 线型（实线 / 虚线 / 粗线 / 不可见），materialize 据此设样式。
     pub line_kind: LineKind,
+    /// ER 关系基数（source 端, target 端），非 ER 边为 (None, None)。
+    pub cardinality: (Option<ErCardinality>, Option<ErCardinality>),
+    /// class 关系基数文本（`"1"` / `"*"` / `"many"` 等），非 class 边为 (None, None)。
+    pub cardinality_text: (Option<String>, Option<String>),
 }
 
 /// GG 容器（仅几何包围盒 + 标题候选）。
@@ -185,4 +195,6 @@ pub struct GGContainer {
     pub bounds: Rect,
     pub title: Option<String>,
     pub kind: ContainerKind,
+    /// 容器成员节点 id（供边路由避让判定：边两端均非成员时才避让该容器）。
+    pub member_ids: Vec<NodeId>,
 }

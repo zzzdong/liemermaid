@@ -177,6 +177,7 @@ mod tests {
             size_hint: SizeHint::default(),
             style_ref: StyleRef::default(),
             constraint: NodeConstraint::default(),
+            detail: NodeDetail::None,
         }
     }
 
@@ -195,6 +196,8 @@ mod tests {
             arrow: ArrowSpec { start: ArrowKind::None, end: ArrowKind::Arrow },
             line_kind: LineKind::Solid,
             repulsion: 1.0,
+            cardinality: (None, None),
+            cardinality_text: (None, None),
         }
     }
 

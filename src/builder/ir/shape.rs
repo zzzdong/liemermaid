@@ -69,4 +69,12 @@ pub enum EdgeEnds {
     Both,
     MultiCircle,
     MultiCross,
+    /// 空心三角（class 继承 `A <|-- B`）。
+    Triangle,
+    /// 实心三角（class 关联 `-->` / 依赖 `..>`）。
+    TriangleFilled,
+    /// 实心菱形（class 组合 `*--`）。
+    DiamondFilled,
+    /// 空心菱形（class 聚合 `o--`）。
+    DiamondHollow,
 }

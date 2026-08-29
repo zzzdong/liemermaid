@@ -28,6 +28,7 @@ fn gg_with(shape: ShapeKind) -> Geograph {
             right: Point::new(90.0, 50.0),
         },
         label: None,
+        detail: liemermaid::builder::ir::common::NodeDetail::None,
     };
     let edge = GGEdge {
         id: "e1".to_string(),
@@ -43,6 +44,8 @@ fn gg_with(shape: ShapeKind) -> Geograph {
         arrow: ArrowSpec { start: ArrowKind::None, end: ArrowKind::Arrow },
         routing_hint: liemermaid::builder::ir::common::RoutingHint::Orthogonal,
         line_kind: liemermaid::builder::ir::common::LineKind::Solid,
+        cardinality: (None, None),
+        cardinality_text: (None, None),
     };
     liemermaid::builder::ir::geograph::Geograph {
         size: Size::new(100.0, 100.0),
@@ -50,6 +53,8 @@ fn gg_with(shape: ShapeKind) -> Geograph {
         nodes: vec![node],
         edges: vec![edge],
         containers: vec![],
+        title: None,
+        show_data: false,
     }
 }
 

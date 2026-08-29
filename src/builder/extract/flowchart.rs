@@ -113,6 +113,7 @@ pub fn extract_flowchart(fc: &Flowchart) -> Unigraph {
             size_hint: SizeHint::ByText,
             style_ref: StyleRef::NodeDefault,
             constraint: ir::common::NodeConstraint::Free,
+            detail: ir::common::NodeDetail::None,
         });
     };
     for n in &fc.nodes {
@@ -147,6 +148,8 @@ pub fn extract_flowchart(fc: &Flowchart) -> Unigraph {
             arrow: map_arrow(&e.arrow_type),
             line_kind: map_line(&e.arrow_type),
             repulsion: 1.0,
+            cardinality: (None, None),
+            cardinality_text: (None, None),
         });
     }
 
@@ -159,6 +162,7 @@ pub fn extract_flowchart(fc: &Flowchart) -> Unigraph {
             id: format!("sub{}", i),
             title: sg.title.clone(),
             member_ids: sg.nodes.iter().map(|n| n.id.clone()).collect(),
+            kind: ir::common::ContainerKind::Subgraph,
         })
         .collect();
 
@@ -168,6 +172,7 @@ pub fn extract_flowchart(fc: &Flowchart) -> Unigraph {
         nodes,
         edges,
         subgraphs,
-        meta: ir::common::DiagramMeta { title: None },
+        sequence_rows: None,
+        meta: ir::common::DiagramMeta { title: None, show_data: false },
     }
 }

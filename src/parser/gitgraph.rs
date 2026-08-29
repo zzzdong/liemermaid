@@ -21,10 +21,10 @@ pub fn gitgraph_diagram<'i>(input: &mut &'i str) -> PResult<'i, GitGraphDiagram>
     keyword("gitGraph").parse_next(input)?;
     skip_ws_and_comments(input)?;
 
-    // 可选 `: "main"`
+    // 可选 `: "main"`（仅限本行，不可跨行吞掉下一行语句）
     if input.starts_with(':') {
         let _ = ':'.parse_next(input)?;
-        skip_ws_and_comments(input)?;
+        inline_ws(input)?;
         let _ = opt(quoted_string).parse_next(input)?;
         consume_line(input)?;
     }

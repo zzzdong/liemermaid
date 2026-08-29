@@ -20,7 +20,7 @@ impl Default for OutputConfig {
         Self {
             width: DEFAULT_WIDTH,
             height: DEFAULT_HEIGHT,
-            background: Color::new(255_f64 / 255.0, 255_f64 / 255.0, 255_f64 / 255.0, 1.0),
+            background: Color::new(255, 255, 255, 255),
         }
     }
 }

@@ -7,7 +7,7 @@
 //! 箭头标记（EdgeEnds）留 P1.3 补充（当前边仅画线，不画箭头头部）。
 
 use lievisual::geometry::{Point, Rect, Vec2};
-use lievisual::scene::{Element, FillStrokeStyle, Scene, SceneNode, Stroke};
+use lievisual::scene::{Element, Fill, FillStrokeStyle, Scene, SceneNode, Stroke};
 
 use crate::builder::ir::{
     geograph::{RoutePath, RouteSegment},
@@ -267,20 +267,36 @@ fn arrow_element(from: Point, tip: Point, ends: &EdgeEnds, stroke: &Stroke, z: i
     let px = -uy;
     let py = ux;
     let size = 8.0;
-    let style = FillStrokeStyle {
+    let hollow = FillStrokeStyle {
         fill: None,
         stroke: Some(stroke.clone()),
     };
+    let solid = FillStrokeStyle {
+        fill: Some(Fill::Solid(stroke.color)),
+        stroke: Some(stroke.clone()),
+    };
+    // 三角（空心 / 实心）：尖端在 tip，底边沿 -u 方向外扩。
+    let triangle = |f: &FillStrokeStyle| -> Vec<SceneNode> {
+        let left = Point::new(tip.x - ux * size + px * size * 0.5, tip.y - uy * size + py * size * 0.5);
+        let right = Point::new(tip.x - ux * size - px * size * 0.5, tip.y - uy * size - py * size * 0.5);
+        vec![SceneNode::new(Element::polygon(vec![left, tip, right], f.clone())).with_z(z)]
+    };
+    // 菱形（空心 / 实心）：front 沿 -u（离开端点）、back 沿 +u（进入端点）。
+    let diamond = |f: &FillStrokeStyle| -> Vec<SceneNode> {
+        let front = Point::new(tip.x - ux * size, tip.y - uy * size);
+        let back = Point::new(tip.x + ux * size, tip.y + uy * size);
+        let p1 = Point::new(tip.x + px * size * 0.7, tip.y + py * size * 0.7);
+        let p2 = Point::new(tip.x - px * size * 0.7, tip.y - py * size * 0.7);
+        vec![SceneNode::new(Element::polygon(vec![front, p1, back, p2], f.clone())).with_z(z)]
+    };
     match ends {
-        EdgeEnds::Arrow => {
-            let left = Point::new(tip.x - ux * size + px * size * 0.5, tip.y - uy * size + py * size * 0.5);
-            let right = Point::new(tip.x - ux * size - px * size * 0.5, tip.y - uy * size - py * size * 0.5);
-            let pts = vec![left, tip, right];
-            out.push(SceneNode::new(Element::polygon(pts, style)).with_z(z));
-        }
+        EdgeEnds::Arrow | EdgeEnds::Triangle => out.extend(triangle(&hollow)),
+        EdgeEnds::TriangleFilled => out.extend(triangle(&solid)),
+        EdgeEnds::DiamondFilled => out.extend(diamond(&solid)),
+        EdgeEnds::DiamondHollow => out.extend(diamond(&hollow)),
         EdgeEnds::Circle => {
             let c = Point::new(tip.x - ux * size * 0.5, tip.y - uy * size * 0.5);
-            out.push(SceneNode::new(Element::ellipse(c, Vec2::new(size * 0.4, size * 0.4), 0.0, style)).with_z(z));
+            out.push(SceneNode::new(Element::ellipse(c, Vec2::new(size * 0.4, size * 0.4), 0.0, hollow)).with_z(z));
         }
         EdgeEnds::Cross => {
             // 以 tip 为交点的两条对角线（沿/垂直边方向）。

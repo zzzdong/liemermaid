@@ -38,6 +38,9 @@ pub struct Unigraph {
     pub edges: Vec<UGEdge>,
     /// 子图（subgraph / 泳道 / 类框）成员关系：layout 据此计算容器包围盒。
     pub subgraphs: Vec<UGSubgraph>,
+    /// 时序图（Sequence 家族）的语句行序（消息 / 备注 / 分组块起止，按源码序）。
+    /// 非 sequence 家族为 None。engine 的 Sequence 布局据此推进纵向行序并算分组块几何。
+    pub sequence_rows: Option<Vec<SequenceRow>>,
     pub meta: DiagramMeta,
 }
 
@@ -49,9 +52,27 @@ impl Default for Unigraph {
             nodes: Vec::new(),
             edges: Vec::new(),
             subgraphs: Vec::new(),
+            sequence_rows: None,
             meta: DiagramMeta::default(),
         }
     }
+}
+
+/// 时序图的语句行（按源码序排列）。
+///
+/// Sequence 不是普通"图"：消息 / 备注 / 分组块构成线性语句序列，纵向行序是
+/// 布局的核心维度。此枚举在 extract 阶段产出，engine 的 Sequence 布局据此
+/// 推进 y 坐标：`BlockStart`/`BlockEnd` 成对包裹其成员消息，用于计算分组框几何。
+#[derive(Debug, Clone)]
+pub enum SequenceRow {
+    /// 一条消息边（行号由此枚举顺序决定）。
+    Message(EdgeId),
+    /// 一个备注节点（行号由此枚举顺序决定）。
+    Note(NodeId),
+    /// 分组块开始（块 id, 标签文本）。
+    BlockStart(String, String),
+    /// 分组块结束（块 id）。
+    BlockEnd(String),
 }
 
 /// 子图（subgraph）规格：容器 id / 标题 / 成员节点 id 列表。
@@ -62,6 +83,8 @@ pub struct UGSubgraph {
     pub id: String,
     pub title: Option<String>,
     pub member_ids: Vec<NodeId>,
+    /// 容器种类（flowchart subgraph / state 复合状态等，决定 materialize 样式）。
+    pub kind: ContainerKind,
 }
 
 /// UG 节点（语义拓扑，未含颜色）。
@@ -78,6 +101,8 @@ pub struct UGNode {
     pub size_hint: SizeHint,
     pub style_ref: StyleRef,
     pub constraint: NodeConstraint,
+    /// 结构化节点详情（类框 / 实体框等），None 为普通单栏节点。
+    pub detail: NodeDetail,
 }
 
 /// UG 边（语义连接，未含颜色）。
@@ -100,6 +125,10 @@ pub struct UGEdge {
     pub line_kind: LineKind,
     /// 与其他边 / 节点的排斥强度（默认 1.0）。
     pub repulsion: f64,
+    /// ER 关系基数（source 端, target 端），非 ER 边为 (None, None)。
+    pub cardinality: (Option<ErCardinality>, Option<ErCardinality>),
+    /// class 关系基数文本（`"1"` / `"*"` / `"many"` 等），非 class 边为 (None, None)。
+    pub cardinality_text: (Option<String>, Option<String>),
 }
 
 /// 边语义类别（驱动 materialize 选线型 / 箭头表）。

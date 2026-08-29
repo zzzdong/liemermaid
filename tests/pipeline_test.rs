@@ -192,5 +192,101 @@ fn flowchart_uses_correct_dimensions() {
 }
 
 // ============================================================
+// Timeline 图表测试（新管线 Linear 家族）
+// ============================================================
+
+#[test]
+fn timeline_renders_sections_and_events() {
+    let svg = render_to_svg(
+        "timeline\ntitle History\nsection Early\n1900 : Born\nsection Later\n1950 : Retire",
+        800,
+        600,
+    );
+    let text = strip_xml(&svg);
+    // 标题、section 名与事件文本都应渲染。
+    assert!(text.contains("History"), "应渲染标题 History");
+    assert!(text.contains("Early"), "应渲染 section 名 Early");
+    assert!(text.contains("Later"), "应渲染 section 名 Later");
+    assert!(text.contains("1900"), "应渲染事件 1900");
+    assert!(text.contains("Born"), "应渲染事件 Born");
+    assert!(text.contains("1950"), "应渲染事件 1950");
+    assert!(text.contains("Retire"), "应渲染事件 Retire");
+}
+
+#[test]
+fn timeline_without_title_renders() {
+    let svg = render_to_svg("timeline\nsection A\n2000 : X", 600, 400);
+    let text = strip_xml(&svg);
+    assert!(text.contains("A"), "应渲染 section 名 A");
+    assert!(text.contains("2000"), "应渲染事件 2000");
+    assert!(text.contains("X"), "应渲染事件 X");
+}
+
+// ============================================================
+// Sequence 图表测试（新管线 Sequence 家族）
+// ============================================================
+
+#[test]
+fn sequence_renders_participants_messages_and_notes() {
+    let svg = render_to_svg(
+        "sequenceDiagram\n    participant A as Alice\n    participant B as Bob\n    A->>B: hi\n    Note over A,B: shared note\n    B-->>A: ack\n",
+        800,
+        600,
+    );
+    let text = strip_xml(&svg);
+    assert!(text.contains("Alice"), "应渲染参与者 Alice（alias）");
+    assert!(text.contains("Bob"), "应渲染参与者 Bob");
+    assert!(text.contains("hi"), "应渲染消息 hi");
+    assert!(text.contains("shared note"), "应渲染备注文本");
+    assert!(text.contains("ack"), "应渲染消息 ack");
+}
+
+#[test]
+fn sequence_renders_loop_block_label() {
+    let svg = render_to_svg(
+        "sequenceDiagram\n    A->>B: x\n    loop retry\n        A->>B: again\n        B-->>A: ack\n    end\n",
+        800,
+        600,
+    );
+    let text = strip_xml(&svg);
+    assert!(text.contains("loop [retry]"), "应渲染分组块标签 loop [retry]");
+    assert!(text.contains("again"), "应渲染块内消息 again");
+    assert!(text.contains("ack"), "应渲染块内消息 ack");
+}
+
+// ============================================================
+// GitGraph 图表测试（新管线 Hierarchy 家族）
+// ============================================================
+
+#[test]
+fn gitgraph_renders_commit_ids_branches_and_dashed_lanes() {
+    let svg = render_to_svg(
+        "gitGraph:\n    commit\n    commit\n    branch develop\n    checkout develop\n    commit\n    commit\n    checkout main\n    merge develop\n    commit\n",
+        900,
+        500,
+    );
+    let text = strip_xml(&svg);
+    // commit id 标签（除 merge 外）。
+    assert!(text.contains("c0"), "应渲染 commit id c0");
+    assert!(text.contains("c1"), "应渲染 commit id c1");
+    assert!(text.contains("c2"), "应渲染 commit id c2");
+    assert!(text.contains("c3"), "应渲染 commit id c3");
+    assert!(text.contains("c5"), "应渲染 commit id c5");
+    // merge 无显式标签时不应出现默认 "merge develop" 标签（对齐官方）。
+    assert!(
+        !text.contains("merge develop"),
+        "无显式标签的 merge 不应显示默认标签"
+    );
+    // 分支标签。
+    assert!(text.contains("main"), "应渲染分支标签 main");
+    assert!(text.contains("develop"), "应渲染分支标签 develop");
+    // 分支虚线（平行状态标识）。
+    assert!(
+        svg.contains("stroke-dasharray"),
+        "分支行应有虚线标识"
+    );
+}
+
+// ============================================================
 // 渲染器功能测试
 // ============================================================
