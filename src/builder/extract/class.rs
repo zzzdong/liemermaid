@@ -39,6 +39,8 @@ fn format_member(m: &crate::ast::ClassMember) -> String {
         Some(Visibility::Package) => "~",
         None => "",
     };
+    // 官方 golden：`+String name` / `+int age` / `+eat()` / `+get() : String`
+    // —— 可见性符号与类型之间**无空格**（类型与名称之间有一个空格）。
     if m.is_method {
         match &m.type_ {
             Some(ret) => format!("{}{}() : {}", prefix, m.name, ret),
@@ -46,7 +48,7 @@ fn format_member(m: &crate::ast::ClassMember) -> String {
         }
     } else {
         match &m.type_ {
-            Some(t) => format!("{} {} {}", prefix, t, m.name),
+            Some(t) => format!("{}{} {}", prefix, t, m.name),
             None => format!("{}{}", prefix, m.name),
         }
     }
@@ -231,7 +233,7 @@ mod tests {
         let NodeDetail::Class { attrs, methods, .. } = &ug.nodes[0].detail else {
             panic!("expected Class detail");
         };
-        assert_eq!(attrs, &["# int age".to_string()]);
+        assert_eq!(attrs, &["#int age".to_string()]);
         assert!(methods.is_empty());
     }
 

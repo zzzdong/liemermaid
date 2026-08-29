@@ -14,7 +14,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ast::{State, StateDiagram},
+    ast::{State, StateDiagram, StateStmt},
     builder::ir::{
         self,
         common::{
@@ -29,10 +29,16 @@ use lievisual::geometry::Size;
 /// 状态图默认从上到下布局（无方向声明）。
 const DEFAULT_DIRECTION: crate::ast::Direction = crate::ast::Direction::TB;
 
-// 状态特殊节点固定尺寸（与旧 collect_state_nodes 一致）。
-const START_SIZE: Size = Size::new(32.0, 32.0);
-const END_SIZE: Size = Size::new(36.0, 36.0);
+// 状态特殊节点固定尺寸（对齐官方 golden）：
+// - start：`<circle class="state-start" r="7" width="14" height="14"/>` → 14×14
+// - end：外圈 + 实心内圈（官方外圈 r≈10）
+// - fork / join：细长横条
+const START_SIZE: Size = Size::new(14.0, 14.0);
+const END_SIZE: Size = Size::new(20.0, 20.0);
 const BAR_SIZE: Size = Size::new(100.0, 10.0);
+/// state 节点 padding（官方实测：如 `Idle` 文本 25.8×24 → 41.8×40，故 padding=8）。
+/// 与 flowchart 的圆角节点（padding 30/15）区分，二者同用 `ShapeKind::Rounded`。
+const STATE_PAD: f64 = 8.0;
 
 /// 节点形状 / 尺寸决策。
 fn node_meta(_id: &str, is_start: bool, is_end: bool, is_bar: bool) -> (ShapeKind, SizeHint) {
@@ -43,7 +49,10 @@ fn node_meta(_id: &str, is_start: bool, is_end: bool, is_bar: bool) -> (ShapeKin
     } else if is_bar {
         (ShapeKind::Bar, SizeHint::Fixed(BAR_SIZE))
     } else {
-        (ShapeKind::Rounded, SizeHint::ByText)
+        (
+            ShapeKind::Rounded,
+            SizeHint::Padded { pad_x: STATE_PAD, pad_y: STATE_PAD },
+        )
     }
 }
 
@@ -77,6 +86,44 @@ fn push_node(
         constraint: ir::common::NodeConstraint::Free,
         detail: ir::common::NodeDetail::None,
     });
+}
+
+/// 求出「先被转移引用、之后才被 `<<fork>>`/`<<join>>` 声明」的状态 id 集合。
+///
+/// mermaid 的状态库按源码顺序建节点：一个 id 一旦由转移创建为普通状态，后续的
+/// `<<fork>>` / `<<join>>` 声明**不会**把它改成横条
+/// （官方 `state__fork_join`：`fork_state` 是横条，`join_state` 是带标签的普通框）。
+/// 这些 id 在 extract 中降级为普通状态。
+fn transition_seen_first(sd: &StateDiagram) -> HashSet<String> {
+    let mut out = HashSet::new();
+    let mut first_is_trans: HashSet<String> = HashSet::new();
+    for stmt in &sd.order {
+        match stmt {
+            StateStmt::Decl(i) => {
+                let Some(s) = sd.states.get(*i) else { continue };
+                let id = match s {
+                    State::Simple { id, .. }
+                    | State::Composite { id, .. }
+                    | State::Fork { id }
+                    | State::Join { id } => id.as_str(),
+                    State::Start | State::End => continue,
+                };
+                // 该 id 首次出现是转移 → 声明无法覆盖类型。
+                if first_is_trans.contains(id) {
+                    out.insert(id.to_string());
+                }
+            }
+            StateStmt::Trans(i) => {
+                let Some(t) = sd.transitions.get(*i) else { continue };
+                for id in [&t.from, &t.to] {
+                    if *id != "[*]" {
+                        first_is_trans.insert(id.clone());
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 /// 提取 state 图为统一拓扑图（复合状态展开为子图容器）。
@@ -116,6 +163,7 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
         composite_entry_exit: &mut HashMap<String, (Option<String>, Option<String>)>,
         edge_counter: &mut usize,
         is_inner: bool,
+        degraded: &HashSet<String>,
     ) -> (Option<String>, Option<String>) {
         let mut entry: Option<String> = None;
         let mut exit: Option<String> = None;
@@ -131,7 +179,7 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
                     let start_idx = nodes.len();
                     let (e, x) = collect(
                         inner, nodes, edges, subgraphs, seen, labels, composite_entry_exit,
-                        edge_counter, true,
+                        edge_counter, true, degraded,
                     );
                     let member_ids: Vec<String> =
                         nodes[start_idx..].iter().map(|n| n.id.clone()).collect();
@@ -146,8 +194,18 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
                     exit = x;
                 }
                 State::Fork { id } | State::Join { id } => {
-                    let (shape, hint) = node_meta(id, false, false, true);
-                    push_node(nodes, seen, id.clone(), None, shape, hint);
+                    if degraded.contains(id) {
+                        // 官方行为：该 id 已先被转移创建为普通状态，`<<fork>>`/`<<join>>`
+                        // 声明不再生效 → 退化为带标签的普通状态框（id 作默认标签）。
+                        let (shape, hint) = node_meta(id, false, false, false);
+                        push_node(
+                            nodes, seen, id.clone(),
+                            labels.get(id).cloned().flatten(), shape, hint,
+                        );
+                    } else {
+                        let (shape, hint) = node_meta(id, false, false, true);
+                        push_node(nodes, seen, id.clone(), None, shape, hint);
+                    }
                 }
                 State::Start => {
                     push_node(
@@ -227,9 +285,10 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
         (entry, exit)
     }
 
+    let degraded = transition_seen_first(sd);
     collect(
         sd, &mut nodes, &mut edges, &mut subgraphs, &mut seen, &labels,
-        &mut composite_entry_exit, &mut edge_counter, false,
+        &mut composite_entry_exit, &mut edge_counter, false, &degraded,
     );
 
     // 保证所有被边引用的节点都存在。

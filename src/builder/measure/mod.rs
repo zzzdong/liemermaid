@@ -17,7 +17,11 @@ const MIN_NODE_HEIGHT: f64 = theme::NODE_MIN_H;
 const NODE_PAD_X: f64 = theme::NODE_PAD_X;
 const NODE_PAD_Y: f64 = theme::NODE_PAD_Y;
 const FONT_SIZE: f64 = theme::FONT_SIZE;
-const FONT_FAMILY: &str = theme::FONT_FAMILY;
+
+/// 带官方行高的文本样式（见 [`theme::text_style`]）。
+fn text_style(size: f64, align: TextAlign, baseline: TextBaseline) -> TextStyle {
+    theme::text_style(Color::BLACK, size, align, baseline)
+}
 
 /// 测量 UG 中所有节点与边标签，返回带尺寸的 UG'（结构同 UG，label 转为 Measured）。
 pub fn measure_all(mut ug: ir::Unigraph) -> ir::Unigraph {
@@ -42,9 +46,7 @@ pub fn measure_all(mut ug: ir::Unigraph) -> ir::Unigraph {
     // 边标签：measure 阶段统一测量（label_text → MeasuredLabel）。
     for e in ug.edges.iter_mut() {
         if let Some(text) = e.label_text.clone() {
-            let style = TextStyle::new(Color::BLACK, FONT_SIZE, FONT_FAMILY)
-                .with_align(TextAlign::Center)
-                .with_baseline(TextBaseline::Middle);
+            let style = text_style(FONT_SIZE, TextAlign::Center, TextBaseline::Middle);
             let layout = layout_text(&[RichSpan::new(text.clone(), style.clone())], None);
             let size = Size::new(layout.width, layout.height);
             e.label = Some(ir::common::MeasuredLabel {
@@ -76,9 +78,7 @@ fn measure_node_label(
 
     // 固定尺寸节点（state 的 start/end/bar）：直接给默认尺寸，不依赖文本。
     if let SizeHint::Fixed(fixed) = size_hint {
-        let style = TextStyle::new(Color::BLACK, FONT_SIZE, FONT_FAMILY)
-            .with_align(TextAlign::Center)
-            .with_baseline(TextBaseline::Middle);
+        let style = text_style(FONT_SIZE, TextAlign::Center, TextBaseline::Middle);
         let layout = layout_text(&[RichSpan::new(text.clone(), style.clone())], None);
         return LabelOrMeasured::Measured(MeasuredLabel {
             text: text.clone(),
@@ -88,47 +88,33 @@ fn measure_node_label(
         });
     }
 
-    let text_style = TextStyle::new(Color::BLACK, FONT_SIZE, FONT_FAMILY)
-        .with_align(TextAlign::Center)
-        .with_baseline(TextBaseline::Middle);
+    let text_style = text_style(FONT_SIZE, TextAlign::Center, TextBaseline::Middle);
     let layout = layout_text(&[RichSpan::new(text.clone(), text_style.clone())], None);
     let text_w = layout.width;
     let text_h = layout.height;
 
     // 节点尺寸由文字排版结果决定；不同形状有各自几何约束，必须在测量阶段落实。
-    let size = match shape {
-        ir::shape::ShapeKind::Circle
-        | ir::shape::ShapeKind::DoubleCircle
-        | ir::shape::ShapeKind::StartDot
-        | ir::shape::ShapeKind::EndDot => {
-            // 圆 / 双圆 / start / end：强制正方形，直径 = 文字最大维度 + 留白。
-            let pad = NODE_PAD_X;
-            let d = (text_w.max(text_h) + 2.0 * pad).max(MIN_NODE_HEIGHT);
-            Size::new(d, d)
-        }
-        ir::shape::ShapeKind::Stadium => {
-            // 跑道形：两端半圆直径 = 高。
-            let h = (text_h + 2.0 * NODE_PAD_Y).max(MIN_NODE_HEIGHT);
-            let r = h / 2.0;
-            let w = (text_w + 2.0 * r + 8.0).max(MIN_NODE_WIDTH);
-            Size::new(w, h)
-        }
-        ir::shape::ShapeKind::Cylinder => {
-            let ellipse = NODE_PAD_Y * 2.0;
-            let h = (text_h + 2.0 * NODE_PAD_Y + ellipse).max(MIN_NODE_HEIGHT);
-            let w = (text_w + 2.0 * NODE_PAD_X).max(MIN_NODE_WIDTH);
-            Size::new(w, h)
-        }
-        ir::shape::ShapeKind::Bar => Size::new(100.0, 10.0),
-        // 矩形类：按 shape 乘数 + padding。
-        _ => {
-            let (min_w, min_h, pad_x, pad_y) = shape_multiplier(shape);
-            Size::new(
-                min_w.max(text_w + 2.0 * pad_x),
-                min_h.max(text_h + 2.0 * pad_y),
-            )
-        }
+    // 显式 padding（`SizeHint::Padded`）优先，否则取形状自带 padding 表。
+    let (pad_x, pad_y, square) = match size_hint {
+        SizeHint::Padded { pad_x, pad_y } => (pad_x, pad_y, false),
+        _ => shape_padding(shape),
     };
+    let size = if shape == ir::shape::ShapeKind::Cylinder {
+        // 圆柱：顶部/底部各有一段椭圆弧（占 10% 高），正文区仍需容纳文字 + padding。
+        let w = text_w + 2.0 * pad_x;
+        let h = (text_h + 2.0 * pad_y) / 0.8;
+        Size::new(w, h)
+    } else if square {
+        // 圆 / 双圆 / 菱形：强制正方形，边长 = 文字最大维度 + 两侧 padding。
+        let side = text_w.max(text_h) + 2.0 * pad_x.max(pad_y);
+        Size::new(side, side)
+    } else {
+        Size::new(text_w + 2.0 * pad_x, text_h + 2.0 * pad_y)
+    };
+    let size = Size::new(
+        size.width.max(MIN_NODE_WIDTH),
+        size.height.max(MIN_NODE_HEIGHT),
+    );
 
     LabelOrMeasured::Measured(MeasuredLabel {
         text: text.clone(),
@@ -162,14 +148,10 @@ fn measure_structured_label(label: &LabelOrMeasured, detail: &NodeDetail) -> Lab
     let name = spec.text.clone();
 
     // 类名与成员同字号（官方 10px），颜色在 materialize 阶段注入。
-    let header_style = TextStyle::new(Color::BLACK, SMALL_FONT, FONT_FAMILY)
-        .with_align(TextAlign::Center)
-        .with_baseline(TextBaseline::Middle);
+    let header_style = text_style(SMALL_FONT, TextAlign::Center, TextBaseline::Middle);
     let header_layout = layout_text(&[RichSpan::new(name.clone(), header_style.clone())], None);
 
-    let small_style = TextStyle::new(Color::BLACK, SMALL_FONT, FONT_FAMILY)
-        .with_align(TextAlign::Left)
-        .with_baseline(TextBaseline::Top);
+    let small_style = text_style(SMALL_FONT, TextAlign::Left, TextBaseline::Top);
 
     let (width, height) = match detail {
         NodeDetail::Class { annotation, attrs, methods } => {
@@ -210,9 +192,7 @@ fn measure_structured_label(label: &LabelOrMeasured, detail: &NodeDetail) -> Lab
             let attr_h = (attrs.len() as f64 * ATTR_LINE_H).max(18.0);
 
             // 属性分 type / name 两列（官方 ER 属性继承根字号 16px）。
-            let attr_style = TextStyle::new(Color::BLACK, FONT_SIZE, FONT_FAMILY)
-                .with_align(TextAlign::Left)
-                .with_baseline(TextBaseline::Top);
+            let attr_style = text_style(FONT_SIZE, TextAlign::Left, TextBaseline::Top);
             let mut type_w = 0.0f64;
             let mut name_w = 0.0f64;
             for a in attrs {
@@ -280,54 +260,32 @@ fn measure_structured_label(label: &LabelOrMeasured, detail: &NodeDetail) -> Lab
     })
 }
 
-/// 据 ShapeKind 返回 (min_w, min_h, pad_x, pad_y)，与旧 `layout/measure.rs` 的几何约束对齐。
-fn shape_multiplier(shape: ir::shape::ShapeKind) -> (f64, f64, f64, f64) {
+/// 形状 → `(pad_x, pad_y, square)`：节点包围盒 = 文本排版盒 + 各形状 padding。
+///
+/// `square = true` 时包围盒强制正方形（圆 / 双圆 / 菱形），边长取
+/// `max(text_w, text_h) + 2 × max(pad_x, pad_y)`。
+///
+/// 数值**实测自官方 mermaid golden**（`tests/golden/golden/*.svg`），例如
+/// `flowchart__shapes` 中 `Start` → 93.80×54（文本 33.80×24），即 rect padding
+/// = (30, 15)；`Circle` → r=27.95（文本 40.89×24），即直径 = 文本宽 + 15。
+fn shape_padding(shape: ir::shape::ShapeKind) -> (f64, f64, bool) {
     use ir::shape::ShapeKind as S;
     match shape {
-        S::Diamond => (
-            MIN_NODE_WIDTH * 1.4,
-            MIN_NODE_HEIGHT * 1.4,
-            NODE_PAD_X * 1.6,
-            NODE_PAD_Y * 1.6,
-        ),
-        S::Hexagon => (
-            MIN_NODE_WIDTH * 1.3,
-            MIN_NODE_HEIGHT * 1.2,
-            NODE_PAD_X * 1.4,
-            NODE_PAD_Y * 1.2,
-        ),
-        S::Cylinder => (
-            MIN_NODE_WIDTH * 1.1,
-            MIN_NODE_HEIGHT * 1.2,
-            NODE_PAD_X * 1.2,
-            NODE_PAD_Y * 1.5,
-        ),
-        S::Stadium => (
-            MIN_NODE_WIDTH * 1.1,
-            MIN_NODE_HEIGHT,
-            NODE_PAD_X * 1.5,
-            NODE_PAD_Y,
-        ),
-        S::Asymmetric => (
-            MIN_NODE_WIDTH * 1.1,
-            MIN_NODE_HEIGHT,
-            NODE_PAD_X * 1.3,
-            NODE_PAD_Y,
-        ),
-        S::Parallelogram => (
-            MIN_NODE_WIDTH * 1.2,
-            MIN_NODE_HEIGHT,
-            NODE_PAD_X * 1.5,
-            NODE_PAD_Y,
-        ),
-        S::Trapezoid => (
-            MIN_NODE_WIDTH * 1.2,
-            MIN_NODE_HEIGHT,
-            NODE_PAD_X * 1.4,
-            NODE_PAD_Y,
-        ),
-        // state 节点（Rounded）：官方 padding 8px（如 Idle 41.8×40 = 文本 25.8 + 2×8）。
-        S::Rounded => (30.0, 30.0, 8.0, 8.0),
-        _ => (MIN_NODE_WIDTH, MIN_NODE_HEIGHT, NODE_PAD_X, NODE_PAD_Y),
+        // rect / rounded：W = text_w + 60，H = text_h + 30。
+        S::Rectangle | S::Rounded | S::QuadrantCell => (NODE_PAD_X, NODE_PAD_Y, false),
+        // 圆 / 双圆：直径 = max(text_w, text_h) + 15。
+        S::Circle | S::DoubleCircle | S::StartDot | S::EndDot => (7.5, 7.5, true),
+        // 菱形：正方形包围盒，边长 = max(text_w, text_h) + 54。
+        S::Diamond => (27.0, 27.0, true),
+        // 圆柱（Database）：正文区同 rect，另加上下椭圆弧（见调用处 /0.8）。
+        S::Cylinder => (NODE_PAD_X, NODE_PAD_Y, false),
+        // 以下各形状官方高度统一为 text_h + 15、宽度各不同（实测 golden）。
+        S::Stadium => (12.5, 7.5, false),
+        S::Subroutine => (15.5, 7.5, false),
+        S::Parallelogram | S::Trapezoid => (17.25, 7.5, false),
+        S::Asymmetric => (17.25, 7.5, false),
+        S::Hexagon => (25.0, 15.0, false),
+        S::Bar => (0.0, 0.0, false),
+        S::PieSlice => (0.0, 0.0, false),
     }
 }

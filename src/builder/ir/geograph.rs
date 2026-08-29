@@ -34,6 +34,40 @@ impl RouteSegment {
             RouteSegment::CubicBezier { p3, .. } => *p3,
         }
     }
+    /// 段近似长度（贝塞尔用控制点折线长近似）。
+    pub fn length(&self) -> f64 {
+        match self {
+            RouteSegment::Line { from, to } => {
+                let dx = to.x - from.x;
+                let dy = to.y - from.y;
+                (dx * dx + dy * dy).sqrt()
+            }
+            RouteSegment::CubicBezier { p0, p1, p2, p3 } => {
+                let d01 = ((p1.x - p0.x).powi(2) + (p1.y - p0.y).powi(2)).sqrt();
+                let d12 = ((p2.x - p1.x).powi(2) + (p2.y - p1.y).powi(2)).sqrt();
+                let d23 = ((p3.x - p2.x).powi(2) + (p3.y - p2.y).powi(2)).sqrt();
+                d01 + d12 + d23
+            }
+        }
+    }
+    /// t ∈ [0,1] 处的点。
+    pub fn point_at(&self, t: f64) -> Point {
+        match self {
+            RouteSegment::Line { from, to } => Point::new(
+                from.x + (to.x - from.x) * t,
+                from.y + (to.y - from.y) * t,
+            ),
+            RouteSegment::CubicBezier { p0, p1, p2, p3 } => {
+                let mt = 1.0 - t;
+                Point::new(
+                    mt * mt * mt * p0.x + 3.0 * mt * mt * t * p1.x + 3.0 * mt * t * t * p2.x
+                        + t * t * t * p3.x,
+                    mt * mt * mt * p0.y + 3.0 * mt * mt * t * p1.y + 3.0 * mt * t * t * p2.y
+                        + t * t * t * p3.y,
+                )
+            }
+        }
+    }
 }
 
 /// 路由路径 = 连续的路由段序列（相邻段首尾相接）。
@@ -87,20 +121,27 @@ impl RoutePath {
             RouteSegment::CubicBezier { p2, p3, .. } => norm(p2, p3),
         }
     }
-    /// 中段中点（边标签锚点）。
+    /// 中段中点（边标签锚点）：按**弧长**求路径总长的一半所在位置，
+    /// 而非中间两段的交界点（后者在带 stub 微移的多段直线上会明显偏离视觉中点）。
     pub fn midpoint(&self) -> Point {
         if self.is_empty() {
             return Point::new(0.0, 0.0);
         }
-        if self.len() == 1 {
-            let s = self.0[0].start();
-            let e = self.0[0].end();
-            return Point::new((s.x + e.x) / 2.0, (s.y + e.y) / 2.0);
+        let total: f64 = self.0.iter().map(RouteSegment::length).sum();
+        if total <= 1e-9 {
+            return self.end();
         }
-        let mid = self.len() / 2;
-        let a = self.0[mid - 1].end();
-        let b = self.0[mid].start();
-        Point::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
+        let half = total / 2.0;
+        let mut acc = 0.0;
+        for seg in &self.0 {
+            let l = seg.length();
+            if acc + l >= half {
+                let t = if l > 1e-9 { (half - acc) / l } else { 0.0 };
+                return seg.point_at(t.clamp(0.0, 1.0));
+            }
+            acc += l;
+        }
+        self.end()
     }
     /// 遍历所有锚点（线段端点 + 贝塞尔端点 p0/p3），用于碰撞/回避计算。
     pub fn anchors(&self) -> Vec<Point> {
@@ -147,6 +188,21 @@ pub struct Geograph {
     pub title: Option<String>,
     /// pie 图是否显示数据值（`showData`）。
     pub show_data: bool,
+    /// 时序图激活条（`A->>+B` / `A-->>-B`）：参与者列上的纵向矩形，非 sequence 图为空。
+    pub activations: Vec<GGActivation>,
+}
+
+/// 时序图激活条（纯几何：列 x + 纵向跨度）。
+#[derive(Debug, Clone)]
+pub struct GGActivation {
+    /// 被激活的参与者节点 id。
+    pub actor: NodeId,
+    /// 激活条中心 x（= 参与者生命线 x）。
+    pub x: f64,
+    /// 起点 y（激活发生的消息行）。
+    pub y0: f64,
+    /// 终点 y（取消激活的消息行；未显式取消时取内容底部）。
+    pub y1: f64,
 }
 
 /// GG 节点（几何）。

@@ -64,12 +64,14 @@ fn state_fork_join_bar_nodes() {
         .find(|n| n.id == "fork_state")
         .expect("fork 节点");
     assert_eq!(fork.shape, ShapeKind::Bar, "fork 应为 Bar");
+    // 官方行为：join_state 先被转移引用创建为普通状态，后续 `<<join>>` 声明不再生效
+    // （golden：join_state 是带 label 的普通圆角框，不是横条）。
     let join = ug
         .nodes
         .iter()
         .find(|n| n.id == "join_state")
         .expect("join 节点");
-    assert_eq!(join.shape, ShapeKind::Bar, "join 应为 Bar");
+    assert_eq!(join.shape, ShapeKind::Rounded, "join_state 应为普通状态框（官方行为）");
 }
 
 #[test]

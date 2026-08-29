@@ -37,11 +37,12 @@ fn pie_diagram_produces_valid_svg_structure() {
         "SVG should start with proper namespace"
     );
     assert!(svg.ends_with("</svg>\n"), "SVG should end with closing tag");
-    assert!(svg.contains("width=\"600.00\""), "SVG width should be 600");
+    // 画布语义对齐官方：`width="100%"` + 贴合内容的 viewBox（600×400 为上限）。
     assert!(
-        svg.contains("height=\"400.00\""),
-        "SVG height should be 400"
+        svg.contains(r##"width="100%""##),
+        "SVG 根节点 width 应为 100%"
     );
+    assert!(svg.contains("viewBox="), "SVG 应带 viewBox");
 
     // 2. 饼图应有 3 个 <path> 元素（3个扇区）
     let path_count = svg.matches("<path ").count();
@@ -58,10 +59,21 @@ fn pie_diagram_produces_valid_svg_structure() {
     assert!(text.contains("B"), "SVG should contain data label B");
     assert!(text.contains("C"), "SVG should contain data label C");
 
-    // 5. 百分比显示（30/100=30%, 50/100=50%, 20/100=20%）
-    assert!(text.contains("30.0%"), "SVG should show 30% for A");
-    assert!(text.contains("50.0%"), "SVG should show 50% for B");
-    assert!(text.contains("20.0%"), "SVG should show 20% for C");
+    // 5. 扇区标签为**整数百分比**（官方 golden：`40%` / `35%` / `25%`）。
+    assert!(text.contains("30%"), "SVG should show 30% for A");
+    assert!(text.contains("50%"), "SVG should show 50% for B");
+    assert!(text.contains("20%"), "SVG should show 20% for C");
+
+    // 6. 图例：官方在饼图右侧画色块 + 名称（名称不再贴在扇区外侧）。
+    assert!(
+        svg.contains("<ellipse"),
+        "官方 pie 有外圈（`<circle class=\"pieOuterCircle\">`，此处以 ellipse 输出）"
+    );
+    // 图例色块为 18×18 实心矩形（与扇区同色）。
+    assert!(
+        svg.contains("width=\"18.00\" height=\"18.00\""),
+        "图例色块应为 18×18"
+    );
 }
 
 #[test]
@@ -89,8 +101,8 @@ fn pie_diagram_with_single_sector() {
     let path_count = svg.matches("<path ").count();
     assert_eq!(path_count, 1, "Single sector pie should have 1 path");
 
-    // 单个扇区应显示 100.0%
-    assert!(text.contains("100.0%"), "Should show 100%");
+    // 单个扇区应显示 100%（官方整数百分比）
+    assert!(text.contains("100%"), "Should show 100%");
 }
 
 #[test]
@@ -180,15 +192,50 @@ fn flowchart_with_node_text() {
     assert!(text.contains("End"), "Should render node text 'End'");
 }
 
+/// 画布语义对齐官方 mermaid：`width="100%"` + `viewBox` 贴合内容，
+/// `config` 的 800×600 是**上限**而非固定画布（内容更小则不撑满）。
 #[test]
-fn flowchart_uses_correct_dimensions() {
+fn flowchart_canvas_fits_content_like_official() {
     let svg = render_to_svg("flowchart TD\nX --> Y", 800, 600);
-
-    assert!(svg.contains("width=\"800.00\""), "SVG width should be 800");
     assert!(
-        svg.contains("height=\"600.00\""),
-        "SVG height should be 600"
+        svg.contains(r##"width="100%""##),
+        "官方 SVG 根节点 width 为 100%"
     );
+    assert!(
+        svg.contains("max-width:"),
+        "官方根节点带 max-width 样式（实际渲染宽度）"
+    );
+    // 解析 viewBox，校验画布贴合内容且不超出请求上限 800×600。
+    let vb = svg
+        .split_once("viewBox=\"")
+        .and_then(|(_, s)| s.split_once('"'))
+        .map(|(s, _)| s.to_string())
+        .expect("应存在 viewBox");
+    let nums: Vec<f64> = vb
+        .split_whitespace()
+        .map(|n| n.parse().expect("viewBox 数字"))
+        .collect();
+    assert_eq!(nums.len(), 4, "viewBox 应为 4 个数: {vb}");
+    let (w, h) = (nums[2], nums[3]);
+    assert!(w > 0.0 && h > 0.0, "画布应有正尺寸: {vb}");
+    assert!(w <= 800.0 + 20.0, "画布宽不应超出请求上限: {w}");
+    assert!(h <= 600.0 + 20.0, "画布高不应超出请求上限: {h}");
+    // 两个小节点的内容远小于 800×600，画布应贴合而非撑满。
+    assert!(w < 400.0, "画布应贴合内容而非撑满: {w}");
+}
+
+/// 内容大于配置上限时**等比缩小**（绝不放大、绝不裁切）。
+#[test]
+fn oversized_content_is_scaled_down() {
+    let wide = render_to_svg("flowchart LR\nA --> B --> C --> D --> E --> F --> G --> H", 300, 300);
+    let vb = wide
+        .split_once("viewBox=\"")
+        .and_then(|(_, s)| s.split_once('"'))
+        .map(|(s, _)| s.to_string())
+        .expect("viewBox");
+    let nums: Vec<f64> = vb.split_whitespace().map(|n| n.parse().unwrap()).collect();
+    assert!(nums[2] <= 300.0 + 20.0, "超出上限应被缩小: {vb}");
+    assert!(nums[3] <= 300.0 + 20.0, "超出上限应被缩小: {vb}");
 }
 
 // ============================================================
@@ -249,9 +296,40 @@ fn sequence_renders_loop_block_label() {
         600,
     );
     let text = strip_xml(&svg);
-    assert!(text.contains("loop [retry]"), "应渲染分组块标签 loop [retry]");
+    // 官方把块标签拆成两段文本：`loop` + `[retry]`。
+    assert!(text.contains("loop"), "应渲染分组块关键字 loop");
+    assert!(text.contains("[retry]"), "应渲染分组块描述 [retry]");
     assert!(text.contains("again"), "应渲染块内消息 again");
     assert!(text.contains("ack"), "应渲染块内消息 ack");
+}
+
+#[test]
+fn sequence_renders_activation_bars() {
+    // `A->>+B` 激活目标 B，`B-->>-A` 取消激活**源** B（官方语义）。
+    let svg = render_to_svg(
+        "sequenceDiagram\n    participant A\n    participant B\n    A->>+B: start\n    B-->>-A: done\n",
+        800,
+        600,
+    );
+    // 官方激活条：`<rect fill="#EDF2AE" stroke="#666" width="10" .../>`。
+    assert!(
+        svg.contains(r##"fill="#edf2ae""##),
+        "应渲染激活条（官方 activationBkgColor #EDF2AE）"
+    );
+    // 激活条宽 10、有边框。
+    let act = svg
+        .lines()
+        .find(|l| l.contains(r##"fill="#edf2ae""##))
+        .expect("存在激活条矩形");
+    assert!(act.contains(r##"width="10.00""##), "激活条宽度应为 10: {act}");
+    // 激活条纵向跨度应大于一行（跨越 start → done 两行）。
+    let h = act
+        .split(r##"height=""##)
+        .nth(1)
+        .and_then(|s| s.split('"').next())
+        .and_then(|s| s.parse::<f64>().ok())
+        .expect("激活条高度");
+    assert!(h >= 40.0, "激活条应跨越多行: h={h}");
 }
 
 // ============================================================

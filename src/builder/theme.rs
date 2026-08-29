@@ -4,6 +4,7 @@
 //! 由各图表 builder 通过 `crate::vir::theme`（重导出）引用。
 
 use lievisual::Color;
+use lievisual::text::{TextAlign, TextBaseline, TextStyle};
 
 // ---- 基础 ----
 pub const BACKGROUND: Color = Color::new(255, 255, 255, 255);
@@ -11,23 +12,49 @@ pub const BACKGROUND: Color = Color::new(255, 255, 255, 255);
 // 测量（measure.rs）与绘制（各 builder）共用以下字体配置，保证节点尺寸一致。
 pub const FONT_FAMILY: &str = "'trebuchet ms', verdana, arial, sans-serif";
 pub const FONT_SIZE: f64 = 16.0;
+/// 官方 CSS `line-height: 1.5`（`#my-svg .label{line-height:1.5}`），
+/// 直接影响节点包围盒高度（foreignObject 高度 = 16 × 1.5 = 24）。
+pub const LINE_HEIGHT: f64 = 1.5;
 // 官方默认 radius=5
 pub const NODE_RADIUS: f64 = 5.0;
 // Stadium 为跑道形：两端半圆直径 = 节点高度（半圆半径 = 半高），故不再用固定小圆角
 pub const STADIUM_RADIUS: f64 = 5.0;
 
 // ---- 节点尺寸（测量与绘制共用单一来源，对齐官方默认主题）----
-pub const NODE_MIN_W: f64 = 120.0;
-pub const NODE_MIN_H: f64 = 60.0;
-pub const NODE_PAD_X: f64 = 22.0;
-pub const NODE_PAD_Y: f64 = 12.0;
+// 官方 mermaid 单栏节点包围盒 = 文本排版盒 + 各形状 padding（实测 golden）：
+//   rect / rounded：W = text_w + 60，H = text_h + 30（如 "Start" → 93.8×54）。
+//   故基准 padding 为 PAD_X=30 / PAD_Y=15；**无 120×60 最小尺寸**（官方节点随文本收缩）。
+pub const NODE_PAD_X: f64 = 30.0;
+pub const NODE_PAD_Y: f64 = 15.0;
+/// 节点尺寸的绝对下限（仅防止退化成 0，远小于官方默认，不干预正常排版）。
+pub const NODE_MIN_W: f64 = 16.0;
+pub const NODE_MIN_H: f64 = 16.0;
 
 // ---- 连线通用（对齐 mermaid 默认主题）----
 pub const EDGE_COLOR: Color = Color::new(51, 51, 51, 255); // #333333
-// 官方 flowchart 连线更细（约 1.5px），原 2.0 视觉偏粗。
-pub const EDGE_WIDTH: f64 = 1.5;
+/// 官方 `.edge-thickness-normal{stroke-width:1px}`。
+pub const EDGE_WIDTH: f64 = 1.0;
+/// 官方 `.edge-thickness-thick{stroke-width:3.5px}`（`==>` 粗线）。
+pub const EDGE_WIDTH_THICK: f64 = 3.5;
 // 官方节点文本颜色（CSS: .nodeLabel{color:#131300}），非 #333。
 pub const TEXT_COLOR: Color = Color::new(19, 19, 0, 255); // #131300
+
+/// 带官方行高（`line-height: 1.5`）的文本样式。
+///
+/// 官方 mermaid 的 `<foreignObject>` 高度 = `font-size × 1.5`（16px → 24px），
+/// 直接决定节点包围盒高度。不设行高时 lievisual 返回字体固有行高（≈18.6px），
+/// 节点会比官方矮约 5px。**measure 与 materialize 必须共用**，否则文本垂直位置会偏。
+pub fn text_style(
+    color: Color,
+    size: f64,
+    align: TextAlign,
+    baseline: TextBaseline,
+) -> TextStyle {
+    TextStyle::new(color, size, FONT_FAMILY)
+        .with_align(align)
+        .with_baseline(baseline)
+        .with_line_height(size * LINE_HEIGHT)
+}
 
 // ==================== Flowchart（对齐 mermaid 默认主题）====================
 pub mod flowchart {
@@ -51,6 +78,10 @@ pub mod state {
     pub const EDGE: Color = super::EDGE_COLOR;
     pub const START_FILL: Color = Color::new(236, 236, 255, 255); // #ECECFF
     pub const END_STROKE: Color = Color::new(147, 112, 219, 255); // #9370DB
+    /// 官方 state 特殊节点（start 实心圆 / fork-join 横条）颜色：
+    /// `.node circle.state-start{fill:#333333;stroke:#333333}`、
+    /// `.node .fork-join{fill:#333333;stroke:#333333}`——深色，非紫色。
+    pub const SPECIAL: Color = Color::new(51, 51, 51, 255); // #333333
 }
 
 // ==================== Class（对齐 mermaid 默认主题）====================
@@ -71,20 +102,30 @@ pub mod class {
 // ==================== Sequence（对齐 mermaid 默认主题）====================
 pub mod sequence {
     use super::Color;
-    // 官方默认主题：actorBkg=primaryColor=#ECECFF，actorBorder=nodeBorder=#9370DB
-    pub const ACTOR_FILL: Color = Color::new(236, 236, 255, 255); // #ECECFF
-    pub const ACTOR_STROKE: Color = Color::new(147, 112, 219, 255); // #9370DB
+    // 官方 golden：`<rect fill="#eaeaea" stroke="#666" rx="3" ry="3" class="actor">`
+    pub const ACTOR_FILL: Color = Color::new(234, 234, 234, 255); // #eaeaea
+    pub const ACTOR_STROKE: Color = Color::new(102, 102, 102, 255); // #666
+    pub const ACTOR_RADIUS: f64 = 3.0;
     pub const FILL: Color = Color::new(236, 236, 255, 255); // #ECECFF
     pub const STROKE: Color = Color::new(147, 112, 219, 255); // #9370DB
-    pub const TEXT: Color = super::TEXT_COLOR;
+    // 官方 `.messageText{fill:#333;stroke:none}`（消息/备注文本用 #333，非节点标签的 #131300）。
+    pub const TEXT: Color = Color::new(51, 51, 51, 255); // #333
+    // 官方 `.actor>tspan{fill:black}`（参与者盒内名字用纯黑）。
+    pub const ACTOR_TEXT: Color = Color::new(0, 0, 0, 255); // #000
     pub const EDGE: Color = super::EDGE_COLOR;
-    pub const LIFELINE: Color = Color::new(153, 153, 153, 255); // #999 官方 lifeline 灰
-    // 官方 activationBkgColor=#f4f4f4（浅灰填充）/ activationBorderColor=#666（深灰描边）
-    pub const ACTIVATION_FILL: Color = Color::new(244, 244, 244, 255); // #f4f4f4
-    pub const ACTIVATION_STROKE: Color =
-        Color::new(102, 102, 102, 255); // #666
+    // 官方 golden：`<line class="actor-line" stroke-width="0.5px" stroke="#999"/>`（细实线，非虚线）
+    pub const LIFELINE: Color = Color::new(153, 153, 153, 255); // #999
+    pub const LIFELINE_WIDTH: f64 = 0.5;
+    /// 官方 golden：消息线 `stroke-width="2"`。
+    pub const MESSAGE_WIDTH: f64 = 2.0;
+    /// 官方虚线消息 `style="stroke-dasharray: 3, 3;"`。
+    pub const MESSAGE_DASH: [f64; 2] = [3.0, 3.0];
+    // 官方 golden：`<rect fill="#EDF2AE" stroke="#666" width="10" class="activation0"/>`
+    pub const ACTIVATION_FILL: Color = Color::new(237, 242, 174, 255); // #EDF2AE
+    pub const ACTIVATION_STROKE: Color = Color::new(102, 102, 102, 255); // #666
+    pub const ACTIVATION_WIDTH: f64 = 10.0;
     pub const NOTE_FILL: Color = Color::new(237, 242, 174, 255); // #EDF2AE 官方 noteBkgColor
-    pub const NOTE_STROKE: Color = Color::new(147, 112, 219, 255); // #9370DB
+    pub const NOTE_STROKE: Color = Color::new(102, 102, 102, 255); // #666
     pub const BLOCK_FILL: Color = Color::new(236, 236, 255, 255); // #ECECFF
     pub const BLOCK_STROKE: Color = Color::new(147, 112, 219, 255); // #9370DB
     pub const BLOCK_TEXT: Color = Color::new(51, 51, 51, 255); // #333333
@@ -124,15 +165,18 @@ pub mod timeline {
         Color::new(230, 230, 250, 255), // #E6E6FA 薰衣草
     ];
 
-    // 布局尺寸（测量与绘制共用单一来源）
+    // 布局尺寸（测量与绘制共用单一来源）。
+    // 官方 timeline 布局（实测 golden）：时间轴把「时间点（task）」和「事件（event）」隔开——
+    // 顶部 section 标题块、下方近轴处时间点块（中心距轴约 85）、轴下方事件块（首个中心距轴约 107）。
     pub const BLOCK_W: f64 = 100.0;
     pub const BLOCK_H: f64 = 44.0;
     pub const BLOCK_RX: f64 = 6.0;
     pub const DOT_R: f64 = 7.0;
     pub const TITLE_Y: f64 = 25.0; // 标题 Y 位置
     pub const LINE_Y: f64 = 130.0; // 时间线 Y 位置（从画布顶部计）
-    pub const SECTION_DY: f64 = 60.0; // section 块在时间线上方的距离
-    pub const EVENT_DY: f64 = 75.0; // event 块在时间线下方首个位置的距离
+    pub const SECTION_DY: f64 = 60.0; // section 标题块在时间点块上方的距离
+    pub const TASK_DY: f64 = 85.0; // 时间点块中心在时间轴上方的距离
+    pub const EVENT_DY: f64 = 107.0; // 事件块中心在时间线下方首个位置的距离
     pub const EVENT_GAP: f64 = 15.0; // 同列多个 event 块之间的间距
     pub const LINE_WIDTH: f64 = 2.5;
     pub const BLOCK_STROKE_W: f64 = 1.5;
@@ -184,6 +228,23 @@ pub mod gitgraph {
 // {h,l}) 派生（khroma 同款算法）。下方 12 色为算出的确切值。
 pub mod pie {
     use super::Color;
+    /// 官方 golden：扇区路径半径 185，外圈 `<circle r="186" class="pieOuterCircle"/>`。
+    pub const RADIUS: f64 = 185.0;
+    pub const OUTER_RADIUS: f64 = 186.0;
+    pub const OUTER_STROKE: Color = Color::new(0, 0, 0, 255); // 官方 `.pieOuterCircle{stroke:black}`
+    pub const OUTER_STROKE_WIDTH: f64 = 2.0;
+    /// 扇区百分比标签所在半径（官方实测 = 0.75 × 半径）。
+    pub const LABEL_RADIUS_RATIO: f64 = 0.75;
+    /// 图例色块尺寸与排版（官方 `<rect width="18" height="18"/>` + `<text x="22">`）。
+    pub const LEGEND_SWATCH: f64 = 18.0;
+    pub const LEGEND_TEXT_DX: f64 = 22.0;
+    pub const LEGEND_ROW_H: f64 = 22.0;
+    /// 图例左边缘相对圆心的 x 偏移（官方 = 半径 + 31）。
+    pub const LEGEND_DX: f64 = 31.0;
+    /// 标题基线相对圆心的 y 偏移（官方 `<text x="0" y="-200" class="pieTitleText">`）。
+    pub const TITLE_DY: f64 = 200.0;
+    pub const TITLE_FONT: f64 = 24.0;
+    pub const LABEL_FONT: f64 = 16.0;
     pub const COLORS: [Color; 12] = [
         Color::new(236, 236, 255, 255), // pie1 = primaryColor #ECECFF
         Color::new(255, 255, 222, 255),           // pie2 = secondaryColor #ffffde

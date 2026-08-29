@@ -1368,6 +1368,7 @@ mod tests {
             containers: vec![],
             title: None,
             show_data: false,
+            activations: vec![],
         };
         route_edges(&mut gg, Direction::TB, &[]);
 
@@ -1427,6 +1428,7 @@ mod tests {
             containers: vec![],
             title: None,
             show_data: false,
+            activations: vec![],
         };
         route_edges(&mut gg, crate::ast::Direction::TB, &[]);
         let route = &gg.edges[0].route;
@@ -1459,6 +1461,7 @@ mod tests {
             containers: vec![],
             title: None,
             show_data: false,
+            activations: vec![],
         };
         route_edges(&mut gg, crate::ast::Direction::TB, &[]);
         let route = &gg.edges[0].route;
@@ -1481,6 +1484,7 @@ mod tests {
             containers: vec![],
             title: None,
             show_data: false,
+            activations: vec![],
         };
         route_edges(&mut gg, crate::ast::Direction::TB, &[]);
         let route = &gg.edges[0].route;
@@ -1509,6 +1513,7 @@ mod tests {
             containers: vec![],
             title: None,
             show_data: false,
+            activations: vec![],
         };
         gg.edges[0].routing_hint = crate::builder::ir::common::RoutingHint::Spline;
         gg.edges[1].routing_hint = crate::builder::ir::common::RoutingHint::Spline;
@@ -1558,6 +1563,7 @@ mod tests {
             containers: vec![],
             title: None,
             show_data: false,
+            activations: vec![],
         };
         gg.edges[0].routing_hint = crate::builder::ir::common::RoutingHint::Spline;
         route_edges(&mut gg, Direction::TB, &[container]);
@@ -1593,6 +1599,7 @@ mod tests {
             containers: vec![],
             title: None,
             show_data: false,
+            activations: vec![],
         };
         gg.edges[0].routing_hint = crate::builder::ir::common::RoutingHint::Spline;
         route_edges(&mut gg, Direction::TB, &[container]);
@@ -1619,6 +1626,7 @@ mod tests {
             containers: vec![],
             title: None,
             show_data: false,
+            activations: vec![],
         };
         route_edges(&mut gg, Direction::TB, &[]);
         // 收集所有长垂直主干段（stub 长 18 < 40，只捕获主干）。

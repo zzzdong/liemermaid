@@ -22,8 +22,11 @@ use crate::builder::layout::directed::sugiyama_layers;
 use crate::builder::layout::route::route_edges;
 use crate::builder::theme;
 
-const LAYER_GAP: f64 = 56.0;
-const NODE_GAP: f64 = 48.0;
+/// 层间（主轴）间距，对齐官方 mermaid 的 `rankSpacing: 50`
+/// （golden 实测：`flowchart__chain` 节点中心 y = 35 / 139 / 243，间隔 104 = 节点高 54 + 50）。
+const LAYER_GAP: f64 = 50.0;
+/// 同层节点间距，对齐官方 mermaid 的 `nodeSpacing: 50`。
+const NODE_GAP: f64 = 50.0;
 /// 当相邻两层之间存在带标签的边时，在层间距上额外预留的空间
 /// （标签行高 + 白底上下留白），避免标签与节点重叠。
 const EDGE_LABEL_GAP: f64 = 28.0;
@@ -228,15 +231,17 @@ fn linear_centers(ug: &ir::Unigraph, sizes: &HashMap<NodeId, Size>) -> HashMap<N
 }
 
 // ==================== Sequence（泳道 + 消息时序）====================
-// 布局常量对齐旧 `render/sequence.rs` 的几何（参与者盒 / 列距 / 行距 / 块）。
-const SEQ_BOX_H: f64 = 40.0;
-const SEQ_BOX_MIN_W: f64 = 80.0;
+// 布局常量对齐官方 mermaid golden（`sequence__activation`）：
+// 参与者盒 150×65（`minActorWidth` / `actorMargin=50` 使列中心相距 200），
+// 首条消息距盒底 46，消息行距 46（golden 行 y = 111 / 157 / 201 / 247）。
+const SEQ_BOX_H: f64 = 65.0;
+const SEQ_BOX_MIN_W: f64 = 150.0;
 const SEQ_PAD_X: f64 = 16.0;
-const SEQ_COL_GAP: f64 = 140.0;
-const SEQ_MSG_SPACING: f64 = 50.0;
+const SEQ_COL_GAP: f64 = 50.0; // actorMargin
+const SEQ_MSG_SPACING: f64 = 46.0;
 const SEQ_NOTE_H: f64 = 36.0;
 const SEQ_NOTE_GAP: f64 = 14.0;
-const SEQ_ROW_GAP: f64 = 30.0; // 首行距参与者盒底
+const SEQ_ROW_GAP: f64 = 46.0; // 首行距参与者盒底
 const SEQ_BLOCK_LABEL_H: f64 = 24.0;
 const SEQ_BLOCK_PAD: f64 = 10.0;
 const SEQ_BLOCK_INDENT: f64 = 24.0;
@@ -298,7 +303,12 @@ fn sequence_geometry(
     ug: &ir::Unigraph,
     sizes: &HashMap<NodeId, Size>,
     labels: &HashMap<NodeId, ir::common::MeasuredLabel>,
-) -> (Vec<GGNode>, Vec<GGEdge>, Vec<GGContainer>) {
+) -> (
+    Vec<GGNode>,
+    Vec<GGEdge>,
+    Vec<GGContainer>,
+    Vec<ir::geograph::GGActivation>,
+) {
     use ir::unigraph::SequenceRow;
 
     // —— 参与者列 ——
@@ -329,6 +339,8 @@ fn sequence_geometry(
     let mut cur_y = box_bottom + SEQ_ROW_GAP;
     // 分组块几何（id, label, depth, y_top, y_bot）。
     let mut block_geo: Vec<(String, String, usize, f64, f64)> = Vec::new();
+    // 激活跨度（actor, y0, y1），由下方语句行循环产出（块内必然赋值）。
+    let act_spans_out: Vec<(String, f64, f64)>;
     {
         struct Frame {
             id: String,
@@ -337,15 +349,32 @@ fn sequence_geometry(
             top: f64,
         }
         let mut stack: Vec<Frame> = Vec::new();
+        // 激活条：actor → 已开始但未结束的起点 y 栈（支持嵌套激活）。
+        let mut open_act: HashMap<&str, Vec<f64>> = HashMap::new();
+        // 已闭合的激活跨度 (actor, y0, y1)。
+        let mut act_spans: Vec<(String, f64, f64)> = Vec::new();
+        // 上一行的起始 y（`Activation` 行不占行高，起点取所属消息行的 y）。
+        let mut prev_y = cur_y;
         for row in &rows {
             match row {
                 SequenceRow::Message(eid) => {
                     row_y.insert(eid.as_str(), cur_y);
+                    prev_y = cur_y;
                     cur_y += SEQ_MSG_SPACING;
                 }
                 SequenceRow::Note(nid) => {
                     row_y.insert(nid.as_str(), cur_y);
+                    prev_y = cur_y;
                     cur_y += SEQ_NOTE_H + SEQ_NOTE_GAP;
+                }
+                SequenceRow::Activation { actor, on } => {
+                    if *on {
+                        open_act.entry(actor.as_str()).or_default().push(prev_y);
+                    } else if let Some(starts) = open_act.get_mut(actor.as_str())
+                        && let Some(y0) = starts.pop()
+                    {
+                        act_spans.push((actor.clone(), y0, prev_y));
+                    }
                 }
                 SequenceRow::BlockStart(id, label) => {
                     stack.push(Frame {
@@ -354,6 +383,7 @@ fn sequence_geometry(
                         depth: stack.len(),
                         top: cur_y,
                     });
+                    prev_y = cur_y;
                     cur_y += SEQ_BLOCK_LABEL_H;
                 }
                 SequenceRow::BlockEnd(_) => {
@@ -361,9 +391,17 @@ fn sequence_geometry(
                         cur_y += SEQ_BLOCK_PAD;
                         block_geo.push((f.id, f.label, f.depth, f.top, cur_y));
                     }
+                    prev_y = cur_y;
                 }
             }
         }
+        // 未显式取消的激活延伸到内容底部。
+        for (actor, starts) in open_act {
+            for y0 in starts {
+                act_spans.push((actor.to_string(), y0, cur_y));
+            }
+        }
+        act_spans_out = act_spans;
     }
     let content_bottom = cur_y;
 
@@ -470,8 +508,22 @@ fn sequence_geometry(
         });
     }
 
+    // —— 激活条：列 x + 纵向跨度 ——
+    let mut activations: Vec<ir::geograph::GGActivation> = Vec::new();
+    for (actor, y0, y1) in act_spans_out {
+        let Some(&ci) = col_of.get(actor.as_str()) else {
+            continue;
+        };
+        activations.push(ir::geograph::GGActivation {
+            actor,
+            x: col_centers[ci],
+            y0,
+            y1,
+        });
+    }
+
     let _ = content_bottom; // 生命线底端由 materialize 从边几何推导
-    (gg_nodes, gg_edges, gg_containers)
+    (gg_nodes, gg_edges, gg_containers, activations)
 }
 
 // ==================== Hierarchy（git 分支列）====================
@@ -573,14 +625,18 @@ pub fn run(ug: &ir::Unigraph) -> Result<(Geograph, StyleIntent), String> {
     let gg_nodes;
     let gg_edges;
     let containers;
+    let activations;
     let mut needs_routing = true;
     if ug.family == ir::unigraph::GraphFamily::Sequence {
-        (gg_nodes, gg_edges, containers) = sequence_geometry(ug, &sizes, &labels);
+        (gg_nodes, gg_edges, containers, activations) =
+            sequence_geometry(ug, &sizes, &labels);
         needs_routing = false;
     } else if ug.family == ir::unigraph::GraphFamily::Hierarchy {
+        activations = Vec::new();
         (gg_nodes, gg_edges, containers) = hierarchy_geometry(ug);
         needs_routing = false;
     } else {
+        activations = Vec::new();
         let centers = if ug.family == ir::unigraph::GraphFamily::Linear {
             linear_centers(ug, &sizes)
         } else if ug.family == ir::unigraph::GraphFamily::Radial {
@@ -661,6 +717,7 @@ pub fn run(ug: &ir::Unigraph) -> Result<(Geograph, StyleIntent), String> {
         containers: Vec::<GGContainer>::new(),
         title: ug.meta.title.clone(),
         show_data: ug.meta.show_data,
+        activations,
     };
     if needs_routing {
         // 正交/样条边路由（节点 + 容器回避）：容器包围盒仅依赖节点几何，

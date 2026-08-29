@@ -73,6 +73,11 @@ pub enum SequenceRow {
     BlockStart(String, String),
     /// 分组块结束（块 id）。
     BlockEnd(String),
+    /// 激活标记（`A->>+B` 激活 B / `A-->>-B` 取消激活 B）。
+    ///
+    /// 紧跟在其所属的 [`SequenceRow::Message`] 之后，纵向起点 = 该消息行 y；
+    /// engine 据此算出激活条的 y 跨度（`Geograph::activations`）。
+    Activation { actor: NodeId, on: bool },
 }
 
 /// 子图（subgraph）规格：容器 id / 标题 / 成员节点 id 列表。

@@ -290,8 +290,11 @@ fn arrow_element(from: Point, tip: Point, ends: &EdgeEnds, stroke: &Stroke, z: i
         vec![SceneNode::new(Element::polygon(vec![front, p1, back, p2], f.clone())).with_z(z)]
     };
     match ends {
-        EdgeEnds::Arrow | EdgeEnds::Triangle => out.extend(triangle(&hollow)),
-        EdgeEnds::TriangleFilled => out.extend(triangle(&solid)),
+        // 官方 flowchart / state 箭头为**实心**（`.arrowheadPath{fill:#333333}`，
+        // marker path `M 0 0 L 10 5 L 0 10 z` 闭合填充）；class 继承的空心三角
+        // 才是 `fill:none`。
+        EdgeEnds::Arrow | EdgeEnds::TriangleFilled => out.extend(triangle(&solid)),
+        EdgeEnds::Triangle => out.extend(triangle(&hollow)),
         EdgeEnds::DiamondFilled => out.extend(diamond(&solid)),
         EdgeEnds::DiamondHollow => out.extend(diamond(&hollow)),
         EdgeEnds::Circle => {

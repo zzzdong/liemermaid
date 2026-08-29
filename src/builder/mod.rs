@@ -33,9 +33,12 @@ pub fn build_diagram_with_config(
         .map_err(|e| crate::error::DiagramError::RenderError(format!("layout failed: {e}")))?;
     let sg = materialize::run(&gg, &style);
     let scene = paint::run(&sg);
-    let mut out = lievisual::Scene::new(config.width, config.height);
+    // 画布贴合内容（官方 mermaid 语义：`config` 是上限而非固定画布），
+    // 具体尺寸由 fit_to_canvas 据内容包围盒算出。
+    let (nodes, w, h) = fit_to_canvas(scene.nodes, config);
+    let mut out = lievisual::Scene::new(w, h);
     out.background = config.background;
-    out.nodes.extend(fit_to_canvas(scene.nodes, config));
+    out.nodes.extend(nodes);
     Ok(out)
 }
 
@@ -72,6 +75,14 @@ fn compute_bbox(elements: &[SceneNode]) -> Option<(f64, f64, f64, f64)> {
                 expand!(rect.max_x(), rect.max_y());
             }
             Element::Circle { center, radius, .. } => {
+                expand!(center.x - radius, center.y - radius);
+                expand!(center.x + radius, center.y + radius);
+            }
+            Element::Ellipse { center, radii, .. } => {
+                expand!(center.x - radii.x, center.y - radii.y);
+                expand!(center.x + radii.x, center.y + radii.y);
+            }
+            Element::Pie { center, radius, .. } => {
                 expand!(center.x - radius, center.y - radius);
                 expand!(center.x + radius, center.y + radius);
             }
@@ -146,40 +157,52 @@ fn compute_bbox(elements: &[SceneNode]) -> Option<(f64, f64, f64, f64)> {
     }
 }
 
-/// 将内容居中适配到画布：
-/// 1. 计算所有元素的外包矩形
-/// 2. 若内容超出可用空间（画布 - 2×margin），按比例缩小
-/// 3. 用 Group + transform（translate + scale）居中
-fn fit_to_canvas(elements: Vec<SceneNode>, config: &OutputConfig) -> Vec<SceneNode> {
-    let Some((x0, y0, x1, y1)) = compute_bbox(&elements) else {
-        return elements;
-    };
-    let content_w = x1 - x0;
-    let content_h = y1 - y0;
-    let margin = 40.0;
-    let avail_w = config.width - 2.0 * margin;
-    let avail_h = config.height - 2.0 * margin;
+/// 画布边距（内容外留白，对应官方 mermaid 的 `diagramPadding` 量级）。
+const CANVAS_MARGIN: f64 = 8.0;
 
-    // 计算缩放比例（绝不放大）
+/// 将内容适配到画布，**画布尺寸贴合内容**（对齐官方 mermaid）：
+/// 官方输出 `width="100%"` + `viewBox=内容包围盒`，不留大片空白；
+/// 因此这里把 `config.width/height` 当作**上限**（内容超出才等比缩小，绝不放大），
+/// 画布最终尺寸 = 缩放后内容 + 2×`CANVAS_MARGIN`。
+///
+/// 返回（适配后的节点, 画布宽, 画布高）。
+fn fit_to_canvas(
+    elements: Vec<SceneNode>,
+    config: &OutputConfig,
+) -> (Vec<SceneNode>, f64, f64) {
+    let Some((x0, y0, x1, y1)) = compute_bbox(&elements) else {
+        return (elements, config.width, config.height);
+    };
+    let content_w = (x1 - x0).max(1.0);
+    let content_h = (y1 - y0).max(1.0);
+    let avail_w = config.width - 2.0 * CANVAS_MARGIN;
+    let avail_h = config.height - 2.0 * CANVAS_MARGIN;
+
+    // 计算缩放比例（绝不放大）：配置尺寸是**上限**而非固定画布。
     let scale = (avail_w / content_w).min(avail_h / content_h).min(1.0);
 
-    // 缩放后的内容尺寸
-    let scaled_w = content_w * scale;
-    let scaled_h = content_h * scale;
+    // 画布贴合内容（仅留边距），不再按 config 撑满。
+    let canvas_w = content_w * scale + 2.0 * CANVAS_MARGIN;
+    let canvas_h = content_h * scale + 2.0 * CANVAS_MARGIN;
 
-    // 居中偏移量
-    let offset_x = ((config.width - scaled_w) / 2.0) - x0 * scale;
-    let offset_y = ((config.height - scaled_h) / 2.0) - y0 * scale;
+    // 把内容外包左上角平移到 (margin, margin)
+    let offset_x = CANVAS_MARGIN - x0 * scale;
+    let offset_y = CANVAS_MARGIN - y0 * scale;
 
     if offset_x.abs() < 0.5 && offset_y.abs() < 0.5 && (scale - 1.0).abs() < 0.001 {
-        return elements;
+        // 内容已在原点附近：仅平移到边距即可，无需 Group 包裹。
+        return (elements, canvas_w, canvas_h);
     }
 
     let transform = Transform::translate(offset_x, offset_y).then(&Transform::scale(scale));
 
-    vec![
-        SceneNode::new(Element::Group { children: elements })
-            .with_z(0)
-            .with_transform(transform),
-    ]
+    (
+        vec![
+            SceneNode::new(Element::Group { children: elements })
+                .with_z(0)
+                .with_transform(transform),
+        ],
+        canvas_w,
+        canvas_h,
+    )
 }

@@ -244,8 +244,28 @@ pub enum RelationKind {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StateDiagram {
+    #[serde(default)]
     pub states: Vec<State>,
+    #[serde(default)]
     pub transitions: Vec<Transition>,
+    /// 语句在源码中的**交错顺序**（`states` / `transitions` 的下标序列）。
+    ///
+    /// mermaid 的状态库按源码顺序建节点：若某个 id **先被转移引用**、之后才出现
+    /// `state X <<fork>>` 声明，则它已经是一个普通状态，类型声明不会覆盖它
+    /// （官方 `state__fork_join` 中 `fork_state` 画成横条、`join_state` 却是带标签的
+    /// 普通状态框，原因就在于后者先被 `State2 --> join_state` 引用）。
+    /// extract 据此决定是否把 `<<fork>>`/`<<join>>` 降级为普通状态。
+    #[serde(default)]
+    pub order: Vec<StateStmt>,
+}
+
+/// [`StateDiagram::order`] 的一项：指向 `states` 或 `transitions` 的下标。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StateStmt {
+    /// 状态声明（`states[i]`）。
+    Decl(usize),
+    /// 转移（`transitions[i]`）。
+    Trans(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

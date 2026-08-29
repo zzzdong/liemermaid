@@ -122,17 +122,15 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
         if let Some(title) = &c.title
             && !title.is_empty()
         {
+            let title_style =
+                theme::text_style(theme::TEXT_COLOR, theme::FONT_SIZE, title_align, TextBaseline::Middle);
             items.push(SceneItem::Label {
                 text: vec![lievisual::text::RichSpan::new(
                     title.clone(),
-                    TextStyle::new(theme::TEXT_COLOR, theme::FONT_SIZE, theme::FONT_FAMILY)
-                        .with_align(title_align)
-                        .with_baseline(TextBaseline::Middle),
+                    title_style.clone(),
                 )],
                 position: title_pos,
-                style: TextStyle::new(theme::TEXT_COLOR, theme::FONT_SIZE, theme::FONT_FAMILY)
-                    .with_align(title_align)
-                    .with_baseline(TextBaseline::Middle),
+                style: title_style,
                 anchor: ir::scenegraph::Anchor::Left,
                 z: 0,
             });
@@ -219,13 +217,12 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
             items.push(SceneItem::Label {
                 text: label.spans.clone(),
                 position: n.center,
-                style: TextStyle::new(
+                style: theme::text_style(
                     theme::flowchart::TEXT,
                     theme::FONT_SIZE,
-                    theme::FONT_FAMILY,
-                )
-                .with_align(TextAlign::Center)
-                .with_baseline(TextBaseline::Middle),
+                    TextAlign::Center,
+                    TextBaseline::Middle,
+                ),
                 anchor: ir::scenegraph::Anchor::Center,
                 z: 2,
             });
@@ -285,13 +282,12 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
         if let (Some(text), Some(anchor)) = (&e.label_text, &e.label_anchor)
             && !text.is_empty()
         {
-            let ts = TextStyle::new(
+            let ts = theme::text_style(
                 theme::flowchart::TEXT,
                 theme::FONT_SIZE,
-                theme::FONT_FAMILY,
-            )
-            .with_align(TextAlign::Center)
-            .with_baseline(TextBaseline::Middle);
+                TextAlign::Center,
+                TextBaseline::Middle,
+            );
             let layout = lievisual::text::layout_text(
                 &[lievisual::text::RichSpan::new(text.clone(), ts.clone())],
                 None,
@@ -317,15 +313,9 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
                 z: 1,
             });
             items.push(SceneItem::Label {
-                text: vec![lievisual::text::RichSpan::new(text.clone(), ts)],
+                text: vec![lievisual::text::RichSpan::new(text.clone(), ts.clone())],
                 position: *anchor,
-                style: TextStyle::new(
-                    theme::flowchart::TEXT,
-                    theme::FONT_SIZE,
-                    theme::FONT_FAMILY,
-                )
-                .with_align(TextAlign::Center)
-                .with_baseline(TextBaseline::Middle),
+                style: ts,
                 anchor: ir::scenegraph::Anchor::Center,
                 z: 2,
             });
@@ -499,9 +489,7 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
 
     // 注解（header 顶部）。
     if let Some(ann) = annotation {
-        let ts = TextStyle::new(theme::class::TEXT, SMALL_FONT, theme::FONT_FAMILY)
-            .with_align(TextAlign::Center)
-            .with_baseline(TextBaseline::Middle);
+        let ts = theme::text_style(theme::class::TEXT, SMALL_FONT, TextAlign::Center, TextBaseline::Middle);
         items.push(SceneItem::Label {
             text: vec![RichSpan::new(format!("«{}»", ann), ts.clone())],
             position: Point::new(n.center.x, rect.min_y() + 9.0),
@@ -513,10 +501,13 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
     // 类名（header 居中，官方 10px + 加粗）。
     if let Some(label) = &n.label {
         let name_y = rect.min_y() + header_h / 2.0 + if annotation.is_some() { 6.0 } else { 0.0 };
-        let ts = TextStyle::new(theme::class::TEXT, SMALL_FONT, theme::FONT_FAMILY)
-            .with_align(TextAlign::Center)
-            .with_baseline(TextBaseline::Middle)
-            .with_weight(FontWeight::Bold);
+        let ts = theme::text_style(
+            theme::class::TEXT,
+            SMALL_FONT,
+            TextAlign::Center,
+            TextBaseline::Middle,
+        )
+        .with_weight(FontWeight::Bold);
         items.push(SceneItem::Label {
             text: label.spans.clone(),
             position: Point::new(n.center.x, name_y),
@@ -543,9 +534,7 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
     // attrs 行（左对齐）。
     let mut line_y = rect.min_y() + header_h + 4.0;
     for a in attrs {
-        let ts = TextStyle::new(theme::class::TEXT, SMALL_FONT, theme::FONT_FAMILY)
-            .with_align(TextAlign::Left)
-            .with_baseline(TextBaseline::Top);
+        let ts = theme::text_style(theme::class::TEXT, SMALL_FONT, TextAlign::Left, TextBaseline::Top);
         items.push(SceneItem::Label {
             text: vec![RichSpan::new(a.clone(), ts.clone())],
             position: Point::new(rect.min_x() + CLASS_PAD, line_y),
@@ -559,9 +548,7 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
     // methods 行（左对齐，从成员栏分隔线下方开始）。
     line_y = rect.min_y() + header_h + attr_h + 4.0;
     for m in methods {
-        let ts = TextStyle::new(theme::class::TEXT, SMALL_FONT, theme::FONT_FAMILY)
-            .with_align(TextAlign::Left)
-            .with_baseline(TextBaseline::Top);
+        let ts = theme::text_style(theme::class::TEXT, SMALL_FONT, TextAlign::Left, TextBaseline::Top);
         items.push(SceneItem::Label {
             text: vec![RichSpan::new(m.clone(), ts.clone())],
             position: Point::new(rect.min_x() + CLASS_PAD, line_y),
@@ -621,9 +608,12 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
 
     // 实体名（header 居中）。
     if let Some(label) = &n.label {
-        let ts = TextStyle::new(theme::er::TEXT, theme::FONT_SIZE, theme::FONT_FAMILY)
-            .with_align(TextAlign::Center)
-            .with_baseline(TextBaseline::Middle);
+        let ts = theme::text_style(
+            theme::er::TEXT,
+            theme::FONT_SIZE,
+            TextAlign::Center,
+            TextBaseline::Middle,
+        );
         items.push(SceneItem::Label {
             text: label.spans.clone(),
             position: Point::new(n.center.x, rect.min_y() + header_h / 2.0),
@@ -634,9 +624,12 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
     }
 
     // 属性分 type / name 两列（16px，与官方 ER 属性字号一致）。
-    let attr_ts = TextStyle::new(theme::er::TEXT, theme::FONT_SIZE, theme::FONT_FAMILY)
-        .with_align(TextAlign::Left)
-        .with_baseline(TextBaseline::Top);
+    let attr_ts = theme::text_style(
+        theme::er::TEXT,
+        theme::FONT_SIZE,
+        TextAlign::Left,
+        TextBaseline::Top,
+    );
     let mut type_max = 0.0f64;
     for a in attrs {
         let l = lievisual::text::layout_text(&[RichSpan::new(a.type_.clone(), attr_ts.clone())], None);
@@ -644,6 +637,42 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
     }
     let type_x = rect.min_x() + ENTITY_PAD;
     let name_x = type_x + type_max + ER_ATTR_GAP;
+
+    // 分栏线（官方 golden：header 与属性区之间的横线 + type/name 之间的竖线，
+    // 均为 `fill-rule="evenodd"` 的细分隔线）。
+    let header_line_y = rect.min_y() + header_h;
+    let divider_stroke = Stroke {
+        color: theme::er::STROKE,
+        width: 1.0,
+        line_cap: LineCap::Butt,
+        line_join: LineJoin::Miter,
+        dash_array: Vec::new(),
+        dash_offset: 0.0,
+        miter_limit: 4.0,
+    };
+    // header 底部横线（横跨整宽）。
+    items.push(SceneItem::Edge {
+        path: ir::geograph::line_route(&[
+            Point::new(rect.min_x(), header_line_y),
+            Point::new(rect.max_x(), header_line_y),
+        ]),
+        stroke: divider_stroke.clone(),
+        ends: (EdgeEnds::None, EdgeEnds::None),
+        z: 1,
+    });
+    // type / name 之间的竖线（从 header 底延伸到底边），仅在有属性时绘制。
+    if !attrs.is_empty() {
+        let div_x = name_x - ER_ATTR_GAP / 2.0;
+        items.push(SceneItem::Edge {
+            path: ir::geograph::line_route(&[
+                Point::new(div_x, header_line_y),
+                Point::new(div_x, rect.max_y()),
+            ]),
+            stroke: divider_stroke.clone(),
+            ends: (EdgeEnds::None, EdgeEnds::None),
+            z: 1,
+        });
+    }
 
     let mut line_y = rect.min_y() + header_h + 6.0;
     for a in attrs {
@@ -980,23 +1009,49 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
         return;
     }
     let center = Point::new(0.0, 0.0);
-    let radius = 150.0;
+    let radius = theme::pie::RADIUS;
 
-    // 标题（最上方居中）。
+    // 标题（官方：`<text x="0" y="-200" class="pieTitleText">`，圆心正上方）。
+    // 官方 `.pieTitleText` 用默认字母基线（`position.y` 即基线），故用 Alphabetic；
+    // 若用 Top，渲染时基线会被下移一个 ascent，标题更靠近圆心而压到饼图。
     if let Some(title) = &gg.title
         && !title.is_empty()
     {
-        let ts = TextStyle::new(Color::BLACK, 24.0, theme::FONT_FAMILY)
-            .with_align(TextAlign::Center)
-            .with_baseline(TextBaseline::Top);
+        let ts = theme::text_style(
+            Color::BLACK,
+            theme::pie::TITLE_FONT,
+            TextAlign::Center,
+            TextBaseline::Alphabetic,
+        );
         items.push(SceneItem::Label {
             text: vec![RichSpan::new(title.clone(), ts.clone())],
-            position: Point::new(center.x, center.y - radius - 60.0),
+            position: Point::new(center.x, center.y - theme::pie::TITLE_DY),
             style: ts,
             anchor: ir::scenegraph::Anchor::Center,
             z: 2,
         });
     }
+
+    // 外圈（官方 `<circle r="186" class="pieOuterCircle"/>`：黑描边、无填充）。
+    items.push(SceneItem::Shape {
+        geometry: ShapeGeometry::Ellipse {
+            center,
+            rx: theme::pie::OUTER_RADIUS,
+            ry: theme::pie::OUTER_RADIUS,
+        },
+        fill: None,
+        stroke: Some(Stroke {
+            color: theme::pie::OUTER_STROKE,
+            width: theme::pie::OUTER_STROKE_WIDTH,
+            line_cap: LineCap::Butt,
+            line_join: LineJoin::Miter,
+            dash_array: Vec::new(),
+            dash_offset: 0.0,
+            miter_limit: 4.0,
+        }),
+        name: None,
+        z: 1,
+    });
 
     let slice_stroke = Stroke {
         color: Color::rgb(255, 255, 255),
@@ -1007,10 +1062,16 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
         dash_offset: 0.0,
         miter_limit: 4.0,
     };
+    let slice_ts = theme::text_style(
+        Color::BLACK,
+        theme::pie::LABEL_FONT,
+        TextAlign::Center,
+        TextBaseline::Middle,
+    );
 
     // 各扇区：从 12 点钟方向（-π/2）顺时针推进。
     let mut start = -std::f64::consts::FRAC_PI_2;
-    for (idx, (label, value)) in data.iter().enumerate() {
+    for (idx, (_label, value)) in data.iter().enumerate() {
         let sweep = 2.0 * std::f64::consts::PI * value / total;
         let color = theme::pie::COLORS[idx % theme::pie::COLORS.len()];
         // ShapeGeometry::Pie 的第 4 字段即 sweep 角（paint 直传 Element::pie）。
@@ -1027,28 +1088,70 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
             z: 0,
         });
 
-        // 标签：放在扇形外缘中间位置。
+        // 扇区标签：官方只放**百分比**（`40%`），名称交给右侧图例。
         let mid = start + sweep / 2.0;
-        let lr = radius + 20.0;
+        let lr = radius * theme::pie::LABEL_RADIUS_RATIO;
         let lp = Point::new(center.x + lr * mid.cos(), center.y + lr * mid.sin());
-        let pct = format!("{:.1}%", value / total * 100.0);
-        let display = if gg.show_data {
-            format!("{} ({} {:.0})", label, pct, value)
-        } else {
-            format!("{} ({})", label, pct)
-        };
-        let ts = TextStyle::new(Color::BLACK, 13.0, theme::FONT_FAMILY)
-            .with_align(TextAlign::Center)
-            .with_baseline(TextBaseline::Middle);
+        let pct = format!("{}%", (value / total * 100.0).round() as i64);
         items.push(SceneItem::Label {
-            text: vec![RichSpan::new(display, ts.clone())],
+            text: vec![RichSpan::new(pct, slice_ts.clone())],
             position: lp,
-            style: ts,
+            style: slice_ts.clone(),
             anchor: ir::scenegraph::Anchor::Center,
             z: 2,
         });
 
         start += sweep;
+    }
+
+    // 图例（官方 `<g class="legend" transform="translate(216, y)">`：色块 + 名称，
+    // 竖直居中排布；`showData` 时名称后附 `[数值]`）。
+    let n = data.len() as f64;
+    let legend_x = center.x + radius + theme::pie::LEGEND_DX;
+    let legend_top = center.y - (n - 1.0) / 2.0 * theme::pie::LEGEND_ROW_H;
+    let legend_ts = theme::text_style(
+        Color::BLACK,
+        theme::pie::LABEL_FONT,
+        TextAlign::Left,
+        TextBaseline::Middle,
+    );
+    for (idx, (label, value)) in data.iter().enumerate() {
+        let color = theme::pie::COLORS[idx % theme::pie::COLORS.len()];
+        let row_y = legend_top + idx as f64 * theme::pie::LEGEND_ROW_H;
+        let swatch_top = row_y - theme::pie::LEGEND_SWATCH / 2.0;
+        items.push(SceneItem::Shape {
+            geometry: ShapeGeometry::Rect {
+                at: Point::new(legend_x, swatch_top),
+                size: Size::new(theme::pie::LEGEND_SWATCH, theme::pie::LEGEND_SWATCH),
+            },
+            fill: Some(Fill::Solid(color)),
+            stroke: Some(Stroke {
+                color,
+                width: 1.0,
+                line_cap: LineCap::Butt,
+                line_join: LineJoin::Miter,
+                dash_array: Vec::new(),
+                dash_offset: 0.0,
+                miter_limit: 4.0,
+            }),
+            name: None,
+            z: 1,
+        });
+        let text = if gg.show_data {
+            format!("{} [{}]", label, *value as i64)
+        } else {
+            label.clone()
+        };
+        items.push(SceneItem::Label {
+            text: vec![RichSpan::new(text, legend_ts.clone())],
+            position: Point::new(
+                legend_x + theme::pie::LEGEND_TEXT_DX,
+                row_y,
+            ),
+            style: legend_ts.clone(),
+            anchor: ir::scenegraph::Anchor::Left,
+            z: 2,
+        });
     }
 }
 
@@ -1076,14 +1179,17 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
         .filter(|n| matches!(n.detail, ir::common::NodeDetail::SequenceNote { .. }))
         .map(|n| n.center.y + n.size.height / 2.0)
         .fold(0.0f64, f64::max);
-    let content_bottom = msg_bottom.max(note_bottom) + 30.0;
+    // 官方 golden：最后一条消息线 y=199、底部 actor 盒 y=219，间距 20。
+    // 生命线止于底部盒上沿，底部盒在 content_bottom 处。
+    let content_bottom = msg_bottom.max(note_bottom) + 20.0;
 
+    // 官方 golden：`<line class="actor-line" stroke-width="0.5px" stroke="#999"/>`——细**实线**。
     let lifeline_stroke = Stroke {
         color: theme::sequence::LIFELINE,
-        width: 1.0,
+        width: theme::sequence::LIFELINE_WIDTH,
         line_cap: LineCap::Butt,
         line_join: LineJoin::Miter,
-        dash_array: vec![6.0, 4.0],
+        dash_array: Vec::new(),
         dash_offset: 0.0,
         miter_limit: 4.0,
     };
@@ -1098,16 +1204,17 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             n.center.x + half_w,
             n.center.y + half_h,
         );
+        // 官方 golden：`<rect fill="#eaeaea" stroke="#666" rx="3" ry="3" class="actor"/>`。
         items.push(SceneItem::Shape {
             geometry: ShapeGeometry::RoundedRect {
                 at: Point::new(rect.min_x(), rect.min_y()),
                 size: n.size,
-                radius: theme::NODE_RADIUS,
+                radius: theme::sequence::ACTOR_RADIUS,
             },
             fill: Some(Fill::Solid(theme::sequence::ACTOR_FILL)),
             stroke: Some(Stroke {
                 color: theme::sequence::ACTOR_STROKE,
-                width: 2.0,
+                width: 1.0,
                 line_cap: LineCap::Butt,
                 line_join: LineJoin::Miter,
                 dash_array: Vec::new(),
@@ -1118,9 +1225,12 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             z: 0,
         });
         if let Some(label) = &n.label {
-            let ts = TextStyle::new(theme::sequence::TEXT, theme::FONT_SIZE, theme::FONT_FAMILY)
-                .with_align(TextAlign::Center)
-                .with_baseline(TextBaseline::Middle);
+            let ts = theme::text_style(
+                theme::sequence::ACTOR_TEXT,
+                theme::FONT_SIZE,
+                TextAlign::Center,
+                TextBaseline::Middle,
+            );
             items.push(SceneItem::Label {
                 text: label.spans.clone(),
                 position: n.center,
@@ -1129,7 +1239,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 z: 2,
             });
         }
-        // 生命线（单条虚线，向下延伸到底部内容之下）。
+        // 生命线（单条虚线，从顶部盒底向下延伸到底部盒上沿）。
         items.push(SceneItem::Edge {
             path: ir::geograph::line_route(&[
                 Point::new(n.center.x, n.center.y + half_h),
@@ -1141,11 +1251,80 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
         });
     }
 
+    // —— 底部参与者盒（官方 `<rect class="actor actor-bottom">`，位于生命线终点）——
+    for n in &lifelines {
+        let half_w = n.size.width / 2.0;
+        let bottom_y = content_bottom;
+        items.push(SceneItem::Shape {
+            geometry: ShapeGeometry::RoundedRect {
+                at: Point::new(n.center.x - half_w, bottom_y),
+                size: n.size,
+                radius: theme::sequence::ACTOR_RADIUS,
+            },
+            fill: Some(Fill::Solid(theme::sequence::ACTOR_FILL)),
+            stroke: Some(Stroke {
+                color: theme::sequence::ACTOR_STROKE,
+                width: 1.0,
+                line_cap: LineCap::Butt,
+                line_join: LineJoin::Miter,
+                dash_array: Vec::new(),
+                dash_offset: 0.0,
+                miter_limit: 4.0,
+            }),
+            name: None,
+            z: 0,
+        });
+        if let Some(label) = &n.label {
+            let ts = theme::text_style(
+                theme::sequence::ACTOR_TEXT,
+                theme::FONT_SIZE,
+                TextAlign::Center,
+                TextBaseline::Middle,
+            );
+            items.push(SceneItem::Label {
+                text: label.spans.clone(),
+                position: Point::new(n.center.x, bottom_y + n.size.height / 2.0),
+                style: ts,
+                anchor: ir::scenegraph::Anchor::Center,
+                z: 2,
+            });
+        }
+    }
+
+    // —— 激活条（`A->>+B` / `A-->>-B`）：官方 `<rect fill="#EDF2AE" stroke="#666" width="10"/>` ——
+    for a in &gg.activations {
+        let y0 = a.y0.min(a.y1);
+        let y1 = a.y0.max(a.y1);
+        if (y1 - y0).abs() < 1.0 {
+            continue;
+        }
+        items.push(SceneItem::Shape {
+            geometry: ShapeGeometry::Rect {
+                at: Point::new(a.x - theme::sequence::ACTIVATION_WIDTH / 2.0, y0),
+                size: Size::new(theme::sequence::ACTIVATION_WIDTH, y1 - y0),
+            },
+            fill: Some(Fill::Solid(theme::sequence::ACTIVATION_FILL)),
+            stroke: Some(Stroke {
+                color: theme::sequence::ACTIVATION_STROKE,
+                width: 1.0,
+                line_cap: LineCap::Butt,
+                line_join: LineJoin::Miter,
+                dash_array: Vec::new(),
+                dash_offset: 0.0,
+                miter_limit: 4.0,
+            }),
+            name: None,
+            z: 0,
+        });
+    }
+
     // —— 消息边：水平线 + 箭头 + 标签 ——
     for e in &gg.edges {
-        let (color, width) = edge_style(e.kind, e.line_kind);
+        let (color, _w) = edge_style(e.kind, e.line_kind);
+        // 官方 golden：消息线 `stroke-width="2"`，虚线消息 `stroke-dasharray: 3, 3`。
+        let width = theme::sequence::MESSAGE_WIDTH;
         let dash_array = match e.line_kind {
-            ir::common::LineKind::Dotted => vec![3.0, 4.0],
+            ir::common::LineKind::Dotted => theme::sequence::MESSAGE_DASH.to_vec(),
             _ => Vec::new(),
         };
         let stroke = Stroke {
@@ -1167,9 +1346,12 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
         if let (Some(text), Some(anchor)) = (&e.label_text, &e.label_anchor)
             && !text.is_empty()
         {
-            let ts = TextStyle::new(theme::sequence::TEXT, theme::FONT_SIZE, theme::FONT_FAMILY)
-                .with_align(TextAlign::Center)
-                .with_baseline(TextBaseline::Bottom);
+            let ts = theme::text_style(
+                theme::sequence::TEXT,
+                theme::FONT_SIZE,
+                TextAlign::Center,
+                TextBaseline::Bottom,
+            );
             items.push(SceneItem::Label {
                 text: vec![RichSpan::new(text.clone(), ts.clone())],
                 position: *anchor,
@@ -1197,12 +1379,12 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             geometry: ShapeGeometry::RoundedRect {
                 at: Point::new(rect.min_x(), rect.min_y()),
                 size: n.size,
-                radius: theme::NODE_RADIUS,
+                radius: theme::sequence::ACTOR_RADIUS,
             },
             fill: Some(Fill::Solid(theme::sequence::NOTE_FILL)),
             stroke: Some(Stroke {
                 color: theme::sequence::NOTE_STROKE,
-                width: 1.5,
+                width: 1.0,
                 line_cap: LineCap::Butt,
                 line_join: LineJoin::Miter,
                 dash_array: Vec::new(),
@@ -1212,9 +1394,12 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             name: None,
             z: 0,
         });
-        let ts = TextStyle::new(theme::sequence::TEXT, theme::FONT_SIZE, theme::FONT_FAMILY)
-            .with_align(TextAlign::Center)
-            .with_baseline(TextBaseline::Middle);
+        let ts = theme::text_style(
+            theme::sequence::TEXT,
+            theme::FONT_SIZE,
+            TextAlign::Center,
+            TextBaseline::Middle,
+        );
         items.push(SceneItem::Label {
             text: vec![RichSpan::new(text.clone(), ts.clone())],
             position: n.center,
@@ -1252,17 +1437,57 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
         });
         if let Some(label) = &c.title {
             let ts =
-                TextStyle::new(theme::sequence::BLOCK_TEXT, theme::FONT_SIZE * 0.85, theme::FONT_FAMILY)
-                    .with_align(TextAlign::Left)
-                    .with_baseline(TextBaseline::Middle);
-            items.push(SceneItem::Label {
-                text: vec![RichSpan::new(label.clone(), ts.clone())],
-                position: Point::new(r.min_x() + 8.0, r.min_y() + 12.0),
-                style: ts,
-                anchor: ir::scenegraph::Anchor::Left,
-                z: 0,
-            });
+                theme::text_style(
+                    theme::sequence::BLOCK_TEXT,
+                    theme::FONT_SIZE * 0.85,
+                    TextAlign::Left,
+                    TextBaseline::Middle,
+                );
+            let origin = Point::new(r.min_x() + 8.0, r.min_y() + 12.0);
+            // 官方把标签拆成两段文本：`loop` + `[Each item]`（并列排布，非合并为
+            // `loop [Each item]`），与 golden 的 `<text>` 集合保持一致。
+            let (head, tail) = split_block_label(label);
+            match tail {
+                Some(tail) => {
+                    let w = lievisual::text::layout_text(
+                        &[RichSpan::new(head.clone(), ts.clone())],
+                        None,
+                    )
+                    .width;
+                    items.push(SceneItem::Label {
+                        text: vec![RichSpan::new(head, ts.clone())],
+                        position: origin,
+                        style: ts.clone(),
+                        anchor: ir::scenegraph::Anchor::Left,
+                        z: 0,
+                    });
+                    items.push(SceneItem::Label {
+                        text: vec![RichSpan::new(tail, ts.clone())],
+                        position: Point::new(origin.x + w + 4.0, origin.y),
+                        style: ts,
+                        anchor: ir::scenegraph::Anchor::Left,
+                        z: 0,
+                    });
+                }
+                None => items.push(SceneItem::Label {
+                    text: vec![RichSpan::new(head, ts.clone())],
+                    position: origin,
+                    style: ts,
+                    anchor: ir::scenegraph::Anchor::Left,
+                    z: 0,
+                }),
+            }
         }
+    }
+}
+
+/// 拆分分组块标签为「关键字」+「方括号描述」两段（官方两段独立文本）。
+///
+/// `"loop [Each item]"` → `("loop", Some("[Each item]]"))`；无方括号时返回 `("", None)`。
+fn split_block_label(label: &str) -> (String, Option<String>) {
+    match label.find(" [") {
+        Some(i) => (label[..i].to_string(), Some(label[i + 1..].to_string())),
+        None => (label.to_string(), None),
     }
 }
 
@@ -1326,16 +1551,16 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
         let ts = TextStyle::new(theme::timeline::TITLE, 22.0, theme::FONT_FAMILY)
             .with_align(TextAlign::Center)
             .with_baseline(TextBaseline::Top);
+        // 标题位于 section 标题块（轴上方最远处）之上。
+        let title_off = theme::timeline::TASK_DY
+            + theme::timeline::BLOCK_H
+            + theme::timeline::SECTION_DY
+            + theme::timeline::BLOCK_H / 2.0
+            + 40.0;
         let pos = if horizontal {
-            Point::new(
-                span_mid,
-                axis_c - theme::timeline::SECTION_DY - theme::timeline::BLOCK_H / 2.0 - 40.0,
-            )
+            Point::new(span_mid, axis_c - title_off)
         } else {
-            Point::new(
-                axis_c - theme::timeline::SECTION_DY - theme::timeline::BLOCK_H / 2.0 - 40.0,
-                span_mid,
-            )
+            Point::new(axis_c - title_off, span_mid)
         };
         items.push(SceneItem::Label {
             text: vec![RichSpan::new(title.clone(), ts.clone())],
@@ -1423,26 +1648,48 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             z: 1,
         });
 
-        // section 块（轴上方 / 左侧）。
+        // section 标题块（轴上方最远处）。官方 layout：标题在最顶部，
+        // 下方近轴是时间点块，时间轴把「时间点」与「事件」隔开。
         let sec_center = if horizontal {
-            Point::new(cx, cy - theme::timeline::SECTION_DY)
+            Point::new(
+                cx,
+                cy - theme::timeline::TASK_DY
+                    - theme::timeline::BLOCK_H
+                    - theme::timeline::SECTION_DY,
+            )
         } else {
-            Point::new(cx - theme::timeline::SECTION_DY, cy)
+            Point::new(
+                cx - theme::timeline::TASK_DY
+                    - theme::timeline::BLOCK_H
+                    - theme::timeline::SECTION_DY,
+                cy,
+            )
         };
         emit_timeline_block(items, sec_center, color, &label_text, 14.0);
         emit_timeline_connector(items, dot, sec_center);
 
-        // 事件块（轴下方 / 右侧，逐列堆叠）。
-        for (j, ev) in events.iter().enumerate() {
-            let off =
-                theme::timeline::EVENT_DY + j as f64 * (theme::timeline::BLOCK_H + theme::timeline::EVENT_GAP);
-            let ev_center = if horizontal {
-                Point::new(cx, cy + off)
+        // 时间点块（轴上方近轴处，events[0]）→ 事件块（轴下方，events[1..]）。
+        // 官方 golden：时间点（如 2020）与标题同在轴上方，事件在轴下方，时间轴分隔内容。
+        if let Some((first, rest)) = events.split_first() {
+            let task_center = if horizontal {
+                Point::new(cx, cy - theme::timeline::TASK_DY)
             } else {
-                Point::new(cx + off, cy)
+                Point::new(cx - theme::timeline::TASK_DY, cy)
             };
-            emit_timeline_block(items, ev_center, color, ev, 13.0);
-            emit_timeline_connector(items, dot, ev_center);
+            emit_timeline_block(items, task_center, color, first, 13.0);
+            emit_timeline_connector(items, dot, task_center);
+
+            for (j, ev) in rest.iter().enumerate() {
+                let off = theme::timeline::EVENT_DY
+                    + j as f64 * (theme::timeline::BLOCK_H + theme::timeline::EVENT_GAP);
+                let ev_center = if horizontal {
+                    Point::new(cx, cy + off)
+                } else {
+                    Point::new(cx + off, cy)
+                };
+                emit_timeline_block(items, ev_center, color, ev, 13.0);
+                emit_timeline_connector(items, dot, ev_center);
+            }
         }
     }
 }
@@ -1473,9 +1720,8 @@ fn emit_timeline_block(items: &mut Vec<SceneItem>, center: Point, color: Color, 
         name: None,
         z: 0,
     });
-    let ts = TextStyle::new(theme::timeline::BLOCK_TEXT, font_size, theme::FONT_FAMILY)
-        .with_align(TextAlign::Center)
-        .with_baseline(TextBaseline::Middle);
+    let ts =
+        theme::text_style(theme::timeline::BLOCK_TEXT, font_size, TextAlign::Center, TextBaseline::Middle);
     items.push(SceneItem::Label {
         text: vec![RichSpan::new(text.to_string(), ts.clone())],
         position: center,
@@ -1555,14 +1801,14 @@ fn node_fill_stroke(shape: ShapeKind) -> (Fill, Stroke) {
         miter_limit: 4.0,
     };
     match shape {
-        // StartDot：实心深色圆（用描边色填充）。
+        // StartDot：实心深色圆（官方 `.node circle.state-start{fill:#333333}`）。
         ShapeKind::StartDot => (
-            Fill::Solid(theme::state::STROKE),
+            Fill::Solid(theme::state::SPECIAL),
             Stroke { width: 0.0, ..default_stroke },
         ),
-        // Bar：fork/join 横条，实心深色。
+        // Bar：fork/join 横条，实心深色（官方 `.node .fork-join{fill:#333333}`）。
         ShapeKind::Bar => (
-            Fill::Solid(theme::state::STROKE),
+            Fill::Solid(theme::state::SPECIAL),
             Stroke { width: 0.0, ..default_stroke },
         ),
         _ => (Fill::Solid(theme::flowchart::FILL), default_stroke),
@@ -1573,7 +1819,7 @@ fn node_fill_stroke(shape: ShapeKind) -> (Fill, Stroke) {
 /// Thick 加粗，其余（Solid/Dotted/Invisible）用常规宽度。
 fn edge_style(kind: EdgeKind, line: ir::common::LineKind) -> (Color, f64) {
     let width = if line == ir::common::LineKind::Thick {
-        theme::EDGE_WIDTH * 2.5
+        theme::EDGE_WIDTH_THICK
     } else {
         theme::EDGE_WIDTH
     };

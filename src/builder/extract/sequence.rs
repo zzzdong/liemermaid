@@ -12,8 +12,8 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        MessageArrow, NotePlacement, SequenceBlock, SequenceBlockKind, SequenceDiagram,
-        SequenceItem, SequenceStatement,
+        MessageActivation, MessageArrow, NotePlacement, SequenceBlock, SequenceBlockKind,
+        SequenceDiagram, SequenceItem, SequenceStatement,
     },
     builder::ir::{
         common::{
@@ -131,6 +131,20 @@ fn collect_items(
                 });
                 *edge_counter += 1;
                 rows.push(SequenceRow::Message(eid));
+                // 激活标记（`->>+` / `->>-`）紧跟在消息行之后（engine 取其前一行的 y
+                // 作为激活条起点）。作用对象按官方语义：
+                // - `A->>+B`：**激活目标** B；
+                // - `A-->>-B`：**取消激活源** A（注意不是 B）。
+                if let Some(act) = m.activation {
+                    let actor = match act {
+                        MessageActivation::Activate => m.to.clone(),
+                        MessageActivation::Deactivate => m.from.clone(),
+                    };
+                    rows.push(SequenceRow::Activation {
+                        actor,
+                        on: matches!(act, MessageActivation::Activate),
+                    });
+                }
             }
             SequenceItem::Note(n) => {
                 let nid = format!("note{}", *note_counter);
@@ -299,12 +313,71 @@ mod tests {
                     "block-start"
                 }
                 SequenceRow::BlockEnd(_) => "block-end",
+                SequenceRow::Activation { on, .. } => {
+                    if *on {
+                        "activate"
+                    } else {
+                        "deactivate"
+                    }
+                }
             })
             .collect();
         assert_eq!(
             kinds,
             vec!["msg", "note", "block-start", "msg", "msg", "block-end", "note"]
         );
+    }
+
+    #[test]
+    fn activations_emit_rows_after_their_message() {
+        let seq = parse(
+            "sequenceDiagram\n    A->>B: x\n    A->>+B: start\n    B-->>-A: done\n    A->>B: y\n",
+        );
+        let ug = extract_sequence(&seq);
+        let rows = ug.sequence_rows.clone().unwrap();
+        let kinds: Vec<&str> = rows
+            .iter()
+            .map(|r| match r {
+                SequenceRow::Message(_) => "msg",
+                SequenceRow::Note(_) => "note",
+                SequenceRow::BlockStart(..) => "block-start",
+                SequenceRow::BlockEnd(_) => "block-end",
+                SequenceRow::Activation { on, .. } => {
+                    if *on {
+                        "activate"
+                    } else {
+                        "deactivate"
+                    }
+                }
+            })
+            .collect();
+        assert_eq!(kinds, vec!["msg", "msg", "activate", "msg", "deactivate", "msg"]);
+        // 激活作用于消息**目标**参与者。
+        let act = rows
+            .iter()
+            .find_map(|r| match r {
+                SequenceRow::Activation { actor, on } if *on => Some(actor.as_str()),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(act, "B");
+        // `B-->>-A` 取消激活的是**源** B（官方语义，非目标 A）。
+        let deact = rows
+            .iter()
+            .find_map(|r| match r {
+                SequenceRow::Activation { actor, on } if !*on => Some(actor.as_str()),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(deact, "B");
+    }
+
+    #[test]
+    fn note_carries_text_targets_and_placement() {
+        let seq = parse(
+            "sequenceDiagram\n    A->>B: x\n    Note over A,B: shared note\n    loop retry\n        A->>B: again\n        B-->>A: ack\n    end\n    Note right of A: side note\n",
+        );
+        let ug = extract_sequence(&seq);
         let note = ug
             .nodes
             .iter()

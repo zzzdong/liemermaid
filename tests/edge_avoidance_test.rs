@@ -210,8 +210,9 @@ fn channel_routes_do_not_overlap() {
     }
     // D→B 与 E→C 的通道应分居节点列两侧（D→B 左、E→C 右），
     // 避免回边通道横穿 E→C 的进入段。
-    let has_left = vsegs.iter().any(|(_, x, _, _)| *x < -60.0);
-    let has_right = vsegs.iter().any(|(_, x, _, _)| *x > 60.0);
+    // 判据相对布局中轴（x=0），不写死绝对坐标（节点宽度随文本自适应）。
+    let has_left = vsegs.iter().any(|(_, x, _, _)| *x < 0.0);
+    let has_right = vsegs.iter().any(|(_, x, _, _)| *x > 0.0);
     assert!(has_left && has_right, "cycle2 两条通道应分居左右两侧: {vsegs:?}");
 }
 

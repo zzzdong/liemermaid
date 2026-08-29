@@ -55,6 +55,7 @@ fn gg_with(shape: ShapeKind) -> Geograph {
         containers: vec![],
         title: None,
         show_data: false,
+        activations: vec![],
     }
 }
 

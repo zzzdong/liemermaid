@@ -137,12 +137,20 @@ pub enum NodeConstraint {
 #[derive(Default)]
 pub enum SizeHint {
     /// 由文本测量 + 形状几何推算（多数节点）。
+    ///
+    /// 各形状的 padding 取自 `measure::shape_padding`（实测自官方 golden）。
     #[default]
     ByText,
     /// 固定尺寸。
     Fixed(Size),
     /// 由子节点撑开（容器 / 子图）。
     FromChildren,
+    /// 由文本测量 + **显式** padding 推算。
+    ///
+    /// 用于「同形状但 padding 不同」的图表：state 节点与 flowchart 圆角节点
+    /// 同为 [`crate::builder::ir::shape::ShapeKind::Rounded`]，但官方 state 节点
+    /// padding=8（如 `Idle` → 41.8×40），flowchart 为 30/15（如 `Start` → 93.8×54）。
+    Padded { pad_x: f64, pad_y: f64 },
 }
 
 

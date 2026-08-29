@@ -5,7 +5,7 @@
 //! - 状态声明：`state A` / `state "desc" as A` / `state C { ... }`（复合状态，可嵌套）
 //! - 转移：`A --> B : label`，from/to 可为 `[*]`
 
-use crate::ast::{State, StateDiagram, Transition};
+use crate::ast::{State, StateDiagram, StateStmt, Transition};
 use crate::parser::common::{
     PResult, consume_line, has_input, identifier, inline_ws, keyword, quoted_string, rest_of_line,
     skip_line, skip_ws_and_comments,
@@ -28,6 +28,8 @@ pub fn state_diagram<'i>(input: &mut &'i str) -> PResult<'i, StateDiagram> {
 fn parse_body<'i>(input: &mut &'i str) -> PResult<'i, StateDiagram> {
     let mut states = Vec::new();
     let mut transitions = Vec::new();
+    // 交错顺序：mermaid 的状态库按源码顺序建节点（见 `StateDiagram::order`）。
+    let mut order = Vec::new();
 
     while has_input(input) {
         skip_ws_and_comments(input)?;
@@ -43,18 +45,21 @@ fn parse_body<'i>(input: &mut &'i str) -> PResult<'i, StateDiagram> {
         let cp = *input;
         // 状态声明（简单/复合/fork/join）
         if let Ok(s) = state_decl.parse_next(input) {
+            order.push(StateStmt::Decl(states.len()));
             states.push(s);
             continue;
         }
         *input = cp;
         // 转移
         if let Ok(t) = transition.parse_next(input) {
+            order.push(StateStmt::Trans(transitions.len()));
             transitions.push(t);
             continue;
         }
         *input = cp;
         // 裸状态声明：`s3` 或 `s2 : 描述`（不以 `state` 关键字开头的声明）
         if let Ok(s) = bare_state_decl.parse_next(input) {
+            order.push(StateStmt::Decl(states.len()));
             states.push(s);
             continue;
         }
@@ -66,6 +71,7 @@ fn parse_body<'i>(input: &mut &'i str) -> PResult<'i, StateDiagram> {
     Ok(StateDiagram {
         states,
         transitions,
+        order,
     })
 }
 
