@@ -40,5 +40,5 @@ lto = "fat"
 codegen-units = 1
 strip = "symbols"
 
-#[patch.crates-io]
-#lievisual = { path = "../lievisual" }
+[workspace]
+members = ["site"]

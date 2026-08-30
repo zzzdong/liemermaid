@@ -1,0 +1,18 @@
+sequenceDiagram
+    participant User
+    participant System
+    participant DB
+
+    User->>System: Login(name, pwd)
+    activate System
+    System->>DB: Validate(name)
+    DB-->>System: OK
+    System-->>User: Welcome
+    deactivate System
+
+    User->>System: Query(orderId)
+    activate System
+    System->>DB: Fetch(orderId)
+    DB-->>System: Order
+    System-->>User: Result
+    deactivate System

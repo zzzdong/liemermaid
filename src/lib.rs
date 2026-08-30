@@ -46,6 +46,10 @@ pub use parser::WinnowParser as MermaidParser;
 use builder::build_diagram_with_config;
 pub use builder::types::OutputConfig;
 
+// 字体注册 API 转发自 lievisual，供 WASM 演示站在浏览器中注册自定义字体（如 CJK / 等宽字体），
+// 与 liecharts 的做法一致：宿主用 `liemermaid::register_font` 即可，无需直接依赖 lievisual。
+pub use lievisual::{FontSource, parse_generic_family, register_font, register_font_generic};
+
 /// 渲染 Mermaid 图表为 SVG 字符串。
 ///
 /// builder 直接产出 [`lievisual::Scene`]，本函数交由 lievisual 的矢量后端
