@@ -291,14 +291,8 @@ mod tests {
             ..OutputConfig::default()
         };
         let (_, w, h) = fit_to_canvas(elements, &config);
-        assert!(
-            (w - 500.0).abs() < 1.0,
-            "只限宽时应放大到目标宽度，got {w}"
-        );
-        assert!(
-            (h - 500.0).abs() < 1.0,
-            "高度应按比例同步放大，got {h}"
-        );
+        assert!((w - 500.0).abs() < 1.0, "只限宽时应放大到目标宽度，got {w}");
+        assert!((h - 500.0).abs() < 1.0, "高度应按比例同步放大，got {h}");
     }
 
     #[test]
@@ -312,13 +306,7 @@ mod tests {
             ..OutputConfig::default()
         };
         let (_, w, h) = fit_to_canvas(elements, &config);
-        assert!(
-            (h - 500.0).abs() < 1.0,
-            "只限高时应放大到目标高度，got {h}"
-        );
-        assert!(
-            (w - 500.0).abs() < 1.0,
-            "宽度应按比例同步放大，got {w}"
-        );
+        assert!((h - 500.0).abs() < 1.0, "只限高时应放大到目标高度，got {h}");
+        assert!((w - 500.0).abs() < 1.0, "宽度应按比例同步放大，got {w}");
     }
 }
