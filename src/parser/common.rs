@@ -20,17 +20,18 @@ pub fn keyword<'i>(kw: &'static str) -> impl Parser<&'i str, &'i str, InputError
         // 使用 `get` 安全切片：当 input 以多字节字符（如 BOM/中文）开头时，
         // 直接返回 None 而非 panic（字节边界不安全）。
         if let Some(candidate) = input.get(..lower.len())
-            && candidate.to_ascii_lowercase() == lower {
-                // 关键字后必须是空白、行尾或常见分隔符，避免误吞前缀
-                let after = input[lower.len()..].chars().next();
-                if after.is_none_or(|c| {
-                    c.is_whitespace() || c == ':' || c == '\n' || c == '\r' || c == '{'
-                }) {
-                    let matched = &input[..lower.len()];
-                    *input = &input[lower.len()..];
-                    return Ok(matched);
-                }
+            && candidate.to_ascii_lowercase() == lower
+        {
+            // 关键字后必须是空白、行尾或常见分隔符，避免误吞前缀
+            let after = input[lower.len()..].chars().next();
+            if after
+                .is_none_or(|c| c.is_whitespace() || c == ':' || c == '\n' || c == '\r' || c == '{')
+            {
+                let matched = &input[..lower.len()];
+                *input = &input[lower.len()..];
+                return Ok(matched);
             }
+        }
         Err(InputError::at(*input))
     }
 }
@@ -89,6 +90,24 @@ pub fn ws1<'i>(input: &mut &'i str) -> PResult<'i, &'i str> {
     multispace1.parse_next(input)
 }
 
+/// 跳过**行内**空白与 `%%` 注释（不跨行）。
+///
+/// 语句内部的空白必须用这个而非 [`skip_ws_and_comments`]：后者会吃掉换行，
+/// 使一条语句跨行拼接（如 `autonumber` 指令的下一行消息被并进上一句）。
+pub fn inline_ws_and_comments<'i>(input: &mut &'i str) -> PResult<'i, ()> {
+    loop {
+        let before = input.len();
+        inline_ws(input)?;
+        if input.starts_with("%%") {
+            let _ = take_while(0.., |c: char| c != '\n' && c != '\r').parse_next(input)?;
+        }
+        if input.len() == before {
+            break;
+        }
+    }
+    Ok(())
+}
+
 /// 行注释：`%%` 直到行尾
 pub fn line_comment<'i>(input: &mut &'i str) -> PResult<'i, ()> {
     let _ = "%%".parse_next(input)?;
@@ -131,7 +150,12 @@ pub fn has_input(input: &mut &str) -> bool {
 ///
 /// 使用 `take_while(0..,...)` 以保证在空输入/纯空白时不报错；若未产生任何
 /// 进展（输入未前进）则强制消费一个字符，防止主解析循环死锁。
+/// 输入已耗尽时直接返回 `Ok`（EOF 无需跳过），否则 `take_while(1..)` 会报错
+/// 并让整张图解析失败。
 pub fn skip_line<'i>(input: &mut &'i str) -> PResult<'i, ()> {
+    if input.is_empty() {
+        return Ok(());
+    }
     let before = input.len();
     let _ = take_while(0.., |c: char| c != '\n' && c != '\r').parse_next(input)?;
     let _ = opt(("\r\n", "\n")).parse_next(input)?;
@@ -140,6 +164,28 @@ pub fn skip_line<'i>(input: &mut &'i str) -> PResult<'i, ()> {
         let _ = take_while(1.., |_c: char| true).parse_next(input)?;
     }
     Ok(())
+}
+
+/// 尝试运行 `parser`，**失败时回滚**已消耗的输入。
+///
+/// winnow 的 `Parser::parse_next` 失败时**不保证**把 `input` 恢复到调用前的位置
+/// （组合子内部可能已推进游标）。各图表主循环都是
+/// `if let Ok(x) = p.parse_next(input)` 的择优结构：一次失败的尝试若留下部分消费，
+/// 后续的兜底 `skip_line` 就会把**已经推进到的那一行**整行丢掉，导致后随的合法
+/// 语句被静默吞掉（如 `autonumber\nA->>B: hi` 把消息行吃掉），甚至在 EOF 处让
+/// 整图解析失败。所有择优分支都应改用本函数。
+pub fn attempt<'i, O>(
+    mut parser: impl Parser<&'i str, O, InputError<&'i str>>,
+    input: &mut &'i str,
+) -> Option<O> {
+    let start = *input;
+    match parser.parse_next(input) {
+        Ok(value) => Some(value),
+        Err(_) => {
+            *input = start;
+            None
+        }
+    }
 }
 
 /// 消费当前行剩余内容（直到换行或 EOF），用于语句行解析后的清理。
@@ -158,15 +204,42 @@ pub fn peek_end<'i>(input: &mut &'i str) -> PResult<'i, &'i str> {
 
 // ---------- 标识符与文本 ----------
 
-/// 标识符：字母、数字、下划线、连字符（首字母不能数字）
+/// 标识符：字母、数字、下划线、连字符（首字母不能是数字）。
+///
+/// **连字符需前瞻**：mermaid 的箭头全部由 `-` 组成（`-->` / `---` / `-.->` /
+/// `--o` / `--x` / `<-->` / `o--o` / `x--x` / `-.-`）。若标识符无脑吞掉 `-`，
+/// `A-->B` 会被切成 `A--` + `>B`，箭头解析失败、整条边被丢弃（曾导致
+/// `A-->B` 渲染出空白画布）。因此遇到 `-` 时前瞻其后字符：若是 `-` / `.` / `>`
+/// （即箭头起始）就在此截断；否则保留，兼容 `node-1` 这类带连字符的 id。
 pub fn identifier<'i>(input: &mut &'i str) -> PResult<'i, String> {
-    let start = take_while(1.., |c: char| c.is_ascii_alphabetic() || c == '_');
-    let rest = take_while(0.., |c: char| {
-        c.is_ascii_alphanumeric() || c == '_' || c == '-'
-    });
-    (start, rest)
-        .map(|(s, r): (&str, &str)| format!("{}{}", s, r))
-        .parse_next(input)
+    let s = *input;
+    let mut end = 0usize;
+    let chars: Vec<(usize, char)> = s.char_indices().collect();
+    for (i, (b, c)) in chars.iter().enumerate() {
+        if c.is_alphanumeric() || *c == '_' {
+            end = b + c.len_utf8();
+            continue;
+        }
+        if *c == '-' {
+            // 前瞻：构成箭头起始则截断（不在标识符内消耗该 `-`）。
+            if let Some((_, next)) = chars.get(i + 1)
+                && matches!(next, '-' | '.' | '>')
+            {
+                break;
+            }
+            end = b + c.len_utf8();
+            continue;
+        }
+        break;
+    }
+    // 首字符必须是字母或下划线（不能是数字/连字符），且至少消耗一个字符。
+    let first = s.chars().next();
+    let valid_start = first.is_some_and(|c| c.is_alphabetic() || c == '_');
+    if end == 0 || !valid_start {
+        return Err(InputError::at(*input));
+    }
+    *input = &s[end..];
+    Ok(s[..end].to_string())
 }
 
 /// 带引号的字符串（双引号或单引号）

@@ -1,4 +1,4 @@
-//! state 图的 extract：把 [`crate::ast::StateDiagram`] 翻译成 [`Unigraph`](crate::builder::ir::Unigraph)。
+//! state 图的 extract：把 [`crate::ast::StateDiagram`] 翻译成 [`Unigraph`]。
 //!
 //! family=Directed（状态转移是有向 DAG），与 flowchart 复用同一套 Sugiyama 分层 +
 //! 交叉减少 + 正交路由。
@@ -51,7 +51,10 @@ fn node_meta(_id: &str, is_start: bool, is_end: bool, is_bar: bool) -> (ShapeKin
     } else {
         (
             ShapeKind::Rounded,
-            SizeHint::Padded { pad_x: STATE_PAD, pad_y: STATE_PAD },
+            SizeHint::Padded {
+                pad_x: STATE_PAD,
+                pad_y: STATE_PAD,
+            },
         )
     }
 }
@@ -79,7 +82,10 @@ fn push_node(
         kind: ir::common::NodeKind::Atom,
         role: ir::common::NodeRole::Atom,
         shape,
-        label: ir::common::LabelOrMeasured::Spec(LabelSpec { text, spans: Vec::new() }),
+        label: ir::common::LabelOrMeasured::Spec(LabelSpec {
+            text,
+            spans: Vec::new(),
+        }),
         ports: PortSet::default(),
         size_hint,
         style_ref: StyleRef::NodeDefault,
@@ -114,7 +120,9 @@ fn transition_seen_first(sd: &StateDiagram) -> HashSet<String> {
                 }
             }
             StateStmt::Trans(i) => {
-                let Some(t) = sd.transitions.get(*i) else { continue };
+                let Some(t) = sd.transitions.get(*i) else {
+                    continue;
+                };
                 for id in [&t.from, &t.to] {
                     if *id != "[*]" {
                         first_is_trans.insert(id.clone());
@@ -150,9 +158,13 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
     collect_labels(sd, &mut labels);
 
     // 复合状态 id → (入口节点, 出口节点)。
-    let mut composite_entry_exit: HashMap<String, (Option<String>, Option<String>)> = HashMap::new();
+    let mut composite_entry_exit: HashMap<String, (Option<String>, Option<String>)> =
+        HashMap::new();
 
     // 递归收集一个 StateDiagram。返回 (入口节点, 出口节点)。
+    // 参数较多是因为递归需要一路透传累加器（节点/边/子图/已见集合/计数器），
+    // 把它们打包成 struct 反而会让借用关系更绕，故保留扁平签名。
+    #[allow(clippy::too_many_arguments)]
     fn collect(
         sd: &StateDiagram,
         nodes: &mut Vec<UGNode>,
@@ -173,13 +185,28 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
             match s {
                 State::Simple { id, .. } => {
                     let (shape, hint) = node_meta(id, false, false, false);
-                    push_node(nodes, seen, id.clone(), labels.get(id).cloned().flatten(), shape, hint);
+                    push_node(
+                        nodes,
+                        seen,
+                        id.clone(),
+                        labels.get(id).cloned().flatten(),
+                        shape,
+                        hint,
+                    );
                 }
                 State::Composite { id, inner } => {
                     let start_idx = nodes.len();
                     let (e, x) = collect(
-                        inner, nodes, edges, subgraphs, seen, labels, composite_entry_exit,
-                        edge_counter, true, degraded,
+                        inner,
+                        nodes,
+                        edges,
+                        subgraphs,
+                        seen,
+                        labels,
+                        composite_entry_exit,
+                        edge_counter,
+                        true,
+                        degraded,
                     );
                     let member_ids: Vec<String> =
                         nodes[start_idx..].iter().map(|n| n.id.clone()).collect();
@@ -199,8 +226,12 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
                         // 声明不再生效 → 退化为带标签的普通状态框（id 作默认标签）。
                         let (shape, hint) = node_meta(id, false, false, false);
                         push_node(
-                            nodes, seen, id.clone(),
-                            labels.get(id).cloned().flatten(), shape, hint,
+                            nodes,
+                            seen,
+                            id.clone(),
+                            labels.get(id).cloned().flatten(),
+                            shape,
+                            hint,
                         );
                     } else {
                         let (shape, hint) = node_meta(id, false, false, true);
@@ -209,13 +240,21 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
                 }
                 State::Start => {
                     push_node(
-                        nodes, seen, "__start__".to_string(), None, ShapeKind::StartDot,
+                        nodes,
+                        seen,
+                        "__start__".to_string(),
+                        None,
+                        ShapeKind::StartDot,
                         SizeHint::Fixed(START_SIZE),
                     );
                 }
                 State::End => {
                     push_node(
-                        nodes, seen, "__end__".to_string(), None, ShapeKind::EndDot,
+                        nodes,
+                        seen,
+                        "__end__".to_string(),
+                        None,
+                        ShapeKind::EndDot,
                         SizeHint::Fixed(END_SIZE),
                     );
                 }
@@ -231,21 +270,41 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
             if is_inner && from_is_star {
                 entry = Some(t.to.clone());
                 let (shape, hint) = node_meta(&t.to, false, false, false);
-                push_node(nodes, seen, t.to.clone(), labels.get(&t.to).cloned().flatten(), shape, hint);
+                push_node(
+                    nodes,
+                    seen,
+                    t.to.clone(),
+                    labels.get(&t.to).cloned().flatten(),
+                    shape,
+                    hint,
+                );
                 continue;
             }
             if is_inner && to_is_star {
                 exit = Some(t.from.clone());
                 let (shape, hint) = node_meta(&t.from, false, false, false);
                 push_node(
-                    nodes, seen, t.from.clone(), labels.get(&t.from).cloned().flatten(), shape, hint,
+                    nodes,
+                    seen,
+                    t.from.clone(),
+                    labels.get(&t.from).cloned().flatten(),
+                    shape,
+                    hint,
                 );
                 continue;
             }
 
             // 外层 [*] → 全局 start/end。
-            let mut from = if from_is_star { "__start__".to_string() } else { t.from.clone() };
-            let mut to = if to_is_star { "__end__".to_string() } else { t.to.clone() };
+            let mut from = if from_is_star {
+                "__start__".to_string()
+            } else {
+                t.from.clone()
+            };
+            let mut to = if to_is_star {
+                "__end__".to_string()
+            } else {
+                t.to.clone()
+            };
 
             // 引用复合状态的边，重写到其入口/出口节点：
             // source 是复合状态 → 从出口节点离开；target 是复合状态 → 进入入口节点。
@@ -257,9 +316,23 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
             }
 
             let (shape_f, hint_f) = node_meta(&from, from_is_star, false, false);
-            push_node(nodes, seen, from.clone(), labels.get(&from).cloned().flatten(), shape_f, hint_f);
+            push_node(
+                nodes,
+                seen,
+                from.clone(),
+                labels.get(&from).cloned().flatten(),
+                shape_f,
+                hint_f,
+            );
             let (shape_t, hint_t) = node_meta(&to, false, to_is_star, false);
-            push_node(nodes, seen, to.clone(), labels.get(&to).cloned().flatten(), shape_t, hint_t);
+            push_node(
+                nodes,
+                seen,
+                to.clone(),
+                labels.get(&to).cloned().flatten(),
+                shape_t,
+                hint_t,
+            );
 
             edges.push(UGEdge {
                 id: format!("t{}", *edge_counter),
@@ -273,7 +346,10 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
                 priority: EdgePriority::Primary,
                 // 官方 state 转移线是曲线（transition path 含 C 贝塞尔）。
                 routing_hint: ir::common::RoutingHint::Spline,
-                arrow: ArrowSpec { start: ArrowKind::None, end: ArrowKind::Arrow },
+                arrow: ArrowSpec {
+                    start: ArrowKind::None,
+                    end: ArrowKind::Arrow,
+                },
                 line_kind: ir::common::LineKind::Solid,
                 repulsion: 1.0,
                 cardinality: (None, None),
@@ -287,8 +363,16 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
 
     let degraded = transition_seen_first(sd);
     collect(
-        sd, &mut nodes, &mut edges, &mut subgraphs, &mut seen, &labels,
-        &mut composite_entry_exit, &mut edge_counter, false, &degraded,
+        sd,
+        &mut nodes,
+        &mut edges,
+        &mut subgraphs,
+        &mut seen,
+        &labels,
+        &mut composite_entry_exit,
+        &mut edge_counter,
+        false,
+        &degraded,
     );
 
     // 保证所有被边引用的节点都存在。
@@ -296,15 +380,23 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
         if !seen.contains(&e.source) {
             let (shape, hint) = node_meta(&e.source, false, false, false);
             push_node(
-                &mut nodes, &mut seen, e.source.clone(), labels.get(&e.source).cloned().flatten(),
-                shape, hint,
+                &mut nodes,
+                &mut seen,
+                e.source.clone(),
+                labels.get(&e.source).cloned().flatten(),
+                shape,
+                hint,
             );
         }
         if !seen.contains(&e.target) {
             let (shape, hint) = node_meta(&e.target, false, false, false);
             push_node(
-                &mut nodes, &mut seen, e.target.clone(), labels.get(&e.target).cloned().flatten(),
-                shape, hint,
+                &mut nodes,
+                &mut seen,
+                e.target.clone(),
+                labels.get(&e.target).cloned().flatten(),
+                shape,
+                hint,
             );
         }
     }
@@ -316,6 +408,9 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
         edges,
         subgraphs,
         sequence_rows: None,
-        meta: ir::common::DiagramMeta { title: None, show_data: false },
+        meta: ir::common::DiagramMeta {
+            title: None,
+            show_data: false,
+        },
     }
 }

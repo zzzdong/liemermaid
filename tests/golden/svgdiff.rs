@@ -334,10 +334,11 @@ pub fn parse(svg: &str) -> Vec<El> {
                 }
                 // 本元素自身的 transform 平移叠加（已含祖先累加）
                 if let Some(t) = attr_str(e.attributes(), "transform")
-                    && let Some((tx, ty)) = parse_translate(&t) {
-                        el.x += tx;
-                        el.y += ty;
-                    }
+                    && let Some((tx, ty)) = parse_translate(&t)
+                {
+                    el.x += tx;
+                    el.y += ty;
+                }
                 // 线状几何端点（line/polyline/path）：用于几何等价比对。
                 if kind == Kind::Line {
                     if let (Some(x1), Some(y1), Some(x2), Some(y2)) = (
@@ -350,14 +351,16 @@ pub fn parse(svg: &str) -> Vec<El> {
                     }
                 } else if kind == Kind::Polyline {
                     if let Some(pts) = attr_str(e.attributes(), "points")
-                        && let Some(ep) = parse_points_endpoints(&pts, px, py) {
-                            el.endpoints = Some(ep);
-                        }
+                        && let Some(ep) = parse_points_endpoints(&pts, px, py)
+                    {
+                        el.endpoints = Some(ep);
+                    }
                 } else if kind == Kind::Path
                     && let Some(d) = attr_str(e.attributes(), "d")
-                        && let Some(ep) = parse_path_endpoints(&d, px, py) {
-                            el.endpoints = Some(ep);
-                        }
+                    && let Some(ep) = parse_path_endpoints(&d, px, py)
+                {
+                    el.endpoints = Some(ep);
+                }
                 els.push(el);
             }
             Ok(Event::End(e)) => {
@@ -449,9 +452,10 @@ fn attr_str<'a>(
 ) -> Option<String> {
     for a in attrs {
         if let Ok(a) = a
-            && a.key == quick_xml::name::QName(name) {
-                return Some(a.value.into_owned().to_string());
-            }
+            && a.key == quick_xml::name::QName(name)
+        {
+            return Some(a.value.into_owned().to_string());
+        }
     }
     None
 }
@@ -653,9 +657,12 @@ fn match_point_sets(a: &[(f64, f64)], b: &[(f64, f64)]) -> Option<f64> {
     Some(max_err)
 }
 
+/// 一条边的两个端点（用于几何比对）。
+type EdgeEnds = ((f64, f64), (f64, f64));
+
 /// 边端点集合是否几何等价：每条边视为线段（两端点），数量相等且每条边都能在对方找到
 /// 一条边使其两端点（顺序可交换）在容差内配对。返回最大配对误差，数量不等返回 None。
-fn match_edge_sets(a: &[((f64, f64), (f64, f64))], b: &[((f64, f64), (f64, f64))]) -> Option<f64> {
+fn match_edge_sets(a: &[EdgeEnds], b: &[EdgeEnds]) -> Option<f64> {
     if a.len() != b.len() {
         return None;
     }
@@ -742,14 +749,15 @@ pub fn summarize(els: &[El]) -> Summary {
             s.node_centers.push((el.x + el.w / 2.0, el.y + el.h / 2.0));
         }
         if key == "edge"
-            && let Some((a, b)) = el.endpoints {
-                let dx = b.0 - a.0;
-                let dy = b.1 - a.1;
-                // 跳过过短的线（如自绘箭头头 path），仅保留真正的边连线。
-                if (dx * dx + dy * dy).sqrt() > 5.0 {
-                    s.edge_endpoints.push((a, b));
-                }
+            && let Some((a, b)) = el.endpoints
+        {
+            let dx = b.0 - a.0;
+            let dy = b.1 - a.1;
+            // 跳过过短的线（如自绘箭头头 path），仅保留真正的边连线。
+            if (dx * dx + dy * dy).sqrt() > 5.0 {
+                s.edge_endpoints.push((a, b));
             }
+        }
     }
     s
 }

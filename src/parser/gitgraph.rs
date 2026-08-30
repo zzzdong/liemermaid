@@ -7,8 +7,8 @@
 
 use crate::ast::{GitGraphDiagram, GitGraphStatement};
 use crate::parser::common::{
-    PResult, consume_line, has_input, identifier, inline_ws, keyword, quoted_string, skip_line,
-    skip_ws_and_comments,
+    PResult, attempt, consume_line, has_input, identifier, inline_ws, keyword, quoted_string,
+    skip_line, skip_ws_and_comments,
 };
 use winnow::{
     Parser,
@@ -36,23 +36,23 @@ pub fn gitgraph_diagram<'i>(input: &mut &'i str) -> PResult<'i, GitGraphDiagram>
         if !has_input(input) {
             break;
         }
-        if let Ok(stmt) = commit_stmt.parse_next(input) {
+        if let Some(stmt) = attempt(commit_stmt, input) {
             statements.push(stmt);
             continue;
         }
-        if let Ok(stmt) = branch_stmt.parse_next(input) {
+        if let Some(stmt) = attempt(branch_stmt, input) {
             statements.push(stmt);
             continue;
         }
-        if let Ok(stmt) = checkout_stmt.parse_next(input) {
+        if let Some(stmt) = attempt(checkout_stmt, input) {
             statements.push(stmt);
             continue;
         }
-        if let Ok(stmt) = merge_stmt.parse_next(input) {
+        if let Some(stmt) = attempt(merge_stmt, input) {
             statements.push(stmt);
             continue;
         }
-        if let Ok(stmt) = cherry_pick_stmt.parse_next(input) {
+        if let Some(stmt) = attempt(cherry_pick_stmt, input) {
             statements.push(stmt);
             continue;
         }

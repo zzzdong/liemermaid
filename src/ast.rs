@@ -1,6 +1,10 @@
+// `serde` 是可选依赖（`default` feature 开启）：关闭时必须能编译，
+// 故导入与全部派生都按 feature 门控（见各处的 `cfg_attr`）。
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Diagram {
     Flowchart(Flowchart),
     Sequence(SequenceDiagram),
@@ -12,7 +16,8 @@ pub enum Diagram {
     GitGraph(GitGraphDiagram),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Flowchart {
     pub direction: Option<Direction>,
     pub nodes: Vec<Node>,
@@ -20,7 +25,8 @@ pub struct Flowchart {
     pub subgraphs: Vec<Subgraph>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Direction {
     TB,
     TD,
@@ -29,14 +35,16 @@ pub enum Direction {
     LR,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Node {
     pub id: String,
     pub shape: Option<NodeShape>,
     pub text: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum NodeShape {
     Rectangle,
     Rounded,
@@ -54,7 +62,8 @@ pub enum NodeShape {
     TrapezoidAlt,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Edge {
     pub source: String,
     pub target: String,
@@ -62,7 +71,8 @@ pub struct Edge {
     pub label: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ArrowType {
     Solid,
     Dotted,
@@ -84,36 +94,47 @@ pub enum ArrowType {
     Labeled(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Subgraph {
     pub title: Option<String>,
     pub nodes: Vec<Node>,
     pub edges: Vec<Edge>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SequenceDiagram {
     pub participants: Vec<Participant>,
     /// 顶层语句（消息、备注、分组块）按输入顺序排列
     pub statements: Vec<SequenceStatement>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum SequenceStatement {
     Message(Message),
     Note(Note),
     Block(SequenceBlock),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum SequenceBlockKind {
     Loop,
     Alt,
     Opt,
     Par,
+    /// `critical ... option ... end`（mermaid v10.7+）
+    Critical,
+    /// `break ... end`：跳出 enclosing loop
+    Break,
+    /// `rect rgb(...) ... end`：底色分组块
+    Rect,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SequenceBlock {
     pub kind: SequenceBlockKind,
     pub label: Option<String>,
@@ -121,21 +142,24 @@ pub struct SequenceBlock {
     pub items: Vec<SequenceItem>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum SequenceItem {
     Message(Message),
     Note(Note),
     Block(SequenceBlock),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Participant {
     pub name: String,
     pub alias: Option<String>,
     pub kind: ParticipantKind,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ParticipantKind {
     Participant,
     Actor,
@@ -147,13 +171,15 @@ pub enum ParticipantKind {
     Queue,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum MessageActivation {
     Activate,
     Deactivate,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Message {
     pub from: String,
     pub to: String,
@@ -163,7 +189,8 @@ pub struct Message {
     pub text: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum MessageArrow {
     Solid,
     SolidTip,
@@ -175,27 +202,31 @@ pub enum MessageArrow {
     Both,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Note {
     pub placement: NotePlacement,
     pub targets: Vec<String>,
     pub text: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum NotePlacement {
     LeftOf,
     RightOf,
     Over,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ClassDiagram {
     pub classes: Vec<Class>,
     pub relations: Vec<Relation>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Class {
     pub name: String,
     /// 泛型参数（mermaid `~T~` 语法），如 `T`
@@ -205,7 +236,8 @@ pub struct Class {
     pub members: Vec<ClassMember>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ClassMember {
     pub visibility: Option<Visibility>,
     pub name: String,
@@ -213,7 +245,8 @@ pub struct ClassMember {
     pub is_method: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Visibility {
     Public,
     Private,
@@ -221,7 +254,8 @@ pub enum Visibility {
     Package,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Relation {
     pub source: String,
     pub target: String,
@@ -233,20 +267,28 @@ pub struct Relation {
     pub label: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum RelationKind {
     Inheritance,
     Composition,
     Aggregation,
     Association,
     Dependency,
+    /// 实现（`..|>` / `<|..`）
+    Realization,
+    /// 实线连接（`--`）
+    Link,
+    /// 虚线连接（`..`）
+    Dashed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct StateDiagram {
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub states: Vec<State>,
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub transitions: Vec<Transition>,
     /// 语句在源码中的**交错顺序**（`states` / `transitions` 的下标序列）。
     ///
@@ -255,12 +297,13 @@ pub struct StateDiagram {
     /// （官方 `state__fork_join` 中 `fork_state` 画成横条、`join_state` 却是带标签的
     /// 普通状态框，原因就在于后者先被 `State2 --> join_state` 引用）。
     /// extract 据此决定是否把 `<<fork>>`/`<<join>>` 降级为普通状态。
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub order: Vec<StateStmt>,
 }
 
 /// [`StateDiagram::order`] 的一项：指向 `states` 或 `transitions` 的下标。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum StateStmt {
     /// 状态声明（`states[i]`）。
     Decl(usize),
@@ -268,7 +311,8 @@ pub enum StateStmt {
     Trans(usize),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum State {
     Simple {
         id: String,
@@ -288,32 +332,37 @@ pub enum State {
     End,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Transition {
     pub from: String,
     pub to: String,
     pub label: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ErDiagram {
     pub entities: Vec<ErEntity>,
     pub relationships: Vec<ErRelationship>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ErEntity {
     pub name: String,
     pub attributes: Vec<ErAttribute>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ErAttribute {
     pub type_: String,
     pub name: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ErRelationship {
     pub first_entity: String,
     pub second_entity: String,
@@ -322,7 +371,8 @@ pub struct ErRelationship {
     pub label: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Cardinality {
     ZeroOrOne,
     ExactlyOne,
@@ -330,20 +380,23 @@ pub enum Cardinality {
     OneOrMany,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PieDiagram {
     pub title: Option<String>,
     pub show_data: bool,
     pub data: Vec<PieData>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PieData {
     pub label: String,
     pub value: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TimelineDiagram {
     pub title: Option<String>,
     /// 方向：`LR`（默认）或 `TD`
@@ -351,24 +404,28 @@ pub struct TimelineDiagram {
     pub sections: Vec<TimelineSection>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum TimelineDirection {
     LR,
     TD,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TimelineSection {
     pub name: String,
     pub events: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GitGraphDiagram {
     pub statements: Vec<GitGraphStatement>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum GitGraphStatement {
     Commit {
         id: Option<String>,

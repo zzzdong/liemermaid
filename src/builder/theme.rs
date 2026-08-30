@@ -44,12 +44,7 @@ pub const TEXT_COLOR: Color = Color::new(19, 19, 0, 255); // #131300
 /// 官方 mermaid 的 `<foreignObject>` 高度 = `font-size × 1.5`（16px → 24px），
 /// 直接决定节点包围盒高度。不设行高时 lievisual 返回字体固有行高（≈18.6px），
 /// 节点会比官方矮约 5px。**measure 与 materialize 必须共用**，否则文本垂直位置会偏。
-pub fn text_style(
-    color: Color,
-    size: f64,
-    align: TextAlign,
-    baseline: TextBaseline,
-) -> TextStyle {
+pub fn text_style(color: Color, size: f64, align: TextAlign, baseline: TextBaseline) -> TextStyle {
     TextStyle::new(color, size, FONT_FAMILY)
         .with_align(align)
         .with_baseline(baseline)
@@ -191,14 +186,14 @@ pub mod timeline {
 pub mod gitgraph {
     use super::Color;
     pub const BRANCH_COLORS: [Color; 8] = [
-        Color::new(0, 0, 204, 255), // git0 深蓝 #0000CC (main)
-        Color::new(255, 200, 0, 255), // git1 金黄 #FFC800 (develop)
-        Color::new(34, 139, 34, 255), // git2 森林绿 #228B22
-        Color::new(220, 20, 60, 255), // git3 猩红 #DC143C
-        Color::new(148, 0, 211, 255), // git4 紫罗兰 #9400D3
+        Color::new(0, 0, 204, 255),    // git0 深蓝 #0000CC (main)
+        Color::new(255, 200, 0, 255),  // git1 金黄 #FFC800 (develop)
+        Color::new(34, 139, 34, 255),  // git2 森林绿 #228B22
+        Color::new(220, 20, 60, 255),  // git3 猩红 #DC143C
+        Color::new(148, 0, 211, 255),  // git4 紫罗兰 #9400D3
         Color::new(30, 144, 255, 255), // git5 道奇蓝 #1E90FF
-        Color::new(255, 140, 0, 255), // git6 深橙 #FF8C00
-        Color::new(50, 205, 50, 255), // git7 酸橙绿 #32CD32
+        Color::new(255, 140, 0, 255),  // git6 深橙 #FF8C00
+        Color::new(50, 205, 50, 255),  // git7 酸橙绿 #32CD32
     ];
     pub const TEXT: Color = super::TEXT_COLOR;
     pub const COMMIT_STROKE: Color = Color::new(255, 255, 255, 255);
@@ -247,15 +242,15 @@ pub mod pie {
     pub const LABEL_FONT: f64 = 16.0;
     pub const COLORS: [Color; 12] = [
         Color::new(236, 236, 255, 255), // pie1 = primaryColor #ECECFF
-        Color::new(255, 255, 222, 255),           // pie2 = secondaryColor #ffffde
+        Color::new(255, 255, 222, 255), // pie2 = secondaryColor #ffffde
         Color::new(185, 255, 32, 255),  // pie3 = adjust(tertiary,{l:-40})
         Color::new(185, 185, 255, 255), // pie4 = adjust(primary,{l:-10})
-        Color::new(255, 255, 69, 255),            // pie5 = adjust(secondary,{l:-30})
+        Color::new(255, 255, 69, 255),  // pie5 = adjust(secondary,{l:-30})
         Color::new(217, 255, 134, 255), // pie6 = adjust(tertiary,{l:-20})
-        Color::new(255, 134, 255, 255),           // pie7 = adjust(primary,{h:+60,l:-20})
-        Color::new(32, 255, 255, 255),            // pie8 = adjust(primary,{h:-60,l:-40})
+        Color::new(255, 134, 255, 255), // pie7 = adjust(primary,{h:+60,l:-20})
+        Color::new(32, 255, 255, 255),  // pie8 = adjust(primary,{h:-60,l:-40})
         Color::new(255, 32, 32, 255),   // pie9 = adjust(primary,{h:120,l:-40})
-        Color::new(255, 32, 255, 255),            // pie10 = adjust(primary,{h:+60,l:-40})
+        Color::new(255, 32, 255, 255),  // pie10 = adjust(primary,{h:+60,l:-40})
         Color::new(32, 255, 144, 255),  // pie11 = adjust(primary,{h:-90,l:-40})
         Color::new(255, 83, 83, 255),   // pie12 = adjust(primary,{h:120,l:-30})
     ];

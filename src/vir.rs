@@ -87,9 +87,10 @@ pub fn fs_both(fill: Color, stroke: Color, width: f64) -> FillStrokeStyle {
 // 图元构造（z 提升到 SceneNode.z_index）
 // ---------------------------------------------------------------------------
 
+/// 构造矩形 / 圆角矩形节点。
+///
 /// 坐标统一使用 lievisual `Point` / `Rect`（不再经 kurbo → lievisual 转换）。
 /// 仅矢量路径（[`BezPath`]）保留 kurbo（lievisual 的 `Element::Path` 原生使用它）。
-
 pub fn rect_node(rect: Rect, radius: Option<f64>, style: FillStrokeStyle, z: i32) -> SceneNode {
     let el = match radius {
         Some(r) => Element::rounded_rect(rect, r, style),

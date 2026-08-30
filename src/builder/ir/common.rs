@@ -35,7 +35,12 @@ pub struct PortSet {
 
 impl Default for PortSet {
     fn default() -> Self {
-        PortSet { top: true, bottom: true, left: true, right: true }
+        PortSet {
+            top: true,
+            bottom: true,
+            left: true,
+            right: true,
+        }
     }
 }
 
@@ -119,8 +124,7 @@ pub enum NodeKind {
 }
 
 /// 节点尺寸约束。
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum NodeConstraint {
     /// 最小尺寸，可压缩到该值以下则报错。
     Min(Size),
@@ -131,10 +135,8 @@ pub enum NodeConstraint {
     Free,
 }
 
-
 /// 尺寸提示：决定布局阶段如何确定节点包围盒。
-#[derive(Debug, Clone, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum SizeHint {
     /// 由文本测量 + 形状几何推算（多数节点）。
     ///
@@ -152,7 +154,6 @@ pub enum SizeHint {
     /// padding=8（如 `Idle` → 41.8×40），flowchart 为 30/15（如 `Start` → 93.8×54）。
     Padded { pad_x: f64, pad_y: f64 },
 }
-
 
 /// 样式引用：指向 Theme 中某条样式规则，materialize 阶段据此查具体颜色/线型。
 ///

@@ -125,7 +125,11 @@ fn reorder_by_neighbors(
                 cnt += 1;
             }
         }
-        let b = if cnt > 0 { sum / cnt as f64 } else { pos as f64 };
+        let b = if cnt > 0 {
+            sum / cnt as f64
+        } else {
+            pos as f64
+        };
         let app = *appearance.get(id).unwrap_or(&pos);
         bary.push((pos, b, app));
     }
@@ -136,7 +140,10 @@ fn reorder_by_neighbors(
             .then(a.2.cmp(&b.2))
     });
 
-    let new_layer: Vec<NodeId> = bary.into_iter().map(|(pos, _, _)| layer[pos].clone()).collect();
+    let new_layer: Vec<NodeId> = bary
+        .into_iter()
+        .map(|(pos, _, _)| layer[pos].clone())
+        .collect();
     cur[layer_idx] = new_layer;
 }
 
@@ -154,8 +161,14 @@ mod tests {
             vec!["C".to_string(), "D".to_string()],
         ];
         let edges = vec![
-            LayerEdge { source: "A".to_string(), target: "D".to_string() },
-            LayerEdge { source: "B".to_string(), target: "C".to_string() },
+            LayerEdge {
+                source: "A".to_string(),
+                target: "D".to_string(),
+            },
+            LayerEdge {
+                source: "B".to_string(),
+                target: "C".to_string(),
+            },
         ];
         let out = minimize_crossings(&layers, &edges);
         let crossings = count_crossings(&out, &edges);
@@ -169,14 +182,26 @@ mod tests {
             vec!["D".to_string(), "E".to_string()],
         ];
         let edges = vec![
-            LayerEdge { source: "A".to_string(), target: "D".to_string() },
-            LayerEdge { source: "B".to_string(), target: "E".to_string() },
-            LayerEdge { source: "C".to_string(), target: "D".to_string() },
+            LayerEdge {
+                source: "A".to_string(),
+                target: "D".to_string(),
+            },
+            LayerEdge {
+                source: "B".to_string(),
+                target: "E".to_string(),
+            },
+            LayerEdge {
+                source: "C".to_string(),
+                target: "D".to_string(),
+            },
         ];
         let out = minimize_crossings(&layers, &edges);
         let mut flat: Vec<String> = out.iter().flat_map(|l| l.iter().cloned()).collect();
         flat.sort();
-        let mut expect = ["A", "B", "C", "D", "E"].iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let mut expect = ["A", "B", "C", "D", "E"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>();
         expect.sort();
         assert_eq!(flat, expect);
     }
@@ -186,7 +211,8 @@ mod tests {
         if layers.len() < 2 {
             return 0;
         }
-        let pos = |li: usize, id: &str| -> Option<usize> { layers[li].iter().position(|x| x == id) };
+        let pos =
+            |li: usize, id: &str| -> Option<usize> { layers[li].iter().position(|x| x == id) };
         let mut count = 0;
         for li in 0..layers.len() - 1 {
             let mut segs: Vec<(usize, usize)> = Vec::new();

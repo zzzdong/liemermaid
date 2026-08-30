@@ -1,4 +1,4 @@
-//! flowchart 的 extract：把 [`crate::ast::Flowchart`] 翻译成 [`Unigraph`](crate::builder::ir::Unigraph)。
+//! flowchart 的 extract：把 [`crate::ast::Flowchart`] 翻译成 [`Unigraph`]。
 //!
 //! 这是 `extract` 家族的第一个实现（P0.3 最小子集）：矩形/菱形/圆等节点 + 直线边。
 //! subgraphs 暂忽略（P2 再处理容器），其他图类型在 P3 实现。
@@ -7,7 +7,10 @@ use crate::{
     ast::{ArrowType, Flowchart, NodeShape},
     builder::ir::{
         self,
-        common::{ArrowKind, ArrowSpec, EdgePriority, LabelSpec, LineKind, PortHint, PortSet, SizeHint, StyleRef},
+        common::{
+            ArrowKind, ArrowSpec, EdgePriority, LabelSpec, LineKind, PortHint, PortSet, SizeHint,
+            StyleRef,
+        },
         shape::ShapeKind,
         unigraph::{EdgeKind, UGEdge, UGNode, Unigraph},
     },
@@ -55,10 +58,14 @@ pub fn map_arrow(arrow: &ArrowType) -> ArrowSpec {
 /// 把 ast 的 ArrowType 映射到 IR 的 LineKind（实线 / 虚线 / 粗线 / 不可见）。
 pub fn map_line(arrow: &ArrowType) -> LineKind {
     match arrow {
-        ArrowType::Solid | ArrowType::NoArrow | ArrowType::Both | ArrowType::Circle
-        | ArrowType::Cross | ArrowType::MultiCircle | ArrowType::MultiCross | ArrowType::Labeled(_) => {
-            LineKind::Solid
-        }
+        ArrowType::Solid
+        | ArrowType::NoArrow
+        | ArrowType::Both
+        | ArrowType::Circle
+        | ArrowType::Cross
+        | ArrowType::MultiCircle
+        | ArrowType::MultiCross
+        | ArrowType::Labeled(_) => LineKind::Solid,
         ArrowType::Dotted => LineKind::Dotted,
         ArrowType::Thick => LineKind::Thick,
         ArrowType::Invisible => LineKind::Invisible,
@@ -89,7 +96,10 @@ pub fn extract_flowchart(fc: &Flowchart) -> Unigraph {
     let mut nodes = Vec::new();
     // 按 fc.nodes + subgraph 内部节点都纳入，去重构建。
     let mut seen = std::collections::HashSet::new();
-    let mut emit_node = |nodes: &mut Vec<UGNode>, id: &str, shape_of: &HashMap<&str, &Option<NodeShape>>, text_of: &HashMap<&str, &Option<String>>| {
+    let mut emit_node = |nodes: &mut Vec<UGNode>,
+                         id: &str,
+                         shape_of: &HashMap<&str, &Option<NodeShape>>,
+                         text_of: &HashMap<&str, &Option<String>>| {
         if seen.contains(id) {
             return;
         }
@@ -168,11 +178,14 @@ pub fn extract_flowchart(fc: &Flowchart) -> Unigraph {
 
     Unigraph {
         family: ir::unigraph::GraphFamily::Directed,
-        direction: fc.direction.clone().unwrap_or(crate::ast::Direction::TB),
+        direction: fc.direction.unwrap_or(crate::ast::Direction::TB),
         nodes,
         edges,
         subgraphs,
         sequence_rows: None,
-        meta: ir::common::DiagramMeta { title: None, show_data: false },
+        meta: ir::common::DiagramMeta {
+            title: None,
+            show_data: false,
+        },
     }
 }

@@ -19,15 +19,19 @@ fn render_gg(src: &str) -> liemermaid::builder::ir::geograph::Geograph {
 }
 
 /// 点是否在节点形状内部（含 margin 收缩，边界接触不算碰撞）。
-fn inside_shape(p: Point, center: Point, w: f64, h: f64, shape: &liemermaid::builder::ir::shape::ShapeKind) -> bool {
+fn inside_shape(
+    p: Point,
+    center: Point,
+    w: f64,
+    h: f64,
+    shape: &liemermaid::builder::ir::shape::ShapeKind,
+) -> bool {
     use liemermaid::builder::ir::shape::ShapeKind;
     let (dx, dy) = (p.x - center.x, p.y - center.y);
     let (hw, hh) = (w / 2.0, h / 2.0);
     const MARGIN: f64 = 2.0;
     match shape {
-        ShapeKind::Diamond => {
-            (dx.abs() / hw.max(1e-9)) + (dy.abs() / hh.max(1e-9)) < 1.0 - 0.02
-        }
+        ShapeKind::Diamond => (dx.abs() / hw.max(1e-9)) + (dy.abs() / hh.max(1e-9)) < 1.0 - 0.02,
         ShapeKind::Circle | ShapeKind::DoubleCircle | ShapeKind::StartDot | ShapeKind::EndDot => {
             (dx / hw.max(1e-9)).powi(2) + (dy / hh.max(1e-9)).powi(2) < 1.0 - 0.02
         }
@@ -90,10 +94,17 @@ fn assert_no_collision(src: &str, case: &str) {
             }
         }
     }
-    assert!(violations.is_empty(), "{case}: 连线穿过节点!\n{}", violations.join("\n"));
+    assert!(
+        violations.is_empty(),
+        "{case}: 连线穿过节点!\n{}",
+        violations.join("\n")
+    );
     // 端点自检：每条边起止点应接近其端点节点的形状边界（不能悬空）。
     for e in &gg.edges {
-        let (Some(s), Some(t)) = (node_by_id.get(e.source.as_str()), node_by_id.get(e.target.as_str())) else {
+        let (Some(s), Some(t)) = (
+            node_by_id.get(e.source.as_str()),
+            node_by_id.get(e.target.as_str()),
+        ) else {
             continue;
         };
         if e.source == e.target {
@@ -101,8 +112,11 @@ fn assert_no_collision(src: &str, case: &str) {
         }
         for (pt, n) in [(e.route.start(), *s), (e.route.end(), *t)] {
             let on = on_boundary(pt, n);
-            assert!(on, "{case}: 边 {}->{} 的端点 ({:.1},{:.1}) 未落在节点 {} 边界上",
-                e.source, e.target, pt.x, pt.y, n.id);
+            assert!(
+                on,
+                "{case}: 边 {}->{} 的端点 ({:.1},{:.1}) 未落在节点 {} 边界上",
+                e.source, e.target, pt.x, pt.y, n.id
+            );
         }
     }
 }
@@ -114,7 +128,9 @@ fn on_boundary(p: Point, n: &liemermaid::builder::ir::geograph::GGNode) -> bool 
     let (hw, hh) = (n.size.width / 2.0, n.size.height / 2.0);
     const TOL: f64 = 3.0;
     match n.shape {
-        ShapeKind::Diamond => ((dx.abs() / hw.max(1e-9)) + (dy.abs() / hh.max(1e-9)) - 1.0).abs() * hh.min(hw) < TOL,
+        ShapeKind::Diamond => {
+            ((dx.abs() / hw.max(1e-9)) + (dy.abs() / hh.max(1e-9)) - 1.0).abs() * hh.min(hw) < TOL
+        }
         ShapeKind::Circle | ShapeKind::DoubleCircle | ShapeKind::StartDot | ShapeKind::EndDot => {
             ((dx / hw.max(1e-9)).powi(2) + (dy / hh.max(1e-9)).powi(2) - 1.0).abs() < 0.25
         }
@@ -137,20 +153,32 @@ fn cycle_edges() {
 #[test]
 fn cycle2_edges() {
     assert_no_collision(
-        &format!("flowchart TB\n    A[A]\n    B[B]\n    C[C]\n    A --> B\n    B --> C\n    C --> A\n    C --> B\n"),
+        "flowchart TB\n    A[A]\n    B[B]\n    C[C]\n    A --> B\n    B --> C\n    C --> A\n    C --> B\n",
         "cycle2",
     );
 }
 
 #[test]
 fn self_loop_edges() {
-    let gg = render_gg("flowchart TB\n    A[A]\n    B[B]\n    C[C]\n    A --> B\n    B --> B\n    B --> C\n");
+    let gg = render_gg(
+        "flowchart TB\n    A[A]\n    B[B]\n    C[C]\n    A --> B\n    B --> B\n    B --> C\n",
+    );
     // 自环应可见：route 非空且外凸出节点包围盒。
-    let e = gg.edges.iter().find(|e| e.source == "B" && e.target == "B").expect("self loop edge");
+    let e = gg
+        .edges
+        .iter()
+        .find(|e| e.source == "B" && e.target == "B")
+        .expect("self loop edge");
     assert!(!e.route.is_empty(), "自环路由为空");
-    let max_x = sample_path(&e.route, 32).iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max);
+    let max_x = sample_path(&e.route, 32)
+        .iter()
+        .map(|p| p.x)
+        .fold(f64::NEG_INFINITY, f64::max);
     let b = gg.nodes.iter().find(|n| n.id == "B").unwrap();
-    assert!(max_x > b.center.x + b.size.width / 2.0 + 5.0, "自环应外凸出右边缘: max_x={max_x}");
+    assert!(
+        max_x > b.center.x + b.size.width / 2.0 + 5.0,
+        "自环应外凸出右边缘: max_x={max_x}"
+    );
 }
 
 #[test]
@@ -213,14 +241,19 @@ fn channel_routes_do_not_overlap() {
     // 判据相对布局中轴（x=0），不写死绝对坐标（节点宽度随文本自适应）。
     let has_left = vsegs.iter().any(|(_, x, _, _)| *x < 0.0);
     let has_right = vsegs.iter().any(|(_, x, _, _)| *x > 0.0);
-    assert!(has_left && has_right, "cycle2 两条通道应分居左右两侧: {vsegs:?}");
+    assert!(
+        has_left && has_right,
+        "cycle2 两条通道应分居左右两侧: {vsegs:?}"
+    );
 }
 
 #[test]
 fn diamond_directions() {
     for (name, dir) in [("bt", "BT"), ("lr", "LR"), ("rl", "RL")] {
         assert_no_collision(
-            &format!("flowchart {dir}\n    A[A]\n    B{{B}}\n    C[C]\n    D[D]\n    A --> B\n    B --> C\n    B --> D\n"),
+            &format!(
+                "flowchart {dir}\n    A[A]\n    B{{B}}\n    C[C]\n    D[D]\n    A --> B\n    B --> C\n    B --> D\n"
+            ),
             &format!("diamond_{name}"),
         );
     }

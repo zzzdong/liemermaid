@@ -55,6 +55,9 @@ fn block_label(block: &SequenceBlock) -> String {
         SequenceBlockKind::Alt => "alt",
         SequenceBlockKind::Opt => "opt",
         SequenceBlockKind::Par => "par",
+        SequenceBlockKind::Critical => "critical",
+        SequenceBlockKind::Break => "break",
+        SequenceBlockKind::Rect => "rect",
     };
     match &block.label {
         Some(l) if !l.trim().is_empty() => format!("{} [{}]", prefix, l.trim()),
@@ -95,6 +98,7 @@ fn ensure_participant(
 
 /// 递归收集语句行：消息 → 边 + `SequenceRow::Message`；备注 → 节点 + `SequenceRow::Note`；
 /// 分组块 → `BlockStart`/`BlockEnd` 包裹块内语句（块 id 递增）。
+#[allow(clippy::too_many_arguments)]
 fn collect_items(
     items: &[SequenceItem],
     nodes: &mut Vec<UGNode>,
@@ -238,7 +242,10 @@ pub fn extract_sequence(seq: &SequenceDiagram) -> Unigraph {
         edges,
         subgraphs: Vec::new(),
         sequence_rows: Some(rows),
-        meta: DiagramMeta { title: None, show_data: false },
+        meta: DiagramMeta {
+            title: None,
+            show_data: false,
+        },
     }
 }
 
@@ -258,7 +265,9 @@ mod tests {
 
     #[test]
     fn extract_participants_as_lifeline_nodes() {
-        let seq = parse("sequenceDiagram\n    participant A as Alice\n    participant B as Bob\n    A->>B: hi\n");
+        let seq = parse(
+            "sequenceDiagram\n    participant A as Alice\n    participant B as Bob\n    A->>B: hi\n",
+        );
         let ug = extract_sequence(&seq);
         assert_eq!(ug.family, GraphFamily::Sequence);
         assert_eq!(ug.nodes.len(), 2, "两个参与者节点");
@@ -324,7 +333,15 @@ mod tests {
             .collect();
         assert_eq!(
             kinds,
-            vec!["msg", "note", "block-start", "msg", "msg", "block-end", "note"]
+            vec![
+                "msg",
+                "note",
+                "block-start",
+                "msg",
+                "msg",
+                "block-end",
+                "note"
+            ]
         );
     }
 
@@ -351,7 +368,10 @@ mod tests {
                 }
             })
             .collect();
-        assert_eq!(kinds, vec!["msg", "msg", "activate", "msg", "deactivate", "msg"]);
+        assert_eq!(
+            kinds,
+            vec!["msg", "msg", "activate", "msg", "deactivate", "msg"]
+        );
         // 激活作用于消息**目标**参与者。
         let act = rows
             .iter()
@@ -384,7 +404,11 @@ mod tests {
             .find(|n| matches!(n.detail, NodeDetail::SequenceNote { .. }))
             .unwrap();
         match &note.detail {
-            NodeDetail::SequenceNote { text, targets, placement } => {
+            NodeDetail::SequenceNote {
+                text,
+                targets,
+                placement,
+            } => {
                 assert_eq!(text, "shared note");
                 assert_eq!(targets, &vec!["A".to_string(), "B".to_string()]);
                 assert_eq!(*placement, SequenceNotePlacement::Over);

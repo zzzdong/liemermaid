@@ -11,8 +11,8 @@ use crate::{
     builder::ir::{
         self,
         common::{
-            ArrowKind, ArrowSpec, EdgePriority, LabelSpec, LineKind, NodeDetail, PortHint,
-            PortSet, SizeHint, StyleRef,
+            ArrowKind, ArrowSpec, EdgePriority, LabelSpec, LineKind, NodeDetail, PortHint, PortSet,
+            SizeHint, StyleRef,
         },
         shape::ShapeKind,
         unigraph::{EdgeKind, UGEdge, UGNode, Unigraph},
@@ -27,6 +27,9 @@ pub fn map_relation_kind(kind: &RelationKind) -> EdgeKind {
         RelationKind::Aggregation => EdgeKind::ClassAggregation,
         RelationKind::Association => EdgeKind::ClassAssociation,
         RelationKind::Dependency => EdgeKind::ClassDependency,
+        RelationKind::Realization => EdgeKind::ClassRealization,
+        RelationKind::Link => EdgeKind::ClassLink,
+        RelationKind::Dashed => EdgeKind::ClassDashed,
     }
 }
 
@@ -136,10 +139,11 @@ pub fn extract_class(cd: &ClassDiagram) -> Unigraph {
             RelationKind::Association | RelationKind::Dependency => ArrowKind::Arrow,
             _ => ArrowKind::None,
         };
-        let line_kind = if rel.kind == RelationKind::Dependency {
-            LineKind::Dotted
-        } else {
-            LineKind::Solid
+        let line_kind = match rel.kind {
+            RelationKind::Dependency | RelationKind::Dashed | RelationKind::Realization => {
+                LineKind::Dotted
+            }
+            _ => LineKind::Solid,
         };
         edges.push(UGEdge {
             id: format!("r{}", i),
@@ -160,7 +164,10 @@ pub fn extract_class(cd: &ClassDiagram) -> Unigraph {
             line_kind,
             repulsion: 1.0,
             cardinality: (None, None),
-            cardinality_text: (rel.cardinality_first.clone(), rel.cardinality_second.clone()),
+            cardinality_text: (
+                rel.cardinality_first.clone(),
+                rel.cardinality_second.clone(),
+            ),
         });
     }
 
@@ -171,7 +178,10 @@ pub fn extract_class(cd: &ClassDiagram) -> Unigraph {
         edges,
         subgraphs: Vec::new(),
         sequence_rows: None,
-        meta: ir::common::DiagramMeta { title: None, show_data: false },
+        meta: ir::common::DiagramMeta {
+            title: None,
+            show_data: false,
+        },
     }
 }
 
@@ -239,11 +249,26 @@ mod tests {
 
     #[test]
     fn maps_relation_kinds() {
-        assert_eq!(map_relation_kind(&RelationKind::Inheritance), EdgeKind::ClassExtends);
-        assert_eq!(map_relation_kind(&RelationKind::Composition), EdgeKind::ClassComposition);
-        assert_eq!(map_relation_kind(&RelationKind::Aggregation), EdgeKind::ClassAggregation);
-        assert_eq!(map_relation_kind(&RelationKind::Association), EdgeKind::ClassAssociation);
-        assert_eq!(map_relation_kind(&RelationKind::Dependency), EdgeKind::ClassDependency);
+        assert_eq!(
+            map_relation_kind(&RelationKind::Inheritance),
+            EdgeKind::ClassExtends
+        );
+        assert_eq!(
+            map_relation_kind(&RelationKind::Composition),
+            EdgeKind::ClassComposition
+        );
+        assert_eq!(
+            map_relation_kind(&RelationKind::Aggregation),
+            EdgeKind::ClassAggregation
+        );
+        assert_eq!(
+            map_relation_kind(&RelationKind::Association),
+            EdgeKind::ClassAssociation
+        );
+        assert_eq!(
+            map_relation_kind(&RelationKind::Dependency),
+            EdgeKind::ClassDependency
+        );
     }
 
     #[test]

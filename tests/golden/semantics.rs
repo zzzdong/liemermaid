@@ -247,9 +247,10 @@ fn attr_str<'a>(
 ) -> Option<String> {
     for a in attrs {
         if let Ok(a) = a
-            && a.key == quick_xml::name::QName(name) {
-                return Some(a.value.into_owned().to_string());
-            }
+            && a.key == quick_xml::name::QName(name)
+        {
+            return Some(a.value.into_owned().to_string());
+        }
     }
     None
 }

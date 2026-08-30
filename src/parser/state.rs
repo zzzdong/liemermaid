@@ -7,8 +7,8 @@
 
 use crate::ast::{State, StateDiagram, StateStmt, Transition};
 use crate::parser::common::{
-    PResult, consume_line, has_input, identifier, inline_ws, keyword, quoted_string, rest_of_line,
-    skip_line, skip_ws_and_comments,
+    PResult, attempt, consume_line, has_input, identifier, inline_ws, keyword, quoted_string,
+    rest_of_line, skip_line, skip_ws_and_comments,
 };
 use winnow::{
     Parser,
@@ -40,30 +40,24 @@ fn parse_body<'i>(input: &mut &'i str) -> PResult<'i, StateDiagram> {
         if input.starts_with('}') {
             break;
         }
-        // 每次尝试前保存检查点：winnow 组合子在 Cut 失败时不会回滚输入，
-        // 手动恢复以确保后续分支（声明/转移/裸声明）都能从头解析本行。
-        let cp = *input;
         // 状态声明（简单/复合/fork/join）
-        if let Ok(s) = state_decl.parse_next(input) {
+        if let Some(s) = attempt(state_decl, input) {
             order.push(StateStmt::Decl(states.len()));
             states.push(s);
             continue;
         }
-        *input = cp;
         // 转移
-        if let Ok(t) = transition.parse_next(input) {
+        if let Some(t) = attempt(transition, input) {
             order.push(StateStmt::Trans(transitions.len()));
             transitions.push(t);
             continue;
         }
-        *input = cp;
         // 裸状态声明：`s3` 或 `s2 : 描述`（不以 `state` 关键字开头的声明）
-        if let Ok(s) = bare_state_decl.parse_next(input) {
+        if let Some(s) = attempt(bare_state_decl, input) {
             order.push(StateStmt::Decl(states.len()));
             states.push(s);
             continue;
         }
-        *input = cp;
         // 跳过未知行
         skip_line(input)?;
     }

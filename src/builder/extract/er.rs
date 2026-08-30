@@ -35,7 +35,10 @@ pub fn extract_er(ed: &ErDiagram) -> Unigraph {
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     // 实体顺序：显式声明在前 + 关系隐含实体按出现顺序追加（与旧 render/er.rs 一致）。
-    let push_entity = |nodes: &mut Vec<UGNode>, seen: &mut std::collections::HashSet<String>, name: &str, attrs: Vec<EntityAttr>| {
+    let push_entity = |nodes: &mut Vec<UGNode>,
+                       seen: &mut std::collections::HashSet<String>,
+                       name: &str,
+                       attrs: Vec<EntityAttr>| {
         if seen.contains(name) {
             return;
         }
@@ -109,7 +112,10 @@ pub fn extract_er(ed: &ErDiagram) -> Unigraph {
         edges,
         subgraphs: Vec::new(),
         sequence_rows: None,
-        meta: ir::common::DiagramMeta { title: None, show_data: false },
+        meta: ir::common::DiagramMeta {
+            title: None,
+            show_data: false,
+        },
     }
 }
 
@@ -119,10 +125,22 @@ mod tests {
 
     #[test]
     fn maps_cardinality() {
-        assert_eq!(map_cardinality(&Cardinality::ZeroOrOne), ErCardinality::ZeroOrOne);
-        assert_eq!(map_cardinality(&Cardinality::ExactlyOne), ErCardinality::ExactlyOne);
-        assert_eq!(map_cardinality(&Cardinality::ZeroOrMany), ErCardinality::ZeroOrMany);
-        assert_eq!(map_cardinality(&Cardinality::OneOrMany), ErCardinality::OneOrMany);
+        assert_eq!(
+            map_cardinality(&Cardinality::ZeroOrOne),
+            ErCardinality::ZeroOrOne
+        );
+        assert_eq!(
+            map_cardinality(&Cardinality::ExactlyOne),
+            ErCardinality::ExactlyOne
+        );
+        assert_eq!(
+            map_cardinality(&Cardinality::ZeroOrMany),
+            ErCardinality::ZeroOrMany
+        );
+        assert_eq!(
+            map_cardinality(&Cardinality::OneOrMany),
+            ErCardinality::OneOrMany
+        );
     }
 
     #[test]
@@ -154,7 +172,10 @@ mod tests {
         assert_eq!(ug.edges[0].kind, EdgeKind::Generic);
         assert_eq!(
             ug.edges[0].cardinality,
-            (Some(ErCardinality::ExactlyOne), Some(ErCardinality::ZeroOrMany))
+            (
+                Some(ErCardinality::ExactlyOne),
+                Some(ErCardinality::ZeroOrMany)
+            )
         );
     }
 }

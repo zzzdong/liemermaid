@@ -6,12 +6,12 @@
 
 use crate::ast::{Cardinality, ErAttribute, ErDiagram, ErEntity, ErRelationship};
 use crate::parser::common::{
-    PResult, consume_line, has_input, identifier, quoted_string, rest_of_line, skip_line,
-    skip_ws_and_comments, ws,
+    PResult, attempt, consume_line, has_input, identifier, inline_ws_and_comments, keyword,
+    quoted_string, rest_of_line, skip_line, skip_ws_and_comments,
 };
 use winnow::{
     Parser,
-    combinator::{alt, opt, peek, preceded},
+    combinator::{alt, opt, preceded},
     token::take_while,
 };
 
@@ -28,11 +28,11 @@ pub fn er_diagram<'i>(input: &mut &'i str) -> PResult<'i, ErDiagram> {
         if input.is_empty() {
             break;
         }
-        if let Ok(e) = entity.parse_next(input) {
+        if let Some(e) = attempt(entity, input) {
             entities.push(e);
             continue;
         }
-        if let Ok(r) = relationship.parse_next(input) {
+        if let Some(r) = attempt(relationship, input) {
             relationships.push(r);
             continue;
         }
@@ -46,13 +46,14 @@ pub fn er_diagram<'i>(input: &mut &'i str) -> PResult<'i, ErDiagram> {
     })
 }
 
-/// 实体：`NAME { type name [PK] ... }`
+/// 实体：`NAME { type name [PK] ... }`，名字可带 `as` 别名。
 fn entity<'i>(input: &mut &'i str) -> PResult<'i, ErEntity> {
-    // 仅当后面紧跟 `{` 时才是实体声明，避免误吞关系行（peek 会回滚）。
-    let _ = peek((identifier, ws, '{')).parse_next(input)?;
-
-    let name = identifier.parse_next(input)?;
+    let name = entity_name.parse_next(input)?;
     skip_ws_and_comments(input)?;
+    // 仅当后面紧跟 `{` 时才是实体声明，避免误吞关系行。
+    if !input.starts_with('{') {
+        return Err(winnow::error::InputError::at(*input));
+    }
 
     let mut attributes = Vec::new();
     if input.starts_with('{') {
@@ -135,9 +136,26 @@ fn relationship<'i>(input: &mut &'i str) -> PResult<'i, ErRelationship> {
     })
 }
 
-/// 实体引用（关系行中）：标识符或引号串。
+/// 实体引用（关系行中）：引号串，或标识符（可带 `as` 别名）。
 fn entity_ref<'i>(input: &mut &'i str) -> PResult<'i, String> {
-    alt((quoted_string, identifier)).parse_next(input)
+    alt((quoted_string, entity_name)).parse_next(input)
+}
+
+/// 实体名（可带 `as` 别名）：`CUSTOMER as C`。
+///
+/// mermaid 以别名作为实体显示名，因此这里直接返回别名。
+fn entity_name<'i>(input: &mut &'i str) -> PResult<'i, String> {
+    let name = identifier.parse_next(input)?;
+    let cp = *input;
+    inline_ws_and_comments(input)?;
+    if let Some(alias) = attempt(
+        preceded((keyword("as"), inline_ws_and_comments), identifier),
+        input,
+    ) {
+        return Ok(alias);
+    }
+    *input = cp;
+    Ok(name)
 }
 
 #[cfg(test)]

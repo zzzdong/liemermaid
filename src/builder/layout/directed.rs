@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 
 use crate::ast::Direction;
-use crate::builder::ir::{unigraph::Unigraph, common::NodeId};
+use crate::builder::ir::{common::NodeId, unigraph::Unigraph};
 
 use super::crossing::{LayerEdge, minimize_crossings};
 
@@ -28,7 +28,9 @@ fn detect_back_edges(ug: &Unigraph) -> std::collections::HashSet<(NodeId, NodeId
         adj.entry(n.id.clone()).or_default();
     }
     for e in &ug.edges {
-        adj.entry(e.source.clone()).or_default().push(e.target.clone());
+        adj.entry(e.source.clone())
+            .or_default()
+            .push(e.target.clone());
     }
     let mut back: std::collections::HashSet<(NodeId, NodeId)> = std::collections::HashSet::new();
     // 三色标记：0=未访问，1=在栈中，2=已结束。
@@ -193,7 +195,10 @@ mod tests {
             label: None,
             priority: EdgePriority::Primary,
             routing_hint: RoutingHint::Orthogonal,
-            arrow: ArrowSpec { start: ArrowKind::None, end: ArrowKind::Arrow },
+            arrow: ArrowSpec {
+                start: ArrowKind::None,
+                end: ArrowKind::Arrow,
+            },
             line_kind: LineKind::Solid,
             repulsion: 1.0,
             cardinality: (None, None),
@@ -202,7 +207,8 @@ mod tests {
     }
 
     fn count_crossings_ug(layers: &[Vec<NodeId>], edges: &[UGEdge]) -> usize {
-        let pos = |li: usize, id: &str| -> Option<usize> { layers[li].iter().position(|x| x == id) };
+        let pos =
+            |li: usize, id: &str| -> Option<usize> { layers[li].iter().position(|x| x == id) };
         let mut count = 0;
         for li in 0..layers.len() - 1 {
             let mut segs: Vec<(usize, usize)> = Vec::new();
@@ -280,4 +286,3 @@ mod tests {
         assert_eq!(out2[0], vec!["C".to_string()]);
     }
 }
-

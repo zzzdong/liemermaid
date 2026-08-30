@@ -7,7 +7,7 @@
 
 use crate::ast::{Class, ClassDiagram, ClassMember, Relation, RelationKind, Visibility};
 use crate::parser::common::{
-    PResult, consume_line, has_input, identifier, inline_ws, quoted_string, rest_of_line,
+    PResult, attempt, consume_line, has_input, identifier, inline_ws, quoted_string, rest_of_line,
     skip_line, skip_ws_and_comments,
 };
 use winnow::{
@@ -29,11 +29,11 @@ pub fn class_diagram<'i>(input: &mut &'i str) -> PResult<'i, ClassDiagram> {
         if input.is_empty() {
             break;
         }
-        if let Ok(c) = class_decl.parse_next(input) {
+        if let Some(c) = attempt(class_decl, input) {
             classes.push(c);
             continue;
         }
-        if let Ok(r) = relation.parse_next(input) {
+        if let Some(r) = attempt(relation, input) {
             relations.push(r);
             continue;
         }
@@ -84,7 +84,7 @@ fn class_decl<'i>(input: &mut &'i str) -> PResult<'i, Class> {
             if !has_input(input) {
                 break;
             }
-            if let Ok(m) = member.parse_next(input) {
+            if let Some(m) = attempt(member, input) {
                 members.push(m);
             } else {
                 // 跳过无法解析的成员行
@@ -241,16 +241,27 @@ fn relation<'i>(input: &mut &'i str) -> PResult<'i, Relation> {
 
 /// 关系类型符号。
 fn relation_kind<'i>(input: &mut &'i str) -> PResult<'i, RelationKind> {
+    // 长符号必须排在短符号之前（`..|>` 先于 `..>`，`-->` 先于 `--`），
+    // 否则短匹配会截断符号尾部导致关系行被整行丢弃。
+    // 注：`alt` 元组最多 10 个分支，故按"继承/组合/聚合"与"关联/实现/依赖/连接"分组。
     alt((
-        "<|--".map(|_| RelationKind::Inheritance),
-        "--|>".map(|_| RelationKind::Inheritance),
-        "--*>".map(|_| RelationKind::Composition),
-        "*--".map(|_| RelationKind::Composition),
-        "o--".map(|_| RelationKind::Aggregation),
-        "--o".map(|_| RelationKind::Aggregation),
-        "-->".map(|_| RelationKind::Association),
-        "..>".map(|_| RelationKind::Dependency),
-        "<..".map(|_| RelationKind::Dependency),
+        alt((
+            "<|--".map(|_| RelationKind::Inheritance),
+            "--|>".map(|_| RelationKind::Inheritance),
+            "--*>".map(|_| RelationKind::Composition),
+            "*--".map(|_| RelationKind::Composition),
+            "o--".map(|_| RelationKind::Aggregation),
+            "--o".map(|_| RelationKind::Aggregation),
+        )),
+        alt((
+            "-->".map(|_| RelationKind::Association),
+            "..|>".map(|_| RelationKind::Realization),
+            "<|..".map(|_| RelationKind::Realization),
+            "..>".map(|_| RelationKind::Dependency),
+            "<..".map(|_| RelationKind::Dependency),
+            "..".map(|_| RelationKind::Dashed),
+            "--".map(|_| RelationKind::Link),
+        )),
     ))
     .parse_next(input)
 }

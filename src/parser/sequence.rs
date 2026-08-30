@@ -12,8 +12,8 @@ use crate::ast::{
     SequenceBlock, SequenceBlockKind, SequenceDiagram, SequenceItem, SequenceStatement,
 };
 use crate::parser::common::{
-    PResult, consume_line, has_input, inline_ws, keyword, participant_kind, quoted_string,
-    rest_of_line, skip_line, skip_ws_and_comments,
+    PResult, attempt, consume_line, has_input, inline_ws, inline_ws_and_comments, keyword,
+    participant_kind, quoted_string, rest_of_line, skip_line, skip_ws_and_comments,
 };
 use winnow::{
     Parser,
@@ -35,22 +35,22 @@ pub fn sequence_diagram<'i>(input: &mut &'i str) -> PResult<'i, SequenceDiagram>
             break;
         }
         // 参与者声明
-        if let Ok(p) = participant_decl.parse_next(input) {
+        if let Some(p) = attempt(participant_decl, input) {
             participants.push(p);
             continue;
         }
         // 分组块
-        if let Ok(stmt) = block_statement.parse_next(input) {
+        if let Some(stmt) = attempt(block_statement, input) {
             statements.push(stmt);
             continue;
         }
         // 备注
-        if let Ok(stmt) = note_statement.parse_next(input) {
+        if let Some(stmt) = attempt(note_statement, input) {
             statements.push(stmt);
             continue;
         }
         // 消息
-        if let Ok(stmt) = message_statement.parse_next(input) {
+        if let Some(stmt) = attempt(message_statement, input) {
             statements.push(stmt);
             continue;
         }
@@ -99,25 +99,33 @@ fn p_name<'i>(input: &mut &'i str) -> PResult<'i, String> {
     alt((quoted_string, seq_id)).parse_next(input)
 }
 
-/// 严格标识符：字母 / 数字 / 下划线（首字符非数字）。用于 sequence 参与者名。
+/// 严格标识符：字母 / 数字 / 下划线（首字符非数字），支持 Unicode。
+///
+/// 用于 sequence 参与者名。这里**不能**用通用的 [`identifier`]：后者允许连字符
+/// （在 `-` 后非箭头起始时），会把 `A-xB` 的参与者名读成 `A-x`，把官方的
+/// `-x`（终点叉号）箭头吞掉。sequence 的参与者名本就不含连字符。
 fn seq_id<'i>(input: &mut &'i str) -> PResult<'i, String> {
-    take_while(1.., |c: char| c.is_ascii_alphanumeric() || c == '_')
+    take_while(1.., |c: char| c.is_alphanumeric() || c == '_')
         .map(|s: &str| s.to_string())
         .parse_next(input)
 }
 
 /// 消息语句：`A->>B: text`
+///
+/// 语句内部一律用 [`inline_ws_and_comments`]（不跨行）：若用会吃换行的
+/// `skip_ws_and_comments`，`autonumber` 这类指令行的下一行消息会被并进上一句，
+/// 凭空造出一个名为 `autonumber` 的参与者。
 fn message_statement<'i>(input: &mut &'i str) -> PResult<'i, SequenceStatement> {
     let from = p_name.parse_next(input)?;
-    skip_ws_and_comments(input)?;
+    inline_ws_and_comments(input)?;
 
     let (arrow, activation) = arrow_with_activation.parse_next(input)?;
-    skip_ws_and_comments(input)?;
+    inline_ws_and_comments(input)?;
 
     let to = p_name.parse_next(input)?;
 
     // 可选的 `: text`
-    skip_ws_and_comments(input)?;
+    inline_ws_and_comments(input)?;
     let text = opt(preceded(':', rest_of_line)).parse_next(input)?;
 
     Ok(SequenceStatement::Message(Message {
@@ -133,6 +141,7 @@ fn message_statement<'i>(input: &mut &'i str) -> PResult<'i, SequenceStatement> 
 fn arrow_with_activation<'i>(
     input: &mut &'i str,
 ) -> PResult<'i, (MessageArrow, Option<MessageActivation>)> {
+    // 长符号必须排在短符号之前，否则 `->>` 会被 `->` 抢先匹配。
     let base = alt((
         "<<->>".map(|_| MessageArrow::Both),
         "<<-->>".map(|_| MessageArrow::Both),
@@ -140,13 +149,18 @@ fn arrow_with_activation<'i>(
         "-->>".map(|_| MessageArrow::DashedTip),
         "->x".map(|_| MessageArrow::Cross),
         "--x".map(|_| MessageArrow::Cross),
-        "->".map(|_| MessageArrow::Solid),
         alt((
-            "-->".map(|_| MessageArrow::Dashed),
-            "-x".map(|_| MessageArrow::Cross),
+            // 异步开放箭头（mermaid `-)` / `--)`）
+            "--)".map(|_| MessageArrow::Open),
+            "-)".map(|_| MessageArrow::Open),
+            "->".map(|_| MessageArrow::Solid),
             alt((
-                "x->".map(|_| MessageArrow::Open),
-                "x-->".map(|_| MessageArrow::Open),
+                "-->".map(|_| MessageArrow::Dashed),
+                "-x".map(|_| MessageArrow::Cross),
+                alt((
+                    "x->".map(|_| MessageArrow::Open),
+                    "x-->".map(|_| MessageArrow::Open),
+                )),
             )),
         )),
     ))
@@ -205,13 +219,28 @@ fn note_statement<'i>(input: &mut &'i str) -> PResult<'i, SequenceStatement> {
     }))
 }
 
+/// 是否位于块结束的 `end` 关键字处。
+///
+/// 要求 `end` 后紧跟空白/分号/EOF，避免把 `endpoint->>A: x` 这类以 `end` 开头的
+/// 参与者名误判成块结束。
+fn at_block_end(input: &str) -> bool {
+    input.strip_prefix("end").is_some_and(|rest| {
+        rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == ';')
+    })
+}
+
 /// 分组块：`loop label ... end`
 fn block_statement<'i>(input: &mut &'i str) -> PResult<'i, SequenceStatement> {
+    // 注意：`keyword` 要求关键字后紧跟空白/行尾，因此 `critical` 不会被
+    // 更短的 `opt` 之类的前缀误匹配（winnow 的 `alt` 按序尝试）。
     let kind = alt((
         keyword("loop").map(|_| SequenceBlockKind::Loop),
         keyword("alt").map(|_| SequenceBlockKind::Alt),
         keyword("opt").map(|_| SequenceBlockKind::Opt),
         keyword("par").map(|_| SequenceBlockKind::Par),
+        keyword("critical").map(|_| SequenceBlockKind::Critical),
+        keyword("break").map(|_| SequenceBlockKind::Break),
+        keyword("rect").map(|_| SequenceBlockKind::Rect),
     ))
     .parse_next(input)?;
 
@@ -225,26 +254,22 @@ fn block_statement<'i>(input: &mut &'i str) -> PResult<'i, SequenceStatement> {
         if !has_input(input) {
             break;
         }
-        if input.starts_with("end") {
+        if at_block_end(input) {
             break;
         }
         // 嵌套块
-        if let Ok(SequenceStatement::Block(b)) = block_statement.parse_next(input) {
+        if let Some(SequenceStatement::Block(b)) = attempt(block_statement, input) {
             items.push(SequenceItem::Block(b));
             continue;
         }
         // 备注
-        if let Ok(stmt) = note_statement.parse_next(input) {
-            if let SequenceStatement::Note(n) = stmt {
-                items.push(SequenceItem::Note(n));
-            }
+        if let Some(SequenceStatement::Note(n)) = attempt(note_statement, input) {
+            items.push(SequenceItem::Note(n));
             continue;
         }
         // 消息
-        if let Ok(stmt) = message_statement.parse_next(input) {
-            if let SequenceStatement::Message(m) = stmt {
-                items.push(SequenceItem::Message(m));
-            }
+        if let Some(SequenceStatement::Message(m)) = attempt(message_statement, input) {
+            items.push(SequenceItem::Message(m));
             continue;
         }
         // 跳过未知行

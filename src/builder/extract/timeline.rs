@@ -35,7 +35,9 @@ pub fn extract_timeline(td: &TimelineDiagram) -> Unigraph {
             size_hint: SizeHint::ByText,
             style_ref: StyleRef::NodeDefault,
             constraint: NodeConstraint::Free,
-            detail: NodeDetail::TimelineSection { events: sec.events.clone() },
+            detail: NodeDetail::TimelineSection {
+                events: sec.events.clone(),
+            },
         })
         .collect();
 
@@ -50,7 +52,10 @@ pub fn extract_timeline(td: &TimelineDiagram) -> Unigraph {
         edges: Vec::new(),
         subgraphs: Vec::new(),
         sequence_rows: None,
-        meta: DiagramMeta { title: td.title.clone(), show_data: false },
+        meta: DiagramMeta {
+            title: td.title.clone(),
+            show_data: false,
+        },
     }
 }
 
@@ -88,7 +93,10 @@ mod tests {
                 };
                 assert_eq!(label_text, "A");
                 // 事件 = [时间标记] + 冒号分隔事件。
-                assert_eq!(events, &vec!["1900".to_string(), "e1".to_string(), "e2".to_string()]);
+                assert_eq!(
+                    events,
+                    &vec!["1900".to_string(), "e1".to_string(), "e2".to_string()]
+                );
             }
             other => panic!("期望 TimelineSection, got {other:?}"),
         }

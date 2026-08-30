@@ -20,9 +20,10 @@ use crate::{
 pub fn extract_pie(pie: &PieDiagram) -> DiagramResult<Unigraph> {
     let mut nodes: Vec<UGNode> = Vec::new();
     for (i, d) in pie.data.iter().enumerate() {
-        let value: f64 = d.value.parse().map_err(|_| {
-            DiagramError::LayoutError(format!("invalid pie value: {}", d.value))
-        })?;
+        let value: f64 = d
+            .value
+            .parse()
+            .map_err(|_| DiagramError::LayoutError(format!("invalid pie value: {}", d.value)))?;
         nodes.push(UGNode {
             id: format!("slice{}", i),
             kind: NodeKind::Atom,
@@ -49,7 +50,10 @@ pub fn extract_pie(pie: &PieDiagram) -> DiagramResult<Unigraph> {
         edges: Vec::new(),
         subgraphs: Vec::new(),
         sequence_rows: None,
-        meta: DiagramMeta { title: pie.title.clone(), show_data: pie.show_data },
+        meta: DiagramMeta {
+            title: pie.title.clone(),
+            show_data: pie.show_data,
+        },
     })
 }
 

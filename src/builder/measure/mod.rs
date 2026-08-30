@@ -1,16 +1,17 @@
 //! Stage 1.5: Measure —— 测量所有文本，把尺寸写回 UG 得到 UG'。
 //!
 //! 必须在 Layout 之前完成：solver（分层 / 网格 / 泳道）需要节点包围盒才能排布。
-//! 节点标签经 lievisual 文本测量 + [`ShapeKind`] 几何约束推算尺寸；
-//! 边标签（`label_text`）同样在此测量，填入 [`UGEdge::label`]。
+//! 节点标签经 lievisual 文本测量 + [`ShapeKind`](crate::builder::ir::shape::ShapeKind)
+//! 几何约束推算尺寸；边标签（`label_text`）同样在此测量，填入
+//! [`UGEdge::label`](crate::builder::ir::unigraph::UGEdge::label)。
 //!
 //! 字体尺寸等样式常量直接引用 `crate::builder::theme` 的 const（现状无 Theme 结构体）。
 
 use lievisual::geometry::{Color, Size};
 use lievisual::text::{RichSpan, TextAlign, TextBaseline, TextStyle, layout_text};
 
-use crate::builder::theme;
 use crate::builder::ir::{self, common::*};
+use crate::builder::theme;
 
 const MIN_NODE_WIDTH: f64 = theme::NODE_MIN_W;
 const MIN_NODE_HEIGHT: f64 = theme::NODE_MIN_H;
@@ -34,9 +35,9 @@ pub fn measure_all(mut ug: ir::Unigraph) -> ir::Unigraph {
             // 结构化节点（类框 / 实体框 / 时间轴列 / 备注）走多栏测量；
             // PieSlice / GitCommit 是普通单标签节点（几何由 materialize 从数据计算）。
             n.label = match &n.detail {
-                NodeDetail::None
-                | NodeDetail::PieSlice { .. }
-                | NodeDetail::GitCommit { .. } => measure_node_label(&n.label, shape, hint),
+                NodeDetail::None | NodeDetail::PieSlice { .. } | NodeDetail::GitCommit { .. } => {
+                    measure_node_label(&n.label, shape, hint)
+                }
                 detail => measure_structured_label(&n.label, detail),
             };
             n
@@ -154,7 +155,11 @@ fn measure_structured_label(label: &LabelOrMeasured, detail: &NodeDetail) -> Lab
     let small_style = text_style(SMALL_FONT, TextAlign::Left, TextBaseline::Top);
 
     let (width, height) = match detail {
-        NodeDetail::Class { annotation, attrs, methods } => {
+        NodeDetail::Class {
+            annotation,
+            attrs,
+            methods,
+        } => {
             let ann_layout = annotation.as_ref().map(|a| {
                 layout_text(
                     &[RichSpan::new(format!("«{}»", a), small_style.clone())],
@@ -213,11 +218,8 @@ fn measure_structured_label(label: &LabelOrMeasured, detail: &NodeDetail) -> Lab
         NodeDetail::TimelineSection { events } => {
             // 时间轴列：尺寸覆盖「section 块（上）+ 事件块区（下）+ 时间点/连线留白」。
             // 具体视觉常量由 materialize 使用，这里仅给出能容纳全列内容的包围盒。
-            let sec_w = layout_text(
-                &[RichSpan::new(name.clone(), small_style.clone())],
-                None,
-            )
-            .width;
+            let sec_w =
+                layout_text(&[RichSpan::new(name.clone(), small_style.clone())], None).width;
             let mut max_ev = 0.0f64;
             for ev in events {
                 let l = layout_text(&[RichSpan::new(ev.clone(), small_style.clone())], None);

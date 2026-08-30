@@ -40,10 +40,15 @@ pub fn run(sg: &SceneGraph) -> Scene {
                     node
                 }
             }
-            SceneItem::Edge { path, stroke, ends, z } => {
+            SceneItem::Edge {
+                path,
+                stroke,
+                ends,
+                z,
+            } => {
                 // P1.3：多段折线 + 起止标记（箭头/圆/叉）。
                 let nodes = run_edge_nodes(path, stroke, ends, *z);
-                
+
                 if nodes.is_empty() {
                     continue;
                 } else if nodes.len() == 1 {
@@ -63,10 +68,7 @@ pub fn run(sg: &SceneGraph) -> Scene {
                 SceneNode::new(element).with_z(*z)
             }
             SceneItem::Group { children, z } => {
-                let children: Vec<SceneNode> = children
-                    .iter()
-                    .filter_map(|c| run_item(c))
-                    .collect();
+                let children: Vec<SceneNode> = children.iter().filter_map(run_item).collect();
                 SceneNode::group(children).with_z(*z)
             }
         };
@@ -91,9 +93,18 @@ fn run_item(item: &SceneItem) -> Option<SceneNode> {
                 stroke: stroke.clone(),
             };
             let node = SceneNode::new(geometry_to_element(geometry, style)).with_z(*z);
-            Some(if let Some(n) = name { node.with_name(n) } else { node })
+            Some(if let Some(n) = name {
+                node.with_name(n)
+            } else {
+                node
+            })
         }
-        SceneItem::Edge { path, stroke, ends, z } => {
+        SceneItem::Edge {
+            path,
+            stroke,
+            ends,
+            z,
+        } => {
             let nodes = run_edge_nodes(path, stroke, ends, *z);
             if nodes.is_empty() {
                 None
@@ -109,7 +120,9 @@ fn run_item(item: &SceneItem) -> Option<SceneNode> {
             style,
             anchor: _anchor,
             z,
-        } => Some(SceneNode::new(Element::rich_text(text.clone(), *position, style.clone())).with_z(*z)),
+        } => Some(
+            SceneNode::new(Element::rich_text(text.clone(), *position, style.clone())).with_z(*z),
+        ),
         SceneItem::Group { children, z } => {
             let children: Vec<SceneNode> = children.iter().filter_map(run_item).collect();
             Some(SceneNode::group(children).with_z(*z))
@@ -253,7 +266,13 @@ fn path_to_bezpath(path: &RoutePath) -> lievisual::geometry::BezPath {
 }
 
 /// 在 `tip` 处、沿 `from→tip` 方向画一个标记（Arrow/Circle/Cross）。
-fn arrow_element(from: Point, tip: Point, ends: &EdgeEnds, stroke: &Stroke, z: i32) -> Vec<SceneNode> {
+fn arrow_element(
+    from: Point,
+    tip: Point,
+    ends: &EdgeEnds,
+    stroke: &Stroke,
+    z: i32,
+) -> Vec<SceneNode> {
     let mut out = Vec::new();
     let dx = tip.x - from.x;
     let dy = tip.y - from.y;
@@ -277,8 +296,14 @@ fn arrow_element(from: Point, tip: Point, ends: &EdgeEnds, stroke: &Stroke, z: i
     };
     // 三角（空心 / 实心）：尖端在 tip，底边沿 -u 方向外扩。
     let triangle = |f: &FillStrokeStyle| -> Vec<SceneNode> {
-        let left = Point::new(tip.x - ux * size + px * size * 0.5, tip.y - uy * size + py * size * 0.5);
-        let right = Point::new(tip.x - ux * size - px * size * 0.5, tip.y - uy * size - py * size * 0.5);
+        let left = Point::new(
+            tip.x - ux * size + px * size * 0.5,
+            tip.y - uy * size + py * size * 0.5,
+        );
+        let right = Point::new(
+            tip.x - ux * size - px * size * 0.5,
+            tip.y - uy * size - py * size * 0.5,
+        );
         vec![SceneNode::new(Element::polygon(vec![left, tip, right], f.clone())).with_z(z)]
     };
     // 菱形（空心 / 实心）：front 沿 -u（离开端点）、back 沿 +u（进入端点）。
@@ -299,7 +324,15 @@ fn arrow_element(from: Point, tip: Point, ends: &EdgeEnds, stroke: &Stroke, z: i
         EdgeEnds::DiamondHollow => out.extend(diamond(&hollow)),
         EdgeEnds::Circle => {
             let c = Point::new(tip.x - ux * size * 0.5, tip.y - uy * size * 0.5);
-            out.push(SceneNode::new(Element::ellipse(c, Vec2::new(size * 0.4, size * 0.4), 0.0, hollow)).with_z(z));
+            out.push(
+                SceneNode::new(Element::ellipse(
+                    c,
+                    Vec2::new(size * 0.4, size * 0.4),
+                    0.0,
+                    hollow,
+                ))
+                .with_z(z),
+            );
         }
         EdgeEnds::Cross => {
             // 以 tip 为交点的两条对角线（沿/垂直边方向）。

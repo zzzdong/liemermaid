@@ -7,6 +7,7 @@
 //! - 转移边带 label；
 //! - 端到端渲染不 panic，产出含 start/end/状态节点。
 
+use liemermaid::MermaidParser;
 use liemermaid::builder::extract;
 use liemermaid::builder::ir::shape::ShapeKind;
 use liemermaid::builder::ir::unigraph::EdgeKind;
@@ -14,7 +15,6 @@ use liemermaid::builder::layout::engine;
 use liemermaid::builder::materialize;
 use liemermaid::builder::measure;
 use liemermaid::builder::paint;
-use liemermaid::MermaidParser;
 
 fn parse(src: &str) -> liemermaid::ast::Diagram {
     MermaidParser::parse_mermaid(src).expect("parse failed")
@@ -31,9 +31,17 @@ fn state_basic_shapes_and_transitions() {
     let ug = extract::run(&diagram).expect("extract failed");
     // 节点：__start__ / Idle / Running / Done / __end__
     assert_eq!(ug.nodes.len(), 5, "应有 5 个节点");
-    let start = ug.nodes.iter().find(|n| n.id == "__start__").expect("start 节点");
+    let start = ug
+        .nodes
+        .iter()
+        .find(|n| n.id == "__start__")
+        .expect("start 节点");
     assert_eq!(start.shape, ShapeKind::StartDot, "start 应为 StartDot");
-    let end = ug.nodes.iter().find(|n| n.id == "__end__").expect("end 节点");
+    let end = ug
+        .nodes
+        .iter()
+        .find(|n| n.id == "__end__")
+        .expect("end 节点");
     assert_eq!(end.shape, ShapeKind::EndDot, "end 应为 EndDot");
     let idle = ug.nodes.iter().find(|n| n.id == "Idle").expect("Idle 节点");
     assert_eq!(idle.shape, ShapeKind::Rounded, "普通状态应为圆角矩形");
@@ -71,7 +79,11 @@ fn state_fork_join_bar_nodes() {
         .iter()
         .find(|n| n.id == "join_state")
         .expect("join 节点");
-    assert_eq!(join.shape, ShapeKind::Rounded, "join_state 应为普通状态框（官方行为）");
+    assert_eq!(
+        join.shape,
+        ShapeKind::Rounded,
+        "join_state 应为普通状态框（官方行为）"
+    );
 }
 
 #[test]

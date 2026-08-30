@@ -53,10 +53,7 @@ pub enum SceneItem {
         z: i32,
     },
     /// 分组（仅用于 z / clip 管理，子项已展平到 items）。
-    Group {
-        children: Vec<SceneItem>,
-        z: i32,
-    },
+    Group { children: Vec<SceneItem>, z: i32 },
 }
 
 /// 文本对齐锚点。

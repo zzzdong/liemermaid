@@ -18,7 +18,12 @@ pub enum RouteSegment {
     /// 直线段。
     Line { from: Point, to: Point },
     /// 三次贝塞尔 p0→p3（控制点 p1, p2）。
-    CubicBezier { p0: Point, p1: Point, p2: Point, p3: Point },
+    CubicBezier {
+        p0: Point,
+        p1: Point,
+        p2: Point,
+        p3: Point,
+    },
 }
 
 impl RouteSegment {
@@ -50,19 +55,22 @@ impl RouteSegment {
             }
         }
     }
-    /// t ∈ [0,1] 处的点。
+    /// 参数 `t` ∈ \[0,1\] 处的点。
     pub fn point_at(&self, t: f64) -> Point {
         match self {
-            RouteSegment::Line { from, to } => Point::new(
-                from.x + (to.x - from.x) * t,
-                from.y + (to.y - from.y) * t,
-            ),
+            RouteSegment::Line { from, to } => {
+                Point::new(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t)
+            }
             RouteSegment::CubicBezier { p0, p1, p2, p3 } => {
                 let mt = 1.0 - t;
                 Point::new(
-                    mt * mt * mt * p0.x + 3.0 * mt * mt * t * p1.x + 3.0 * mt * t * t * p2.x
+                    mt * mt * mt * p0.x
+                        + 3.0 * mt * mt * t * p1.x
+                        + 3.0 * mt * t * t * p2.x
                         + t * t * t * p3.x,
-                    mt * mt * mt * p0.y + 3.0 * mt * mt * t * p1.y + 3.0 * mt * t * t * p2.y
+                    mt * mt * mt * p0.y
+                        + 3.0 * mt * mt * t * p1.y
+                        + 3.0 * mt * t * t * p2.y
                         + t * t * t * p3.y,
                 )
             }
@@ -100,14 +108,20 @@ impl RoutePath {
         self.0.extend(segs);
     }
     pub fn start(&self) -> Point {
-        self.first().map(RouteSegment::start).unwrap_or(Point::new(0.0, 0.0))
+        self.first()
+            .map(RouteSegment::start)
+            .unwrap_or(Point::new(0.0, 0.0))
     }
     pub fn end(&self) -> Point {
-        self.last().map(RouteSegment::end).unwrap_or(Point::new(0.0, 0.0))
+        self.last()
+            .map(RouteSegment::end)
+            .unwrap_or(Point::new(0.0, 0.0))
     }
     /// 首段方向单位向量（源端口出方向）。对贝塞尔段取起点切线 `p1 - p0`。
     pub fn first_direction(&self) -> Point {
-        let Some(seg) = self.first() else { return Point::new(0.0, 0.0) };
+        let Some(seg) = self.first() else {
+            return Point::new(0.0, 0.0);
+        };
         match seg {
             RouteSegment::Line { from, to } => norm(from, to),
             RouteSegment::CubicBezier { p0, p1, .. } => norm(p0, p1),
@@ -115,7 +129,9 @@ impl RoutePath {
     }
     /// 末段方向单位向量（指向目标端口，即入口方向）。对贝塞尔段取终点切线 `p3 - p2`。
     pub fn last_direction(&self) -> Point {
-        let Some(seg) = self.last() else { return Point::new(0.0, 0.0) };
+        let Some(seg) = self.last() else {
+            return Point::new(0.0, 0.0);
+        };
         match seg {
             RouteSegment::Line { from, to } => norm(from, to),
             RouteSegment::CubicBezier { p2, p3, .. } => norm(p2, p3),
@@ -171,7 +187,10 @@ fn norm(a: &Point, b: &Point) -> Point {
 pub fn line_route(points: &[Point]) -> RoutePath {
     let mut r = RoutePath::new();
     for i in 0..points.len().saturating_sub(1) {
-        r.push(RouteSegment::Line { from: points[i], to: points[i + 1] });
+        r.push(RouteSegment::Line {
+            from: points[i],
+            to: points[i + 1],
+        });
     }
     r
 }

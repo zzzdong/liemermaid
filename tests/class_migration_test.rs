@@ -15,7 +15,12 @@ fn run_gg(cd: &ClassDiagram) -> liemermaid::builder::ir::geograph::Geograph {
     layout::engine::run(&ug).expect("layout").0
 }
 
-fn member(visibility: Option<Visibility>, name: &str, type_: Option<&str>, is_method: bool) -> ClassMember {
+fn member(
+    visibility: Option<Visibility>,
+    name: &str,
+    type_: Option<&str>,
+    is_method: bool,
+) -> ClassMember {
     ClassMember {
         visibility,
         name: name.to_string(),
@@ -32,7 +37,12 @@ fn class_grid_layers_parent_above_child() {
                 name: "Animal".into(),
                 generic: None,
                 annotation: None,
-                members: vec![member(Some(Visibility::Protected), "age", Some("int"), false)],
+                members: vec![member(
+                    Some(Visibility::Protected),
+                    "age",
+                    Some("int"),
+                    false,
+                )],
             },
             Class {
                 name: "Dog".into(),
@@ -87,7 +97,11 @@ fn class_detail_survives_measure_into_gg() {
     let gg = run_gg(&cd);
     let n = &gg.nodes[0];
     match &n.detail {
-        liemermaid::builder::ir::common::NodeDetail::Class { annotation, attrs, methods } => {
+        liemermaid::builder::ir::common::NodeDetail::Class {
+            annotation,
+            attrs,
+            methods,
+        } => {
             assert_eq!(annotation.as_deref(), Some("Interface"));
             assert!(attrs.is_empty());
             assert_eq!(methods, &["+run()".to_string()]);
@@ -104,7 +118,12 @@ fn class_box_materializes_and_paints_with_special_ends() {
                 name: "Animal".into(),
                 generic: None,
                 annotation: None,
-                members: vec![member(Some(Visibility::Protected), "age", Some("int"), false)],
+                members: vec![member(
+                    Some(Visibility::Protected),
+                    "age",
+                    Some("int"),
+                    false,
+                )],
             },
             Class {
                 name: "Dog".into(),
@@ -133,8 +152,15 @@ fn class_box_materializes_and_paints_with_special_ends() {
     assert!(has_triangle, "继承关系应生成 (Triangle, None) 端点标记");
 
     // 类框应产出至少 2 个 Shape（header + body 背景）。
-    let shape_count = sg.items.iter().filter(|i| matches!(i, SceneItem::Shape { .. })).count();
-    assert!(shape_count >= 4, "两个类框应各产 header+body 共 >= 4 个 Shape: {shape_count}");
+    let shape_count = sg
+        .items
+        .iter()
+        .filter(|i| matches!(i, SceneItem::Shape { .. }))
+        .count();
+    assert!(
+        shape_count >= 4,
+        "两个类框应各产 header+body 共 >= 4 个 Shape: {shape_count}"
+    );
 
     // paint 不 panic 且产出图元。
     let scene = paint::run(&sg);

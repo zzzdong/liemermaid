@@ -78,9 +78,21 @@ mod tests {
     #[test]
     fn segment_hits_rect_when_crossing() {
         let rect = Rect::new(0.0, 0.0, 10.0, 10.0);
-        assert!(segment_intersects_rect(Point::new(-5.0, 5.0), Point::new(15.0, 5.0), &rect));
-        assert!(segment_intersects_rect(Point::new(5.0, -5.0), Point::new(5.0, 15.0), &rect));
-        assert!(!segment_intersects_rect(Point::new(-5.0, -5.0), Point::new(-1.0, -1.0), &rect));
+        assert!(segment_intersects_rect(
+            Point::new(-5.0, 5.0),
+            Point::new(15.0, 5.0),
+            &rect
+        ));
+        assert!(segment_intersects_rect(
+            Point::new(5.0, -5.0),
+            Point::new(5.0, 15.0),
+            &rect
+        ));
+        assert!(!segment_intersects_rect(
+            Point::new(-5.0, -5.0),
+            Point::new(-1.0, -1.0),
+            &rect
+        ));
     }
 
     #[test]

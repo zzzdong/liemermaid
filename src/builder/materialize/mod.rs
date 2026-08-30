@@ -13,12 +13,11 @@ use lievisual::scene::{Fill, LineCap, LineJoin, Stroke};
 use lievisual::text::{FontWeight, RichSpan, TextAlign, TextBaseline, TextStyle};
 
 use crate::builder::ir::{
-    self,
+    self, SceneGraph, SceneItem, StyleIntent,
     common::{ArrowKind, ArrowSpec},
     geograph::{GGNode, Geograph},
     shape::{EdgeEnds, ShapeGeometry, ShapeKind},
     unigraph::EdgeKind,
-    SceneGraph, SceneItem, StyleIntent,
 };
 use crate::builder::theme;
 
@@ -59,7 +58,10 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
 
     // —— sequence（Sequence 家族）：整体绘制（参与者盒 + 生命线 + 消息 + 备注 + 分组块）——
     // 参与者（Lifeline 节点）存在即视为 sequence，走专属渲染，不经过通用节点/边循环。
-    let is_sequence = gg.nodes.iter().any(|n| n.role == ir::common::NodeRole::Lifeline);
+    let is_sequence = gg
+        .nodes
+        .iter()
+        .any(|n| n.role == ir::common::NodeRole::Lifeline);
     if is_sequence {
         emit_sequence(&mut items, gg);
         return SceneGraph {
@@ -122,8 +124,12 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
         if let Some(title) = &c.title
             && !title.is_empty()
         {
-            let title_style =
-                theme::text_style(theme::TEXT_COLOR, theme::FONT_SIZE, title_align, TextBaseline::Middle);
+            let title_style = theme::text_style(
+                theme::TEXT_COLOR,
+                theme::FONT_SIZE,
+                title_align,
+                TextBaseline::Middle,
+            );
             items.push(SceneItem::Label {
                 text: vec![lievisual::text::RichSpan::new(
                     title.clone(),
@@ -262,11 +268,25 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
         // ER 基数符号（source / target 端，沿「远离节点」方向排列）。
         let (cs, ct) = e.cardinality;
         if let Some(c) = cs {
-            emit_cardinality(&mut items, e.route.start(), e.route.first_direction(), c, &stroke, 1);
+            emit_cardinality(
+                &mut items,
+                e.route.start(),
+                e.route.first_direction(),
+                c,
+                &stroke,
+                1,
+            );
         }
         if let Some(c) = ct {
             let d = e.route.last_direction();
-            emit_cardinality(&mut items, e.route.end(), Point::new(-d.x, -d.y), c, &stroke, 1);
+            emit_cardinality(
+                &mut items,
+                e.route.end(),
+                Point::new(-d.x, -d.y),
+                c,
+                &stroke,
+                1,
+            );
         }
 
         // class 基数文本（"1" / "*" 等），在关系线两端一侧。
@@ -299,10 +319,7 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
                     anchor.x - layout.width / 2.0 - pad_x,
                     anchor.y - layout.height / 2.0 - pad_y,
                 ),
-                size: Size::new(
-                    layout.width + 2.0 * pad_x,
-                    layout.height + 2.0 * pad_y,
-                ),
+                size: Size::new(layout.width + 2.0 * pad_x, layout.height + 2.0 * pad_y),
             };
             items.push(SceneItem::Shape {
                 geometry: bg,
@@ -358,8 +375,14 @@ fn emit_cardinality(
 
     // 短线：沿 perp 方向、中心 `center`，半长 SHORT_HALF。
     let short = |items: &mut Vec<SceneItem>, center: Point| {
-        let s = Point::new(center.x - perp.x * SHORT_HALF, center.y - perp.y * SHORT_HALF);
-        let e = Point::new(center.x + perp.x * SHORT_HALF, center.y + perp.y * SHORT_HALF);
+        let s = Point::new(
+            center.x - perp.x * SHORT_HALF,
+            center.y - perp.y * SHORT_HALF,
+        );
+        let e = Point::new(
+            center.x + perp.x * SHORT_HALF,
+            center.y + perp.y * SHORT_HALF,
+        );
         items.push(SceneItem::Edge {
             path: ir::geograph::line_route(&[s, e]),
             stroke: stroke.clone(),
@@ -370,7 +393,11 @@ fn emit_cardinality(
     // 空心圆：半径 3。
     let circle = |items: &mut Vec<SceneItem>, center: Point| {
         items.push(SceneItem::Shape {
-            geometry: ShapeGeometry::Ellipse { center, rx: 3.0, ry: 3.0 },
+            geometry: ShapeGeometry::Ellipse {
+                center,
+                rx: 3.0,
+                ry: 3.0,
+            },
             fill: None,
             stroke: Some(stroke.clone()),
             name: None,
@@ -383,7 +410,9 @@ fn emit_cardinality(
         let mid = Point::new(center.x + away.x * 3.5, center.y + away.y * 3.5);
         let bot = Point::new(center.x + perp.x * 4.0, center.y + perp.y * 4.0);
         items.push(SceneItem::Shape {
-            geometry: ShapeGeometry::Polygon { points: vec![top, mid, bot] },
+            geometry: ShapeGeometry::Polygon {
+                points: vec![top, mid, bot],
+            },
             fill: None,
             stroke: Some(stroke.clone()),
             name: None,
@@ -453,7 +482,12 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
     );
     let stroke = class_stroke();
 
-    let ir::common::NodeDetail::Class { annotation, attrs, methods } = &n.detail else {
+    let ir::common::NodeDetail::Class {
+        annotation,
+        attrs,
+        methods,
+    } = &n.detail
+    else {
         return;
     };
     let header_layout_h = n.label.as_ref().map(|l| l.layout.height).unwrap_or(20.0);
@@ -489,7 +523,12 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
 
     // 注解（header 顶部）。
     if let Some(ann) = annotation {
-        let ts = theme::text_style(theme::class::TEXT, SMALL_FONT, TextAlign::Center, TextBaseline::Middle);
+        let ts = theme::text_style(
+            theme::class::TEXT,
+            SMALL_FONT,
+            TextAlign::Center,
+            TextBaseline::Middle,
+        );
         items.push(SceneItem::Label {
             text: vec![RichSpan::new(format!("«{}»", ann), ts.clone())],
             position: Point::new(n.center.x, rect.min_y() + 9.0),
@@ -534,7 +573,12 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
     // attrs 行（左对齐）。
     let mut line_y = rect.min_y() + header_h + 4.0;
     for a in attrs {
-        let ts = theme::text_style(theme::class::TEXT, SMALL_FONT, TextAlign::Left, TextBaseline::Top);
+        let ts = theme::text_style(
+            theme::class::TEXT,
+            SMALL_FONT,
+            TextAlign::Left,
+            TextBaseline::Top,
+        );
         items.push(SceneItem::Label {
             text: vec![RichSpan::new(a.clone(), ts.clone())],
             position: Point::new(rect.min_x() + CLASS_PAD, line_y),
@@ -548,7 +592,12 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
     // methods 行（左对齐，从成员栏分隔线下方开始）。
     line_y = rect.min_y() + header_h + attr_h + 4.0;
     for m in methods {
-        let ts = theme::text_style(theme::class::TEXT, SMALL_FONT, TextAlign::Left, TextBaseline::Top);
+        let ts = theme::text_style(
+            theme::class::TEXT,
+            SMALL_FONT,
+            TextAlign::Left,
+            TextBaseline::Top,
+        );
         items.push(SceneItem::Label {
             text: vec![RichSpan::new(m.clone(), ts.clone())],
             position: Point::new(rect.min_x() + CLASS_PAD, line_y),
@@ -632,7 +681,8 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
     );
     let mut type_max = 0.0f64;
     for a in attrs {
-        let l = lievisual::text::layout_text(&[RichSpan::new(a.type_.clone(), attr_ts.clone())], None);
+        let l =
+            lievisual::text::layout_text(&[RichSpan::new(a.type_.clone(), attr_ts.clone())], None);
         type_max = type_max.max(l.width);
     }
     let type_x = rect.min_x() + ENTITY_PAD;
@@ -702,8 +752,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
     use ir::common::NodeDetail;
     use ir::geograph::RouteSegment;
 
-    let node_by_id: HashMap<&str, &GGNode> =
-        gg.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
+    let node_by_id: HashMap<&str, &GGNode> = gg.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
     // 分支列表（顺序 = 容器序，含 main）与行映射。
     let branches: Vec<(String, Vec<String>)> = gg
         .containers
@@ -733,7 +782,14 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
 
     // —— 提交点（HIGHLIGHT 方框 / merge 白芯 / 普通实心）+ commit id 标签 + tag 标签 ——
     for n in &gg.nodes {
-        let NodeDetail::GitCommit { branch, id, tag, commit_type, is_merge } = &n.detail else {
+        let NodeDetail::GitCommit {
+            branch,
+            id,
+            tag,
+            commit_type,
+            is_merge,
+        } = &n.detail
+        else {
             continue;
         };
         let color = branch_color(branch);
@@ -764,14 +820,22 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
         } else if *is_merge {
             // merge：分支色外圆 + 白芯（对齐官方 commit + commit-merge 双圆）。
             items.push(SceneItem::Shape {
-                geometry: ShapeGeometry::Ellipse { center: n.center, rx: cr, ry: cr },
+                geometry: ShapeGeometry::Ellipse {
+                    center: n.center,
+                    rx: cr,
+                    ry: cr,
+                },
                 fill: Some(Fill::Solid(color)),
                 stroke: None,
                 name: None,
                 z: 1,
             });
             items.push(SceneItem::Shape {
-                geometry: ShapeGeometry::Ellipse { center: n.center, rx: cr * 0.6, ry: cr * 0.6 },
+                geometry: ShapeGeometry::Ellipse {
+                    center: n.center,
+                    rx: cr * 0.6,
+                    ry: cr * 0.6,
+                },
                 fill: Some(Fill::Solid(theme::gitgraph::MERGE_INNER)),
                 stroke: None,
                 name: None,
@@ -779,7 +843,11 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
             });
         } else {
             items.push(SceneItem::Shape {
-                geometry: ShapeGeometry::Ellipse { center: n.center, rx: cr, ry: cr },
+                geometry: ShapeGeometry::Ellipse {
+                    center: n.center,
+                    rx: cr,
+                    ry: cr,
+                },
                 fill: Some(Fill::Solid(color)),
                 stroke: None,
                 name: None,
@@ -799,7 +867,8 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
             )
             .with_align(TextAlign::Center)
             .with_baseline(TextBaseline::Alphabetic);
-            let tw = lievisual::text::layout_text(&[RichSpan::new(text.clone(), ts.clone())], None).width;
+            let tw = lievisual::text::layout_text(&[RichSpan::new(text.clone(), ts.clone())], None)
+                .width;
             // 淡黄背景（官方 .commit-label-bkg #ffffde @0.5，包住文字：左 -2 / 右 +3，高 15）。
             items.push(SceneItem::Shape {
                 geometry: ShapeGeometry::Rect {
@@ -828,11 +897,9 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
             )
             .with_align(TextAlign::Center)
             .with_baseline(TextBaseline::Alphabetic);
-            let tw = lievisual::text::layout_text(
-                &[RichSpan::new(tag_text.clone(), ts.clone())],
-                None,
-            )
-            .width;
+            let tw =
+                lievisual::text::layout_text(&[RichSpan::new(tag_text.clone(), ts.clone())], None)
+                    .width;
             // 背景盒：主体矩形 + 左侧尖角（指向 commit 一侧），包住文字（上下各留 ~2px）。
             let x_left = n.center.x - tw / 2.0 - 4.0;
             let x_right = n.center.x + tw / 2.0 + 4.0;
@@ -872,13 +939,20 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
     // 上对齐 child commit 点的控制点）→ 垂直进 child（连线回到 commit）。
     let curve_r = theme::gitgraph::BRANCH_SPACING / 3.0;
     for e in &gg.edges {
-        let (Some(child), Some(parent)) =
-            (node_by_id.get(e.source.as_str()), node_by_id.get(e.target.as_str()))
-        else {
+        let (Some(child), Some(parent)) = (
+            node_by_id.get(e.source.as_str()),
+            node_by_id.get(e.target.as_str()),
+        ) else {
             continue;
         };
-        let (NodeDetail::GitCommit { branch: cb, is_merge: cm, .. }, NodeDetail::GitCommit { branch: pb, .. }) =
-            (&child.detail, &parent.detail)
+        let (
+            NodeDetail::GitCommit {
+                branch: cb,
+                is_merge: cm,
+                ..
+            },
+            NodeDetail::GitCommit { branch: pb, .. },
+        ) = (&child.detail, &parent.detail)
         else {
             continue;
         };
@@ -892,7 +966,11 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
             });
         } else {
             // 跨分支：颜色 = fork 用子分支色、merge 用父分支色（对齐官方箭头）。
-            let color = if *cm { branch_color(pb) } else { branch_color(cb) };
+            let color = if *cm {
+                branch_color(pb)
+            } else {
+                branch_color(cb)
+            };
             let (pc, cc) = (parent.center, child.center);
             let mut path = ir::geograph::RoutePath::new();
             if cc.y >= pc.y {
@@ -902,7 +980,12 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 let p1 = Point::new(pc.x, cc.y); // 平行线（child 行）上对齐父 commit 点
                 let p2 = Point::new((cc.x - curve_r).max(pc.x), cc.y); // 平行线上 child 左侧，保证水平入
                 path.push(RouteSegment::Line { from: pc, to: a });
-                path.push(RouteSegment::CubicBezier { p0: a, p1, p2, p3: cc });
+                path.push(RouteSegment::CubicBezier {
+                    p0: a,
+                    p1,
+                    p2,
+                    p3: cc,
+                });
             } else {
                 // merge：父（下）→ 水平右 → 弧（控制点 = 父行水平线上对齐 child commit 点）
                 // → 垂直进 child（上）。曲线先沿水平线走到 child 正下方，再垂直连线回到 commit。
@@ -910,7 +993,12 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 let p1 = Point::new(cc.x, pc.y); // 水平线（父行）上对齐 child commit 点
                 let p2 = Point::new(cc.x, (pc.y - curve_r).max(cc.y)); // child 列上 commit 下方，保证垂直入
                 path.push(RouteSegment::Line { from: pc, to: a });
-                path.push(RouteSegment::CubicBezier { p0: a, p1, p2, p3: cc });
+                path.push(RouteSegment::CubicBezier {
+                    p0: a,
+                    p1,
+                    p2,
+                    p3: cc,
+                });
             }
             items.push(SceneItem::Edge {
                 path,
@@ -921,9 +1009,17 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
         }
     }
 
-    // —— 分支虚线（每行贯穿，标识分支平行状态）—— 
-    let min_x = gg.nodes.iter().map(|n| n.center.x).fold(f64::INFINITY, f64::min);
-    let max_x = gg.nodes.iter().map(|n| n.center.x).fold(f64::NEG_INFINITY, f64::max);
+    // —— 分支虚线（每行贯穿，标识分支平行状态）——
+    let min_x = gg
+        .nodes
+        .iter()
+        .map(|n| n.center.x)
+        .fold(f64::INFINITY, f64::min);
+    let max_x = gg
+        .nodes
+        .iter()
+        .map(|n| n.center.x)
+        .fold(f64::NEG_INFINITY, f64::max);
     let branch_dash = Stroke {
         color: Color::new(51, 51, 51, 255), // #333（对齐官方 .branch stroke）
         width: 1.0,
@@ -940,14 +1036,21 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
         let y = theme::gitgraph::TOP_MARGIN + i as f64 * theme::gitgraph::BRANCH_SPACING;
         // 分支行虚线（贯穿内容区，标识该分支的平行轨道）。
         items.push(SceneItem::Edge {
-            path: ir::geograph::line_route(&[Point::new(min_x - 10.0, y), Point::new(max_x + 40.0, y)]),
+            path: ir::geograph::line_route(&[
+                Point::new(min_x - 10.0, y),
+                Point::new(max_x + 40.0, y),
+            ]),
             stroke: branch_dash.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
             z: 0,
         });
-        let ts_label = TextStyle::new(Color::rgb(255, 255, 255), theme::FONT_SIZE, theme::FONT_FAMILY)
-            .with_align(TextAlign::Center)
-            .with_baseline(TextBaseline::Middle);
+        let ts_label = TextStyle::new(
+            Color::rgb(255, 255, 255),
+            theme::FONT_SIZE,
+            theme::FONT_FAMILY,
+        )
+        .with_align(TextAlign::Center)
+        .with_baseline(TextBaseline::Middle);
         let layout =
             lievisual::text::layout_text(&[RichSpan::new(name.clone(), ts_label.clone())], None);
         let pad_x = 12.0;
@@ -1144,10 +1247,7 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
         };
         items.push(SceneItem::Label {
             text: vec![RichSpan::new(text, legend_ts.clone())],
-            position: Point::new(
-                legend_x + theme::pie::LEGEND_TEXT_DX,
-                row_y,
-            ),
+            position: Point::new(legend_x + theme::pie::LEGEND_TEXT_DX, row_y),
             style: legend_ts.clone(),
             anchor: ir::scenegraph::Anchor::Left,
             z: 2,
@@ -1436,13 +1536,12 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             z: -1,
         });
         if let Some(label) = &c.title {
-            let ts =
-                theme::text_style(
-                    theme::sequence::BLOCK_TEXT,
-                    theme::FONT_SIZE * 0.85,
-                    TextAlign::Left,
-                    TextBaseline::Middle,
-                );
+            let ts = theme::text_style(
+                theme::sequence::BLOCK_TEXT,
+                theme::FONT_SIZE * 0.85,
+                TextAlign::Left,
+                TextBaseline::Middle,
+            );
             let origin = Point::new(r.min_x() + 8.0, r.min_y() + 12.0);
             // 官方把标签拆成两段文本：`loop` + `[Each item]`（并列排布，非合并为
             // `loop [Each item]`），与 golden 的 `<text>` 集合保持一致。
@@ -1534,7 +1633,11 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
     } else {
         true
     };
-    let axis_c = if horizontal { sections[0].center.y } else { sections[0].center.x };
+    let axis_c = if horizontal {
+        sections[0].center.y
+    } else {
+        sections[0].center.x
+    };
     let mut min_a = f64::INFINITY;
     let mut max_a = f64::NEG_INFINITY;
     for s in &sections {
@@ -1585,13 +1688,19 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             z: 0,
         });
         items.push(SceneItem::Edge {
-            path: ir::geograph::line_route(&[Point::new(tip, y), Point::new(tip - arr * 0.7, y - arr * 0.5)]),
+            path: ir::geograph::line_route(&[
+                Point::new(tip, y),
+                Point::new(tip - arr * 0.7, y - arr * 0.5),
+            ]),
             stroke: axis_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
             z: 0,
         });
         items.push(SceneItem::Edge {
-            path: ir::geograph::line_route(&[Point::new(tip, y), Point::new(tip - arr * 0.7, y + arr * 0.5)]),
+            path: ir::geograph::line_route(&[
+                Point::new(tip, y),
+                Point::new(tip - arr * 0.7, y + arr * 0.5),
+            ]),
             stroke: axis_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
             z: 0,
@@ -1608,13 +1717,19 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             z: 0,
         });
         items.push(SceneItem::Edge {
-            path: ir::geograph::line_route(&[Point::new(x, tip), Point::new(x - arr * 0.5, tip - arr * 0.7)]),
+            path: ir::geograph::line_route(&[
+                Point::new(x, tip),
+                Point::new(x - arr * 0.5, tip - arr * 0.7),
+            ]),
             stroke: axis_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
             z: 0,
         });
         items.push(SceneItem::Edge {
-            path: ir::geograph::line_route(&[Point::new(x, tip), Point::new(x + arr * 0.5, tip - arr * 0.7)]),
+            path: ir::geograph::line_route(&[
+                Point::new(x, tip),
+                Point::new(x + arr * 0.5, tip - arr * 0.7),
+            ]),
             stroke: axis_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
             z: 0,
@@ -1695,7 +1810,13 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
 }
 
 /// 画一个 timeline 任务块（section / event）：圆角彩色矩形 + 居中文本。
-fn emit_timeline_block(items: &mut Vec<SceneItem>, center: Point, color: Color, text: &str, font_size: f64) {
+fn emit_timeline_block(
+    items: &mut Vec<SceneItem>,
+    center: Point,
+    color: Color,
+    text: &str,
+    font_size: f64,
+) {
     let at = Point::new(
         center.x - theme::timeline::BLOCK_W / 2.0,
         center.y - theme::timeline::BLOCK_H / 2.0,
@@ -1720,8 +1841,12 @@ fn emit_timeline_block(items: &mut Vec<SceneItem>, center: Point, color: Color, 
         name: None,
         z: 0,
     });
-    let ts =
-        theme::text_style(theme::timeline::BLOCK_TEXT, font_size, TextAlign::Center, TextBaseline::Middle);
+    let ts = theme::text_style(
+        theme::timeline::BLOCK_TEXT,
+        font_size,
+        TextAlign::Center,
+        TextBaseline::Middle,
+    );
     items.push(SceneItem::Label {
         text: vec![RichSpan::new(text.to_string(), ts.clone())],
         position: center,
@@ -1737,15 +1862,29 @@ fn emit_timeline_connector(items: &mut Vec<SceneItem>, dot: Point, block: Point)
     let vert = (dot.x - block.x).abs() < 1e-6;
     let (dir, from_c, to_c) = if vert {
         let dir = if block.y < dot.y { -1.0 } else { 1.0 };
-        (dir, dot.y + dir * theme::timeline::DOT_R, block.y - dir * theme::timeline::BLOCK_H / 2.0)
+        (
+            dir,
+            dot.y + dir * theme::timeline::DOT_R,
+            block.y - dir * theme::timeline::BLOCK_H / 2.0,
+        )
     } else {
         let dir = if block.x < dot.x { -1.0 } else { 1.0 };
-        (dir, dot.x + dir * theme::timeline::DOT_R, block.x - dir * theme::timeline::BLOCK_W / 2.0)
+        (
+            dir,
+            dot.x + dir * theme::timeline::DOT_R,
+            block.x - dir * theme::timeline::BLOCK_W / 2.0,
+        )
     };
     let (from, tip) = if vert {
-        (Point::new(dot.x, from_c), Point::new(dot.x, to_c - dir * 6.0))
+        (
+            Point::new(dot.x, from_c),
+            Point::new(dot.x, to_c - dir * 6.0),
+        )
     } else {
-        (Point::new(from_c, dot.y), Point::new(to_c - dir * 6.0, dot.y))
+        (
+            Point::new(from_c, dot.y),
+            Point::new(to_c - dir * 6.0, dot.y),
+        )
     };
     let stroke = Stroke {
         color: theme::timeline::LINE,
@@ -1804,12 +1943,18 @@ fn node_fill_stroke(shape: ShapeKind) -> (Fill, Stroke) {
         // StartDot：实心深色圆（官方 `.node circle.state-start{fill:#333333}`）。
         ShapeKind::StartDot => (
             Fill::Solid(theme::state::SPECIAL),
-            Stroke { width: 0.0, ..default_stroke },
+            Stroke {
+                width: 0.0,
+                ..default_stroke
+            },
         ),
         // Bar：fork/join 横条，实心深色（官方 `.node .fork-join{fill:#333333}`）。
         ShapeKind::Bar => (
             Fill::Solid(theme::state::SPECIAL),
-            Stroke { width: 0.0, ..default_stroke },
+            Stroke {
+                width: 0.0,
+                ..default_stroke
+            },
         ),
         _ => (Fill::Solid(theme::flowchart::FILL), default_stroke),
     }
@@ -1874,7 +2019,11 @@ fn shape_to_geometry(shape: ShapeKind, center: Point, size: Size) -> ShapeGeomet
             at: tl,
             size,
             // 官方默认节点圆角 radius=5（theme::NODE_RADIUS）。
-            radius: if shape == ShapeKind::Subroutine { 2.0 } else { theme::NODE_RADIUS },
+            radius: if shape == ShapeKind::Subroutine {
+                2.0
+            } else {
+                theme::NODE_RADIUS
+            },
         },
         ShapeKind::Stadium => ShapeGeometry::Stadium { at: tl, size },
         ShapeKind::Diamond => ShapeGeometry::Polygon {

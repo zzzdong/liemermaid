@@ -7,8 +7,8 @@
 
 use crate::ast::{PieData, PieDiagram};
 use crate::parser::common::{
-    PResult, consume_line, has_input, identifier, keyword, quoted_string, rest_of_line, skip_line,
-    skip_ws_and_comments,
+    PResult, attempt, consume_line, has_input, identifier, keyword, quoted_string, rest_of_line,
+    skip_line, skip_ws_and_comments,
 };
 use winnow::{
     Parser,
@@ -34,12 +34,12 @@ pub fn pie_diagram<'i>(input: &mut &'i str) -> PResult<'i, PieDiagram> {
             break;
         }
         // 标题
-        if let Ok(t) = preceded(keyword("title"), rest_of_line).parse_next(input) {
+        if let Some(t) = attempt(preceded(keyword("title"), rest_of_line), input) {
             title = Some(t);
             continue;
         }
         // 数据行
-        if let Ok(d) = data_row.parse_next(input) {
+        if let Some(d) = attempt(data_row, input) {
             data.push(d);
             continue;
         }

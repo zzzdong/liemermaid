@@ -12,11 +12,10 @@ use lievisual::geometry::Point;
 
 use crate::ast::Direction;
 use crate::builder::ir::{
-    self,
+    self, StyleIntent,
     common::*,
     geograph::{GGContainer, GGEdge, GGNode, Geograph},
     shape::ShapeKind,
-    StyleIntent,
 };
 use crate::builder::layout::directed::sugiyama_layers;
 use crate::builder::layout::route::route_edges;
@@ -56,7 +55,9 @@ fn grid_layers(ug: &ir::Unigraph) -> Vec<Vec<NodeId>> {
     }
     for e in &ug.edges {
         if e.source != e.target {
-            adj.entry(e.source.clone()).or_default().push(e.target.clone());
+            adj.entry(e.source.clone())
+                .or_default()
+                .push(e.target.clone());
         }
     }
 
@@ -130,7 +131,10 @@ fn layered_centers(ug: &ir::Unigraph, sizes: &HashMap<NodeId, Size>) -> HashMap<
         let mut main_len = 0.0f64;
         let mut max_cross = 0.0f64;
         for id in layer {
-            let size = sizes.get(id).cloned().unwrap_or(Size::new(theme::NODE_MIN_W, theme::NODE_MIN_H));
+            let size = sizes
+                .get(id)
+                .cloned()
+                .unwrap_or(Size::new(theme::NODE_MIN_W, theme::NODE_MIN_H));
             let (cross, main) = if horizontal_main {
                 (size.width, size.height)
             } else {
@@ -164,8 +168,8 @@ fn layered_centers(ug: &ir::Unigraph, sizes: &HashMap<NodeId, Size>) -> HashMap<
     }
 
     // 主轴起点（居中）：总主轴长度
-    let total_gap: f64 = gap_extra.iter().sum::<f64>()
-        + LAYER_GAP * (n_layers as f64 - 1.0).max(0.0);
+    let total_gap: f64 =
+        gap_extra.iter().sum::<f64>() + LAYER_GAP * (n_layers as f64 - 1.0).max(0.0);
     let total_main: f64 = layer_main_len.iter().sum::<f64>() + total_gap;
     let mut main_cursor = -total_main / 2.0;
 
@@ -174,7 +178,11 @@ fn layered_centers(ug: &ir::Unigraph, sizes: &HashMap<NodeId, Size>) -> HashMap<
     for li in 0..n_layers {
         let cross_thick = layer_cross_thick[li];
         layer_main_coord[li] = main_cursor + cross_thick / 2.0;
-        let extra = if li + 1 < n_layers { gap_extra[li] } else { 0.0 };
+        let extra = if li + 1 < n_layers {
+            gap_extra[li]
+        } else {
+            0.0
+        };
         main_cursor += cross_thick + LAYER_GAP + extra;
     }
 
@@ -184,7 +192,10 @@ fn layered_centers(ug: &ir::Unigraph, sizes: &HashMap<NodeId, Size>) -> HashMap<
         let main_len = layer_main_len[li];
         let mut cross_cursor = -main_len / 2.0;
         for id in layer {
-            let size = sizes.get(id).cloned().unwrap_or(Size::new(theme::NODE_MIN_W, theme::NODE_MIN_H));
+            let size = sizes
+                .get(id)
+                .cloned()
+                .unwrap_or(Size::new(theme::NODE_MIN_W, theme::NODE_MIN_H));
             // 同层轴方向尺寸：LR=高度（垂直展开）、TB=宽度（水平展开）。
             let main = if horizontal_main {
                 size.height
@@ -212,7 +223,10 @@ fn linear_centers(ug: &ir::Unigraph, sizes: &HashMap<NodeId, Size>) -> HashMap<N
     let horizontal = matches!(ug.direction, Direction::LR | Direction::RL);
     let mut total = 0.0f64;
     for n in &ug.nodes {
-        let size = sizes.get(&n.id).cloned().unwrap_or(Size::new(theme::NODE_MIN_W, theme::NODE_MIN_H));
+        let size = sizes
+            .get(&n.id)
+            .cloned()
+            .unwrap_or(Size::new(theme::NODE_MIN_W, theme::NODE_MIN_H));
         let main = if horizontal { size.width } else { size.height };
         total += main + NODE_GAP;
     }
@@ -220,10 +234,17 @@ fn linear_centers(ug: &ir::Unigraph, sizes: &HashMap<NodeId, Size>) -> HashMap<N
     let mut cursor = -total / 2.0;
     let mut centers: HashMap<NodeId, Point> = HashMap::new();
     for n in &ug.nodes {
-        let size = sizes.get(&n.id).cloned().unwrap_or(Size::new(theme::NODE_MIN_W, theme::NODE_MIN_H));
+        let size = sizes
+            .get(&n.id)
+            .cloned()
+            .unwrap_or(Size::new(theme::NODE_MIN_W, theme::NODE_MIN_H));
         let main = if horizontal { size.width } else { size.height };
         let coord = cursor + main / 2.0;
-        let (x, y) = if horizontal { (coord, 0.0) } else { (0.0, coord) };
+        let (x, y) = if horizontal {
+            (coord, 0.0)
+        } else {
+            (0.0, coord)
+        };
         centers.insert(n.id.clone(), Point::new(x, y));
         cursor += main + NODE_GAP;
     }
@@ -255,7 +276,10 @@ fn seq_note_box_x(
     sizes: &HashMap<NodeId, Size>,
 ) -> (f64, f64) {
     use ir::common::SequenceNotePlacement as NP;
-    let ir::common::NodeDetail::SequenceNote { targets, placement, .. } = &note.detail else {
+    let ir::common::NodeDetail::SequenceNote {
+        targets, placement, ..
+    } = &note.detail
+    else {
         return (0.0, 160.0);
     };
     let text_w = sizes.get(&note.id).map(|s| s.width).unwrap_or(120.0);
@@ -312,11 +336,17 @@ fn sequence_geometry(
     use ir::unigraph::SequenceRow;
 
     // —— 参与者列 ——
-    let participants: Vec<&ir::UGNode> =
-        ug.nodes.iter().filter(|n| n.role == NodeRole::Lifeline).collect();
+    let participants: Vec<&ir::UGNode> = ug
+        .nodes
+        .iter()
+        .filter(|n| n.role == NodeRole::Lifeline)
+        .collect();
     let mut col_widths: Vec<f64> = Vec::with_capacity(participants.len());
     for p in &participants {
-        let tw = labels.get(&p.id).map(|l| l.size.width).unwrap_or(SEQ_BOX_MIN_W);
+        let tw = labels
+            .get(&p.id)
+            .map(|l| l.size.width)
+            .unwrap_or(SEQ_BOX_MIN_W);
         col_widths.push(SEQ_BOX_MIN_W.max(tw + SEQ_PAD_X * 2.0));
     }
     let mut col_centers: Vec<f64> = Vec::with_capacity(participants.len());
@@ -426,7 +456,10 @@ fn sequence_geometry(
             continue;
         }
         let (nx, nw) = seq_note_box_x(n, &col_centers, &col_widths, &col_of, sizes);
-        let ny = row_y.get(n.id.as_str()).copied().unwrap_or(box_bottom + SEQ_ROW_GAP);
+        let ny = row_y
+            .get(n.id.as_str())
+            .copied()
+            .unwrap_or(box_bottom + SEQ_ROW_GAP);
         let center = Point::new(nx + nw / 2.0, ny + SEQ_NOTE_H / 2.0);
         let size = Size::new(nw, SEQ_NOTE_H);
         gg_nodes.push(GGNode {
@@ -444,8 +477,12 @@ fn sequence_geometry(
     // —— GGEdge：消息水平路由（自环右侧小环） ——
     let mut gg_edges: Vec<GGEdge> = Vec::new();
     for e in &ug.edges {
-        let y = row_y.get(e.id.as_str()).copied().unwrap_or(box_bottom + SEQ_ROW_GAP);
-        let (Some(&sci), Some(&tci)) = (col_of.get(e.source.as_str()), col_of.get(e.target.as_str()))
+        let y = row_y
+            .get(e.id.as_str())
+            .copied()
+            .unwrap_or(box_bottom + SEQ_ROW_GAP);
+        let (Some(&sci), Some(&tci)) =
+            (col_of.get(e.source.as_str()), col_of.get(e.target.as_str()))
         else {
             continue;
         };
@@ -628,8 +665,7 @@ pub fn run(ug: &ir::Unigraph) -> Result<(Geograph, StyleIntent), String> {
     let activations;
     let mut needs_routing = true;
     if ug.family == ir::unigraph::GraphFamily::Sequence {
-        (gg_nodes, gg_edges, containers, activations) =
-            sequence_geometry(ug, &sizes, &labels);
+        (gg_nodes, gg_edges, containers, activations) = sequence_geometry(ug, &sizes, &labels);
         needs_routing = false;
     } else if ug.family == ir::unigraph::GraphFamily::Hierarchy {
         activations = Vec::new();
@@ -641,7 +677,10 @@ pub fn run(ug: &ir::Unigraph) -> Result<(Geograph, StyleIntent), String> {
             linear_centers(ug, &sizes)
         } else if ug.family == ir::unigraph::GraphFamily::Radial {
             // Radial（pie 等）：所有节点叠于原点，扇区角度由 materialize 据数据计算。
-            ug.nodes.iter().map(|n| (n.id.clone(), Point::new(0.0, 0.0))).collect()
+            ug.nodes
+                .iter()
+                .map(|n| (n.id.clone(), Point::new(0.0, 0.0)))
+                .collect()
         } else {
             layered_centers(ug, &sizes)
         };
@@ -650,7 +689,10 @@ pub fn run(ug: &ir::Unigraph) -> Result<(Geograph, StyleIntent), String> {
         let mut nodes = Vec::new();
         for n in &ug.nodes {
             let center = centers.get(&n.id).cloned().unwrap_or(Point::new(0.0, 0.0));
-            let size = sizes.get(&n.id).cloned().unwrap_or(Size::new(theme::NODE_MIN_W, theme::NODE_MIN_H));
+            let size = sizes
+                .get(&n.id)
+                .cloned()
+                .unwrap_or(Size::new(theme::NODE_MIN_W, theme::NODE_MIN_H));
             let shape = shapes.get(&n.id).cloned().unwrap_or(ShapeKind::Rectangle);
             nodes.push(GGNode {
                 id: n.id.clone(),
@@ -669,7 +711,8 @@ pub fn run(ug: &ir::Unigraph) -> Result<(Geograph, StyleIntent), String> {
         let mut edges = Vec::new();
         let node_lookup: HashMap<&NodeId, &GGNode> = gg_nodes.iter().map(|n| (&n.id, n)).collect();
         for e in &ug.edges {
-            let (Some(s), Some(t)) = (node_lookup.get(&e.source), node_lookup.get(&e.target)) else {
+            let (Some(s), Some(t)) = (node_lookup.get(&e.source), node_lookup.get(&e.target))
+            else {
                 continue;
             };
             let _ = (s, t);
@@ -691,7 +734,7 @@ pub fn run(ug: &ir::Unigraph) -> Result<(Geograph, StyleIntent), String> {
         gg_edges = edges;
 
         // —— 子图容器 ——
-        containers = compute_containers(&ug, &gg_nodes);
+        containers = compute_containers(ug, &gg_nodes);
     }
 
     // —— StyleIntent 抽取 ——
@@ -833,7 +876,10 @@ mod tests {
         assert_eq!(gg.nodes.len(), 2);
         let (a, b) = (&gg.nodes[0], &gg.nodes[1]);
         // LR（默认）：同一水平线（y≈0），x 递增。
-        assert!((a.center.y - b.center.y).abs() < 1e-6, "LR 各列应在同一水平线");
+        assert!(
+            (a.center.y - b.center.y).abs() < 1e-6,
+            "LR 各列应在同一水平线"
+        );
         assert!(b.center.x > a.center.x, "LR 列应沿 x 递增");
     }
 
@@ -843,7 +889,10 @@ mod tests {
         assert_eq!(gg.nodes.len(), 2);
         let (a, b) = (&gg.nodes[0], &gg.nodes[1]);
         // TD：同一垂直线（x≈0），y 递增。
-        assert!((a.center.x - b.center.x).abs() < 1e-6, "TD 各列应在同一垂直线");
+        assert!(
+            (a.center.x - b.center.x).abs() < 1e-6,
+            "TD 各列应在同一垂直线"
+        );
         assert!(b.center.y > a.center.y, "TD 列应沿 y 递增");
     }
 }

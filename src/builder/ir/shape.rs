@@ -39,14 +39,40 @@ pub enum ShapeKind {
 /// 形状几何描述（布局求解后写入 GG，paint 直接消费）。
 #[derive(Debug, Clone, PartialEq)]
 pub enum ShapeGeometry {
-    Rect { at: Point, size: Size },
-    RoundedRect { at: Point, size: Size, radius: f64 },
-    Stadium { at: Point, size: Size },
-    Diamond { center: Point, size: Size },
-    Ellipse { center: Point, rx: f64, ry: f64 },
-    Polygon { points: Vec<Point> },
-    Path { ops: Vec<PathOp> },
-    Pie { center: Point, radius: f64, start_angle: f64, end_angle: f64 },
+    Rect {
+        at: Point,
+        size: Size,
+    },
+    RoundedRect {
+        at: Point,
+        size: Size,
+        radius: f64,
+    },
+    Stadium {
+        at: Point,
+        size: Size,
+    },
+    Diamond {
+        center: Point,
+        size: Size,
+    },
+    Ellipse {
+        center: Point,
+        rx: f64,
+        ry: f64,
+    },
+    Polygon {
+        points: Vec<Point>,
+    },
+    Path {
+        ops: Vec<PathOp>,
+    },
+    Pie {
+        center: Point,
+        radius: f64,
+        start_angle: f64,
+        end_angle: f64,
+    },
 }
 
 /// 简单路径操作（圆柱等复杂形状的几何描述）。

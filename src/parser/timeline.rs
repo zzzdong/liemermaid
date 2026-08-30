@@ -8,7 +8,7 @@
 
 use crate::ast::{TimelineDiagram, TimelineDirection, TimelineSection};
 use crate::parser::common::{
-    PResult, consume_line, has_input, keyword, rest_of_line, skip_ws_and_comments,
+    PResult, attempt, consume_line, has_input, keyword, rest_of_line, skip_ws_and_comments,
 };
 use winnow::{Parser, combinator::alt};
 
@@ -20,12 +20,13 @@ pub fn timeline_diagram<'i>(input: &mut &'i str) -> PResult<'i, TimelineDiagram>
     // 可选方向（独立行 `TD` / `LR`）
     let mut direction = None;
     skip_ws_and_comments(input)?;
-    if let Ok(dir) = alt((
-        keyword("TD").map(|_| TimelineDirection::TD),
-        keyword("LR").map(|_| TimelineDirection::LR),
-    ))
-    .parse_next(input)
-    {
+    if let Some(dir) = attempt(
+        alt((
+            keyword("TD").map(|_| TimelineDirection::TD),
+            keyword("LR").map(|_| TimelineDirection::LR),
+        )),
+        input,
+    ) {
         direction = Some(dir);
         consume_line(input)?;
     }

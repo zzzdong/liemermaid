@@ -5,13 +5,13 @@
 //! - SG 的 items 数量符合预期（节点数×2[形状+文本] + 边数[线段]）；
 //! - 最终 Scene 的图元数量与 SG 一致。
 
+use liemermaid::MermaidParser;
 use liemermaid::builder::extract;
+use liemermaid::builder::ir::scenegraph::SceneItem;
 use liemermaid::builder::layout::engine;
 use liemermaid::builder::materialize;
 use liemermaid::builder::measure;
 use liemermaid::builder::paint;
-use liemermaid::builder::ir::scenegraph::SceneItem;
-use liemermaid::MermaidParser;
 
 #[test]
 fn flowchart_pipeline_smoke() {
@@ -39,9 +39,21 @@ fn flowchart_pipeline_smoke() {
     // Stage 3: materialize
     let sg = materialize::run(&gg, &style);
     // 预期 items：3 节点 × (形状 + 文本) + 3 边 = 9
-    let shapes = sg.items.iter().filter(|i| matches!(i, SceneItem::Shape { .. })).count();
-    let labels = sg.items.iter().filter(|i| matches!(i, SceneItem::Label { .. })).count();
-    let edges = sg.items.iter().filter(|i| matches!(i, SceneItem::Edge { .. })).count();
+    let shapes = sg
+        .items
+        .iter()
+        .filter(|i| matches!(i, SceneItem::Shape { .. }))
+        .count();
+    let labels = sg
+        .items
+        .iter()
+        .filter(|i| matches!(i, SceneItem::Label { .. }))
+        .count();
+    let edges = sg
+        .items
+        .iter()
+        .filter(|i| matches!(i, SceneItem::Edge { .. }))
+        .count();
     assert_eq!(shapes, 3, "应有 3 个形状项");
     assert_eq!(labels, 3, "应有 3 个文本项");
     assert_eq!(edges, 3, "应有 3 个边项");
@@ -50,7 +62,11 @@ fn flowchart_pipeline_smoke() {
     let scene = paint::run(&sg);
     assert!(!scene.nodes.is_empty(), "Scene 应至少含一个图元");
     // 形状+文本为 z=0/2，边为 z=1；总图元数应等于 SG items 数（无 Group 包裹）
-    assert_eq!(scene.nodes.len(), sg.items.len(), "Scene 图元数应与 SG items 一致");
+    assert_eq!(
+        scene.nodes.len(),
+        sg.items.len(),
+        "Scene 图元数应与 SG items 一致"
+    );
 }
 
 #[test]

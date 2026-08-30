@@ -227,7 +227,11 @@ fn flowchart_canvas_fits_content_like_official() {
 /// 内容大于配置上限时**等比缩小**（绝不放大、绝不裁切）。
 #[test]
 fn oversized_content_is_scaled_down() {
-    let wide = render_to_svg("flowchart LR\nA --> B --> C --> D --> E --> F --> G --> H", 300, 300);
+    let wide = render_to_svg(
+        "flowchart LR\nA --> B --> C --> D --> E --> F --> G --> H",
+        300,
+        300,
+    );
     let vb = wide
         .split_once("viewBox=\"")
         .and_then(|(_, s)| s.split_once('"'))
@@ -321,7 +325,10 @@ fn sequence_renders_activation_bars() {
         .lines()
         .find(|l| l.contains(r##"fill="#edf2ae""##))
         .expect("存在激活条矩形");
-    assert!(act.contains(r##"width="10.00""##), "激活条宽度应为 10: {act}");
+    assert!(
+        act.contains(r##"width="10.00""##),
+        "激活条宽度应为 10: {act}"
+    );
     // 激活条纵向跨度应大于一行（跨越 start → done 两行）。
     let h = act
         .split(r##"height=""##)
@@ -359,10 +366,7 @@ fn gitgraph_renders_commit_ids_branches_and_dashed_lanes() {
     assert!(text.contains("main"), "应渲染分支标签 main");
     assert!(text.contains("develop"), "应渲染分支标签 develop");
     // 分支虚线（平行状态标识）。
-    assert!(
-        svg.contains("stroke-dasharray"),
-        "分支行应有虚线标识"
-    );
+    assert!(svg.contains("stroke-dasharray"), "分支行应有虚线标识");
 }
 
 // ============================================================

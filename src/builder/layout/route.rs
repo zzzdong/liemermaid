@@ -87,7 +87,11 @@ impl Obstacles {
     /// 转置到垂直空间（水平主轴时统一在垂直空间规划）。
     fn transposed(&self) -> Obstacles {
         Obstacles {
-            rects: self.rects.iter().map(|(i, r, o)| (*i, tr_rect(*r), o.clone())).collect(),
+            rects: self
+                .rects
+                .iter()
+                .map(|(i, r, o)| (*i, tr_rect(*r), o.clone()))
+                .collect(),
             members: self.members.clone(),
         }
     }
@@ -105,7 +109,9 @@ fn edge_skip<'a>(
         if owner == s_id || owner == t_id {
             return true;
         }
-        members.get(owner).is_some_and(|m| m.contains(s_id) || m.contains(t_id))
+        members
+            .get(owner)
+            .is_some_and(|m| m.contains(s_id) || m.contains(t_id))
     }
 }
 
@@ -113,7 +119,11 @@ fn edge_skip<'a>(
 ///
 /// `containers`：子图容器框。边只绕开「两端均非其成员」的容器，
 /// 容器内边 / 跨容器边（至少一端为成员）允许穿过容器边界。
-pub fn route_edges(gg: &mut Geograph, direction: crate::ast::Direction, containers: &[GGContainer]) {
+pub fn route_edges(
+    gg: &mut Geograph,
+    direction: crate::ast::Direction,
+    containers: &[GGContainer],
+) {
     let node_map: HashMap<&String, &GGNode> = gg.nodes.iter().map(|n| (&n.id, n)).collect();
 
     // 节点包围盒（含少量 padding）。
@@ -148,7 +158,10 @@ pub fn route_edges(gg: &mut Geograph, direction: crate::ast::Direction, containe
     }
     let mut all_rects = node_rects.clone();
     all_rects.extend(container_rects);
-    let obstacles = Obstacles { rects: all_rects, members };
+    let obstacles = Obstacles {
+        rects: all_rects,
+        members,
+    };
 
     // mutual 对（u↔v）的绕行侧分配记录：key = (source, target)，value = ±1。
     let mut mutual_side: HashMap<(String, String), f64> = HashMap::new();
@@ -159,14 +172,21 @@ pub fn route_edges(gg: &mut Geograph, direction: crate::ast::Direction, containe
     // 已占用的正交主干（trunk 坐标, 跨度起, 跨度止）：同层间的并行正交边
     // 主干互斥，避免多条边画在同一条主干线上（阶段 0.6）。
     let mut used_trunks: Vec<(f64, f64, f64)> = Vec::new();
-    let edge_pairs: Vec<(String, String)> =
-        gg.edges.iter().map(|e| (e.source.clone(), e.target.clone())).collect();
+    let edge_pairs: Vec<(String, String)> = gg
+        .edges
+        .iter()
+        .map(|e| (e.source.clone(), e.target.clone()))
+        .collect();
 
     // 预计算 mutual 对集合（u↔v 与 v↔u 同时存在）。
     let mut mutual_pairs: std::collections::HashSet<(String, String)> =
         std::collections::HashSet::new();
     for e in &gg.edges {
-        if gg.edges.iter().any(|o| o.source == e.target && o.target == e.source) {
+        if gg
+            .edges
+            .iter()
+            .any(|o| o.source == e.target && o.target == e.source)
+        {
             mutual_pairs.insert((e.source.clone(), e.target.clone()));
         }
     }
@@ -179,7 +199,9 @@ pub fn route_edges(gg: &mut Geograph, direction: crate::ast::Direction, containe
                 let plan = if s.id == t.id {
                     Plan::SelfLoop
                 } else if mutual_pairs.contains(&(e.source.clone(), e.target.clone())) {
-                    Plan::Mutual { side: mutual_side_for(&e.source, &e.target, &mut mutual_side) }
+                    Plan::Mutual {
+                        side: mutual_side_for(&e.source, &e.target, &mut mutual_side),
+                    }
                 } else if is_back_edge(s, t, direction) {
                     let side = mutual_side_for(&e.source, &e.target, &mut mutual_side);
                     // 所有回边（含 Orthogonal）都先尝试侧通道绕行：有阻挡 → 通道
@@ -231,7 +253,9 @@ pub fn route_edges(gg: &mut Geograph, direction: crate::ast::Direction, containe
     let mut src_groups: HashMap<(String, Port), Vec<(usize, f64)>> = HashMap::new();
     let mut tgt_groups: HashMap<(String, Port), Vec<(usize, f64)>> = HashMap::new();
     for (i, e) in gg.edges.iter().enumerate() {
-        let Some((sp, tp)) = edge_ports[i] else { continue; };
+        let Some((sp, tp)) = edge_ports[i] else {
+            continue;
+        };
         let (Some(s), Some(t)) = (node_map.get(&e.source), node_map.get(&e.target)) else {
             continue;
         };
@@ -254,7 +278,9 @@ pub fn route_edges(gg: &mut Geograph, direction: crate::ast::Direction, containe
 
     // —— 逐边生成路由 ——
     for (i, e) in gg.edges.iter_mut().enumerate() {
-        let Some(plan) = plans[i] else { continue; };
+        let Some(plan) = plans[i] else {
+            continue;
+        };
         let (Some(s), Some(t)) = (node_map.get(&e.source), node_map.get(&e.target)) else {
             continue;
         };
@@ -266,37 +292,30 @@ pub fn route_edges(gg: &mut Geograph, direction: crate::ast::Direction, containe
         // 自环 / 双向对使用专用路由（无端口概念），其余边需要端口配对。
         let route = match plan {
             Plan::SelfLoop => {
-                let (r, anchor) = self_loop_route(&s);
+                let (r, anchor) = self_loop_route(s);
                 anchor_override = Some(anchor);
                 r
             }
-            Plan::Mutual { side } => mutual_dual_route(&s, &t, side),
+            Plan::Mutual { side } => mutual_dual_route(s, t, side),
             _ => {
-                let Some((sp, tp)) = edge_ports[i] else { continue; };
+                let Some((sp, tp)) = edge_ports[i] else {
+                    continue;
+                };
+                let s_port = (sp, s_slot);
+                let t_port = (tp, t_slot);
                 match plan {
-                    Plan::BackBow { side } => {
-                        back_edge_route(&s, &t, &(sp, s_slot), &(tp, t_slot), side)
-                    }
-                    Plan::BackChannel { ch, .. } => {
-                        channel_route(&s, &t, ch, &(sp, s_slot), &(tp, t_slot))
-                    }
+                    Plan::BackBow { side } => back_edge_route(s, t, &s_port, &t_port, side),
+                    Plan::BackChannel { ch, .. } => channel_route(s, t, ch, &s_port, &t_port),
                     _ => match e.routing_hint {
                         RoutingHint::Spline => spline_route_safe(
-                            &s,
-                            &t,
-                            &(sp, s_slot),
-                            &(tp, t_slot),
+                            s,
+                            t,
+                            &s_port,
+                            &t_port,
                             &obstacles,
                             &mut used_channels,
                         ),
-                        _ => orthogonal_route(
-                            &s,
-                            &t,
-                            &(sp, s_slot),
-                            &(tp, t_slot),
-                            &obstacles,
-                            &mut used_trunks,
-                        ),
+                        _ => orthogonal_route(s, t, &s_port, &t_port, &obstacles, &mut used_trunks),
                     },
                 }
             }
@@ -311,16 +330,12 @@ pub fn route_edges(gg: &mut Geograph, direction: crate::ast::Direction, containe
 
 /// 检测 mutual 对并为每条边分配绕行侧。
 /// `side`: +1 = 右侧，-1 = 左侧。两条相对边一左一右对称。
-fn mutual_side_for(
-    source: &String,
-    target: &String,
-    seen: &mut HashMap<(String, String), f64>,
-) -> f64 {
-    let key = (source.clone(), target.clone());
+fn mutual_side_for(source: &str, target: &str, seen: &mut HashMap<(String, String), f64>) -> f64 {
+    let key = (source.to_owned(), target.to_owned());
     if let Some(&s) = seen.get(&key) {
         return s;
     }
-    let reverse_key = (target.clone(), source.clone());
+    let reverse_key = (target.to_owned(), source.to_owned());
     // 若反向边已分配，则本条分配相反侧。
     if let Some(&rev) = seen.get(&reverse_key) {
         let side = -rev;
@@ -461,15 +476,18 @@ fn channel_route(
 
 /// 通道是否与已占用通道同坐标且跨度重叠。
 fn channel_conflicts_used(ch: f64, top: f64, bot: f64, used: &[(f64, f64, f64)]) -> bool {
-    used.iter().any(|(c, y0, y1)| (c - ch).abs() < 2.0 && *y1 > top && *y0 < bot)
+    used.iter()
+        .any(|(c, y0, y1)| (c - ch).abs() < 2.0 && *y1 > top && *y0 < bot)
 }
 
 /// 正交主干是否与已占用主干同坐标且跨度重叠。
 fn trunk_conflicts_used(trunk: f64, s0: f64, s1: f64, used: &[(f64, f64, f64)]) -> bool {
-    used.iter().any(|(t, u0, u1)| (t - trunk).abs() < 2.0 && *u1 > s0 && *u0 < s1)
+    used.iter()
+        .any(|(t, u0, u1)| (t - trunk).abs() < 2.0 && *u1 > s0 && *u0 < s1)
 }
 
 /// 尝试某一侧的通道：先让开节点/容器，再避开已占用通道（冲突时沿侧向堆叠一格重试）。
+#[allow(clippy::too_many_arguments)]
 fn try_channel_side(
     start: f64,
     to_right: bool,
@@ -489,7 +507,11 @@ fn try_channel_side(
             return Some(ch);
         }
         // 沿远离通道的方向堆叠一格，并重新让开节点/容器。
-        ch = if to_right { ch + CH_STACK } else { ch - CH_STACK };
+        ch = if to_right {
+            ch + CH_STACK
+        } else {
+            ch - CH_STACK
+        };
         ch = settle_channel(ch, to_right, top, bot, rects, skip)?;
         if !ends_clear(ch) {
             return None;
@@ -531,7 +553,10 @@ fn plan_back_channel(
     let node_rects_v: Vec<(usize, Rect, String)> = if vert {
         node_rects.to_vec()
     } else {
-        node_rects.iter().map(|(i, r, o)| (*i, tr_rect(*r), o.clone())).collect()
+        node_rects
+            .iter()
+            .map(|(i, r, o)| (*i, tr_rect(*r), o.clone()))
+            .collect()
     };
     let skip = edge_skip(&s.id, &t.id, &obstacles.members);
 
@@ -598,9 +623,10 @@ fn plan_back_channel(
     // 「通道跨度内的节点」（如 E→C 连 C，C 位于 B..D 跨度内），则该边的
     // 绕行/进入段会与本通道交叉 —— 该侧应降级。用于在两侧等距时选空侧。
     let center_of = |id: &str| -> Option<(f64, f64)> {
-        node_rects_v.iter().find(|(_, _, o)| o == id).map(|(_, r, _)| {
-            ((r.min_x() + r.max_x()) / 2.0, (r.min_y() + r.max_y()) / 2.0)
-        })
+        node_rects_v
+            .iter()
+            .find(|(_, _, o)| o == id)
+            .map(|(_, r, _)| ((r.min_x() + r.max_x()) / 2.0, (r.min_y() + r.max_y()) / 2.0))
     };
     let crossers = |ch: f64, to_right: bool| -> usize {
         let beyond = |x: f64| if to_right { x > ch } else { x < ch };
@@ -612,16 +638,21 @@ fn plan_back_channel(
             let (Some(uc), Some(vc)) = (center_of(u), center_of(v)) else {
                 continue;
             };
-            let in_span = if beyond(uc.0) { vc.1 } else if beyond(vc.0) { uc.1 } else { continue };
+            let in_span = if beyond(uc.0) {
+                vc.1
+            } else if beyond(vc.0) {
+                uc.1
+            } else {
+                continue;
+            };
             if in_span > top && in_span < bot {
                 cnt += 1;
             }
         }
         cnt
     };
-    let score = |ch: f64, to_right: bool| -> (usize, f64) {
-        (crossers(ch, to_right), (ch - mid_x).abs())
-    };
+    let score =
+        |ch: f64, to_right: bool| -> (usize, f64) { (crossers(ch, to_right), (ch - mid_x).abs()) };
 
     let chosen = match (right, left) {
         (Some(r), Some(l)) => {
@@ -663,7 +694,11 @@ fn settle_channel(
             }
         }
         let Some(r) = blocker else { return Some(ch) };
-        ch = if to_right { r.max_x() + CHANNEL_MARGIN } else { r.min_x() - CHANNEL_MARGIN };
+        ch = if to_right {
+            r.max_x() + CHANNEL_MARGIN
+        } else {
+            r.min_x() - CHANNEL_MARGIN
+        };
     }
     None
 }
@@ -780,12 +815,17 @@ fn spline_route_safe(
     if let Some(ch) = settle_channel(hit_max + CHANNEL_MARGIN, true, top, bot, &rects_v, &skip) {
         candidates.push(ch);
     }
-    if let Some(ch) = settle_channel(hit_min - CHANNEL_MARGIN, false, top, bot, &rects_v, &skip)
-    {
+    if let Some(ch) = settle_channel(hit_min - CHANNEL_MARGIN, false, top, bot, &rects_v, &skip) {
         candidates.push(ch);
     }
-    let all_max = rects_v.iter().map(|(_, r, _)| r.max_x()).fold(f64::NEG_INFINITY, f64::max);
-    let all_min = rects_v.iter().map(|(_, r, _)| r.min_x()).fold(f64::INFINITY, f64::min);
+    let all_max = rects_v
+        .iter()
+        .map(|(_, r, _)| r.max_x())
+        .fold(f64::NEG_INFINITY, f64::max);
+    let all_min = rects_v
+        .iter()
+        .map(|(_, r, _)| r.min_x())
+        .fold(f64::INFINITY, f64::min);
     candidates.push(all_max + CHANNEL_MARGIN);
     candidates.push(all_min - CHANNEL_MARGIN);
 
@@ -794,7 +834,14 @@ fn spline_route_safe(
     let mut best: Option<(f64, f64)> = None; // (cost, ch)
     for strict in [true, false] {
         for ch in &candidates {
-            let pts = [p0v, av, Point::new(*ch, av.y), Point::new(*ch, bv.y), bv, p3v];
+            let pts = [
+                p0v,
+                av,
+                Point::new(*ch, av.y),
+                Point::new(*ch, bv.y),
+                bv,
+                p3v,
+            ];
             if !polyline_clear(&pts, &skip, &rects_v) {
                 continue;
             }
@@ -858,13 +905,23 @@ fn orthogonal_route(
     let (a, b) = if vertical_main {
         let out = if sp == Port::Bottom { STUB } else { -STUB };
         let inn = if tp == Port::Top { -STUB } else { STUB };
-        (Point::new(start.x, start.y + out), Point::new(end.x, end.y + inn))
+        (
+            Point::new(start.x, start.y + out),
+            Point::new(end.x, end.y + inn),
+        )
     } else {
         let out = if sp == Port::Right { STUB } else { -STUB };
         let inn = if tp == Port::Left { -STUB } else { STUB };
-        (Point::new(start.x + out, start.y), Point::new(end.x + inn, end.y))
+        (
+            Point::new(start.x + out, start.y),
+            Point::new(end.x + inn, end.y),
+        )
     };
-    let base_trunk = if vertical_main { (a.x + b.x) / 2.0 } else { (a.y + b.y) / 2.0 };
+    let base_trunk = if vertical_main {
+        (a.x + b.x) / 2.0
+    } else {
+        (a.y + b.y) / 2.0
+    };
     // 主干沿主轴方向的跨度（垂直主干 = y 跨度；水平主干 = x 跨度）。
     let (s0, s1) = if vertical_main {
         (a.y.min(b.y), a.y.max(b.y))
@@ -875,9 +932,23 @@ fn orthogonal_route(
     let build = |trunk: f64| -> Vec<Point> {
         if vertical_main {
             // 垂直主干：在 stub 端点高度接入主干，保持全程曼哈顿。
-            vec![start, a, Point::new(trunk, a.y), Point::new(trunk, b.y), b, end]
+            vec![
+                start,
+                a,
+                Point::new(trunk, a.y),
+                Point::new(trunk, b.y),
+                b,
+                end,
+            ]
         } else {
-            vec![start, a, Point::new(a.x, trunk), Point::new(b.x, trunk), b, end]
+            vec![
+                start,
+                a,
+                Point::new(a.x, trunk),
+                Point::new(b.x, trunk),
+                b,
+                end,
+            ]
         }
     };
 
@@ -896,7 +967,9 @@ fn orthogonal_route(
             Some((bc, bu, bt, _)) => {
                 c < *bc
                     || (c == *bc && (!used && *bu))
-                    || (c == *bc && used == *bu && (trunk - base_trunk).abs() < (bt - base_trunk).abs())
+                    || (c == *bc
+                        && used == *bu
+                        && (trunk - base_trunk).abs() < (bt - base_trunk).abs())
             }
         };
         if better {
@@ -1006,7 +1079,11 @@ fn channel_ports(side: f64, direction: crate::ast::Direction) -> (Port, Port) {
     use crate::ast::Direction;
     let vert = matches!(direction, Direction::TB | Direction::TD | Direction::BT);
     if vert {
-        if side > 0.0 { (Port::Right, Port::Right) } else { (Port::Left, Port::Left) }
+        if side > 0.0 {
+            (Port::Right, Port::Right)
+        } else {
+            (Port::Left, Port::Left)
+        }
     } else if side > 0.0 {
         (Port::Bottom, Port::Bottom)
     } else {
@@ -1054,8 +1131,11 @@ fn rank_slots(
 ) {
     use std::cmp::Ordering;
     for (_, mut members) in groups {
-        members
-            .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal).then(a.0.cmp(&b.0)));
+        members.sort_by(|a, b| {
+            a.1.partial_cmp(&b.1)
+                .unwrap_or(Ordering::Equal)
+                .then(a.0.cmp(&b.0))
+        });
         let total = members.len();
         for (idx, (edge_i, _)) in members.into_iter().enumerate() {
             let slot = Slot { idx, total };
@@ -1082,8 +1162,10 @@ fn port_point_at(n: &GGNode, p: Port, slot: Slot) -> Point {
     // - 上限 span * PORT_MAX_SPACING_RATIO：宽节点上的少数几条边也能真正分散开。
     // 上限需不小于下限：节点很窄（span < PORT_MIN_SPACING / RATIO）时，
     // `span * RATIO` 会小于下限，导致 clamp 上下限倒置 panic。
-    let mut spacing = (span / slot.total as f64)
-        .clamp(PORT_MIN_SPACING, (span * PORT_MAX_SPACING_RATIO).max(PORT_MIN_SPACING));
+    let mut spacing = (span / slot.total as f64).clamp(
+        PORT_MIN_SPACING,
+        (span * PORT_MAX_SPACING_RATIO).max(PORT_MIN_SPACING),
+    );
     // 总跨度不得超出「边长 - 两侧留白」，避免端口点贴到节点角上。
     let usable = (span - 2.0 * PORT_CORNER_MARGIN).max(PORT_MIN_SPACING);
     spacing = spacing.min(usable / (slot.total - 1) as f64);
@@ -1185,7 +1267,11 @@ fn polyline_conflicts(
     rects: &[(usize, Rect, String)],
 ) -> usize {
     pts.windows(2)
-        .filter(|w| rects.iter().any(|(_, r, owner)| !skip(owner) && segment_intersects_rect(w[0], w[1], r)))
+        .filter(|w| {
+            rects
+                .iter()
+                .any(|(_, r, owner)| !skip(owner) && segment_intersects_rect(w[0], w[1], r))
+        })
         .count()
 }
 
@@ -1238,14 +1324,28 @@ fn rounded_polyline(pts: &[Point], radius: f64) -> RoutePath {
             r.push(RouteSegment::Line { from: cur, to: cs });
         }
         // 二次贝塞尔 (cs, corner, ce) 升阶为三次。
-        let p1 = Point::new(cs.x + (corner.x - cs.x) * 2.0 / 3.0, cs.y + (corner.y - cs.y) * 2.0 / 3.0);
-        let p2 = Point::new(ce.x + (corner.x - ce.x) * 2.0 / 3.0, ce.y + (corner.y - ce.y) * 2.0 / 3.0);
-        r.push(RouteSegment::CubicBezier { p0: cs, p1, p2, p3: ce });
+        let p1 = Point::new(
+            cs.x + (corner.x - cs.x) * 2.0 / 3.0,
+            cs.y + (corner.y - cs.y) * 2.0 / 3.0,
+        );
+        let p2 = Point::new(
+            ce.x + (corner.x - ce.x) * 2.0 / 3.0,
+            ce.y + (corner.y - ce.y) * 2.0 / 3.0,
+        );
+        r.push(RouteSegment::CubicBezier {
+            p0: cs,
+            p1,
+            p2,
+            p3: ce,
+        });
         cur = ce;
     }
     let last = *pts.last().unwrap();
     if (last.x - cur.x).abs() > 1e-6 || (last.y - cur.y).abs() > 1e-6 {
-        r.push(RouteSegment::Line { from: cur, to: last });
+        r.push(RouteSegment::Line {
+            from: cur,
+            to: last,
+        });
     }
     r
 }
@@ -1320,7 +1420,10 @@ mod tests {
             label_text: None,
             label_anchor: None,
             kind: EdgeKind::Flow,
-            arrow: ArrowSpec { start: ArrowKind::None, end: ArrowKind::Arrow },
+            arrow: ArrowSpec {
+                start: ArrowKind::None,
+                end: ArrowKind::Arrow,
+            },
             routing_hint: crate::builder::ir::common::RoutingHint::Orthogonal,
             line_kind: crate::builder::ir::common::LineKind::Solid,
             cardinality: (None, None),
@@ -1330,9 +1433,8 @@ mod tests {
 
     /// 线段相交判定（含端点接触）。
     fn segs_cross(a: Point, b: Point, c: Point, d: Point) -> bool {
-        let cross = |o: Point, p: Point, q: Point| {
-            (p.x - o.x) * (q.y - o.y) - (p.y - o.y) * (q.x - o.x)
-        };
+        let cross =
+            |o: Point, p: Point, q: Point| (p.x - o.x) * (q.y - o.y) - (p.y - o.y) * (q.x - o.x);
         let d1 = cross(c, d, a);
         let d2 = cross(c, d, b);
         let d3 = cross(a, b, c);
@@ -1468,9 +1570,17 @@ mod tests {
         // 垂直主导：A 出 Bottom 端口(0,20)，B 入 Top 端口(0,130)
         let start = route.start();
         assert!((start.x - 0.0).abs() < 1.0, "起点 x 应≈0");
-        assert!(start.y > 0.0 && start.y < 40.0, "起点应在 A 底部出线, got {:?}", start);
+        assert!(
+            start.y > 0.0 && start.y < 40.0,
+            "起点应在 A 底部出线, got {:?}",
+            start
+        );
         let end = route.end();
-        assert!(end.y > 110.0 && end.y < 150.0, "终点应在 B 顶部入线, got {:?}", end);
+        assert!(
+            end.y > 110.0 && end.y < 150.0,
+            "终点应在 B 顶部入线, got {:?}",
+            end
+        );
     }
 
     /// 自环路由：应生成外凸环（非退化路径），起止点都在节点右边缘。
@@ -1491,7 +1601,10 @@ mod tests {
         assert!(!route.is_empty(), "自环路由不应为空");
         let samples = sample_path(route, 32);
         // 环应伸到节点右边缘之外
-        let max_x = samples.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max);
+        let max_x = samples
+            .iter()
+            .map(|p| p.x)
+            .fold(f64::NEG_INFINITY, f64::max);
         assert!(max_x > 60.0 + 10.0, "自环应外凸出右边缘, max_x={max_x}");
         // 起止点应在节点右边缘上
         assert!((route.start().x - 60.0).abs() < 1e-6);
@@ -1520,8 +1633,14 @@ mod tests {
         route_edges(&mut gg, Direction::TB, &[]);
         let x0 = gg.edges[0].route.start().x;
         let x1 = gg.edges[1].route.start().x;
-        assert!((x0 - x1).abs() > 2.0, "双向对两条边应左右分开: {x0} vs {x1}");
-        assert!((x0 - 0.0).abs() < 20.0 && (x1 - 0.0).abs() < 20.0, "双向对偏移应很小（紧贴风格）");
+        assert!(
+            (x0 - x1).abs() > 2.0,
+            "双向对两条边应左右分开: {x0} vs {x1}"
+        );
+        assert!(
+            (x0 - 0.0).abs() < 20.0 && (x1 - 0.0).abs() < 20.0,
+            "双向对偏移应很小（紧贴风格）"
+        );
     }
 
     /// 菱形端口：端口点应落在菱形边界上（而非包围盒角部悬空）。
@@ -1533,7 +1652,10 @@ mod tests {
         // 底面偏移 66（约 hw/3）：边界 y = hh * (1 - 66/100) = 19.8
         let p = port_point_offset(&n, Port::Bottom, 66.0);
         let ratio = (p.x / 100.0).abs() + (p.y / 60.0).abs();
-        assert!((ratio - 1.0).abs() < 1e-6, "端口应落在菱形边界上, ratio={ratio}");
+        assert!(
+            (ratio - 1.0).abs() < 1e-6,
+            "端口应落在菱形边界上, ratio={ratio}"
+        );
         // 顶面中点 = 顶点
         let top = port_point_offset(&n, Port::Top, 0.0);
         assert!((top.y - (-60.0)).abs() < 1e-6 && (top.x - 0.0).abs() < 1e-6);

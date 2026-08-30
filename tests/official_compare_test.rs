@@ -2,10 +2,12 @@
 //!
 //! 层 1（语义层）：用 `semantics` 模块从 liemermaid 输出与官方 mermaid-cli 输出各抽
 //! 取结构化语义（文本集合 / 节点标签集合 / 归一语义类型计数），做跨引擎正确性比对。
-//! 文本集合与节点标签集合要求**相等**（强判据）；类型计数记录偏差（弱判据）。
 //!
 //! 层 2（结构层）：复用 `svgdiff` 对比两边生成的 SVG 在元素数量、文本、颜色、
 //! 相对布局/包围盒等维度的差异，作为"渲染像不像"的辅助信号。
+//!
+//! 两层目前都只做**报告 + 结构回归硬门槛**：语义与几何的细粒度差异仍待逐步收敛，
+//! 只有"官方有、liemermaid 完全没渲染"才视为结构性回归并硬失败。
 //!
 //! 官方 golden 来源：`tests/golden/golden/{type}__{name}.svg`（由 mermaid-cli 生成）。
 //! liemermaid 输出：实时 `liemermaid::render` 渲染 catalog 中的 `.mmd` 源码。
@@ -15,6 +17,9 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
+
+#[path = "golden/semantics.rs"]
+mod semantics;
 
 #[path = "golden/svgdiff.rs"]
 mod svgdiff;
@@ -83,14 +88,23 @@ fn official_semantic_compare() {
             }
         };
 
-        // 层 1：svgdiff 内容正确性比对（文本集合相等 + 节点/边拓扑数量相等）。
-        // 已不依赖 class 命名——回退后 liemermaid 不再输出官方 class，改用几何类型推断。
+        let mut detail = String::new();
+
+        // 层 1：语义层比对（文本 / 节点标签 / 归一语义类型计数）。
+        let ours_sem = semantics::extract(&ours, false);
+        let golden_sem = semantics::extract(&golden_svg, true);
+        let sd = semantics::compare(&ours_sem, &golden_sem);
+        if !sd.is_empty() {
+            detail.push_str("SEMANTICS (text/node-label/semantic types):\n");
+            detail.push_str(&sd.describe());
+        }
+
+        // 层 2：结构层比对（元素数量 / 文本 / 颜色 / 相对布局）。
         let ours_els = svgdiff::parse(&ours);
         let golden_els = svgdiff::parse(&golden_svg);
         let ours_sum = svgdiff::summarize(&ours_els);
         let golden_sum = svgdiff::summarize(&golden_els);
         let dd = svgdiff::compare(&ours_sum, &golden_sum);
-        let mut detail = String::new();
         if !dd.is_empty() {
             detail.push_str("SVGDIFF (content/geometry):\n");
             detail.push_str(&dd.describe());
@@ -105,7 +119,10 @@ fn official_semantic_compare() {
         if !golden_sum.node_centers.is_empty() && ours_sum.node_centers.is_empty() {
             struct_missing.push("node");
         }
-        if src_has_edges && !golden_sum.edge_endpoints.is_empty() && ours_sum.edge_endpoints.is_empty() {
+        if src_has_edges
+            && !golden_sum.edge_endpoints.is_empty()
+            && ours_sum.edge_endpoints.is_empty()
+        {
             struct_missing.push("edge");
         }
         if !struct_missing.is_empty() {

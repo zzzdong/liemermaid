@@ -6,12 +6,12 @@
 
 use crate::ast::{ArrowType, Edge, Flowchart, Node, NodeShape, Subgraph};
 use crate::parser::common::{
-    PResult, direction, has_input, identifier, peek_end, rest_of_line, skip_ws_and_comments, text,
-    ws1,
+    PResult, attempt, direction, has_input, identifier, inline_ws_and_comments, peek_end,
+    rest_of_line, skip_ws_and_comments, text, ws1,
 };
 use winnow::{
     Parser,
-    combinator::{alt, delimited, fail, opt, peek, preceded, repeat},
+    combinator::{alt, delimited, fail, opt, peek, preceded},
     token::{any, take_while},
 };
 
@@ -116,17 +116,13 @@ fn arrow_type<'i>(input: &mut &'i str) -> PResult<'i, ArrowType> {
 
 // ---------- 边 ----------
 
-/// 单个箭头段：`source <arrow> target`，箭头可带标签。
-fn edge<'i>(input: &mut &'i str) -> PResult<'i, Edge> {
-    let source = identifier.parse_next(input)?;
-    skip_ws_and_comments(input)?;
-
-    // 箭头 + 可选标签。标签形式：
-    //   A -->|label| B   （竖线包裹，箭头后）
-    //   A --|label|--> B   （竖线包裹，箭头中）
-    //   A --label--> B     （裸文本，仅 solid/thick/dotted）
-    //   A --> B            （无标签）
-    let (arrow, label) = alt((
+/// 箭头 + 可选标签。标签形式：
+///   `A -->|label| B`   （竖线包裹，箭头后）
+///   `A --|label|--> B` （竖线包裹，箭头中）
+///   `A --label--> B`   （裸文本，仅 solid/thick/dotted）
+///   `A --> B`          （无标签）
+fn link_arrow<'i>(input: &mut &'i str) -> PResult<'i, (ArrowType, Option<String>)> {
+    alt((
         // A --|label|--> B（标签在箭头中间）
         (
             alt(("--", "-.", "==", "~~~")),
@@ -141,27 +137,89 @@ fn edge<'i>(input: &mut &'i str) -> PResult<'i, Edge> {
         // 无标签
         arrow_type.map(|arrow| (arrow, None)),
     ))
-    .parse_next(input)?;
-
-    skip_ws_and_comments(input)?;
-    let target = identifier.parse_next(input)?;
-
-    Ok(Edge {
-        source,
-        target,
-        arrow_type: arrow,
-        label,
-    })
+    .parse_next(input)
 }
 
-/// 链式链接：`A --> B --> C`
-fn chain_edges<'i>(input: &mut &'i str) -> PResult<'i, Vec<Edge>> {
-    let first = edge.parse_next(input)?;
-    let rest: Vec<Edge> = repeat(0.., preceded(skip_ws_and_comments, edge)).parse_next(input)?;
-    let mut edges = Vec::with_capacity(1 + rest.len());
-    edges.push(first);
-    edges.extend(rest);
-    Ok(edges)
+/// 单个边端点：`A` 或带形状的 `A[Start]`。
+///
+/// 返回 `(id, 可选节点声明)`：端点上直接写形状是 mermaid 最常见写法
+/// （`A[Start] --> B[End]`），形状需要登记为节点，否则标签会丢失。
+fn edge_endpoint<'i>(input: &mut &'i str) -> PResult<'i, (String, Option<Node>)> {
+    let id = identifier.parse_next(input)?;
+    let node = attempt(node_shape_with_text, input).map(|(shape, text)| Node {
+        id: id.clone(),
+        shape,
+        text,
+    });
+    Ok((id, node))
+}
+
+/// `&` 分隔的端点列表：`A & B`。mermaid 的 `A & B --> C` 等价于两条边。
+fn endpoint_list<'i>(input: &mut &'i str) -> PResult<'i, (Vec<String>, Vec<Node>)> {
+    let (first_id, first_node) = edge_endpoint.parse_next(input)?;
+    let mut ids = vec![first_id];
+    let mut nodes = Vec::new();
+    if let Some(n) = first_node {
+        nodes.push(n);
+    }
+    loop {
+        let before = *input;
+        inline_ws_and_comments(input)?;
+        if !input.starts_with('&') {
+            *input = before;
+            break;
+        }
+        let _ = '&'.parse_next(input)?;
+        inline_ws_and_comments(input)?;
+        match attempt(edge_endpoint, input) {
+            Some((id, node)) => {
+                ids.push(id);
+                nodes.extend(node);
+            }
+            None => {
+                *input = before;
+                break;
+            }
+        }
+    }
+    Ok((ids, nodes))
+}
+
+/// 链式链接：`A --> B --> C`，并支持 `&` 多端点（`A & B --> C`）。
+///
+/// mermaid 语义：第 2 段起沿用上一段的目标作为源。返回 `(边, 端点处声明的节点)`。
+fn chain_edges<'i>(input: &mut &'i str) -> PResult<'i, (Vec<Edge>, Vec<Node>)> {
+    let (mut sources, mut nodes) = endpoint_list.parse_next(input)?;
+    let mut edges: Vec<Edge> = Vec::new();
+
+    loop {
+        let before = *input;
+        inline_ws_and_comments(input)?;
+        let Some((arrow, label)) = attempt(link_arrow, input) else {
+            *input = before;
+            break;
+        };
+        inline_ws_and_comments(input)?;
+        let (targets, target_nodes) = endpoint_list.parse_next(input)?;
+        nodes.extend(target_nodes);
+        for s in &sources {
+            for t in &targets {
+                edges.push(Edge {
+                    source: s.clone(),
+                    target: t.clone(),
+                    arrow_type: arrow.clone(),
+                    label: label.clone(),
+                });
+            }
+        }
+        sources = targets;
+    }
+
+    // 没有任何箭头就不是边（交给 `node_definition` / `bare_node` 处理）。
+    if edges.is_empty() {
+        return Err(winnow::error::InputError::at(*input));
+    }
+    Ok((edges, nodes))
 }
 
 // ---------- 子图 ----------
@@ -188,24 +246,26 @@ fn subgraph<'i>(input: &mut &'i str) -> PResult<'i, Subgraph> {
         }
 
         // 嵌套子图
-        if let Ok(sub) = subgraph.parse_next(input) {
+        if let Some(sub) = attempt(subgraph, input) {
             nodes.extend(sub.nodes);
             edges.extend(sub.edges);
             continue;
         }
+        // 边（含链式与 `&` 多端点）。必须**先于**节点声明尝试：
+        // `A[Start] --> B[End]` 的端点自带形状，只有边解析器能同时登记节点。
+        if let Some((chain, declared)) = attempt(chain_edges, input) {
+            edges.extend(chain);
+            nodes.extend(declared);
+            continue;
+        }
         // 节点
-        if let Ok(node) = node_definition.parse_next(input) {
+        if let Some(node) = attempt(node_definition, input) {
             nodes.push(node);
             continue;
         }
         // 裸节点声明（孤立节点），如 `E`
-        if let Ok(node) = bare_node.parse_next(input) {
+        if let Some(node) = attempt(bare_node, input) {
             nodes.push(node);
-            continue;
-        }
-        // 边
-        if let Ok(chain) = chain_edges.parse_next(input) {
-            edges.extend(chain);
             continue;
         }
         // 跳过未知内容（直到分号或换行）
@@ -256,21 +316,23 @@ pub fn flowchart_diagram<'i>(input: &mut &'i str) -> PResult<'i, Flowchart> {
             break;
         }
 
-        if let Ok(sub) = subgraph.parse_next(input) {
+        if let Some(sub) = attempt(subgraph, input) {
             subgraphs.push(sub);
             continue;
         }
-        if let Ok(node) = node_definition.parse_next(input) {
+        // 边先于节点声明：`A[Start] --> B[End]` 的端点形状需由边解析器登记。
+        if let Some((chain, declared)) = attempt(chain_edges, input) {
+            edges.extend(chain);
+            nodes.extend(declared);
+            continue;
+        }
+        if let Some(node) = attempt(node_definition, input) {
             nodes.push(node);
             continue;
         }
         // 裸节点声明（孤立节点），如 `E`
-        if let Ok(node) = bare_node.parse_next(input) {
+        if let Some(node) = attempt(bare_node, input) {
             nodes.push(node);
-            continue;
-        }
-        if let Ok(chain) = chain_edges.parse_next(input) {
-            edges.extend(chain);
             continue;
         }
         // 跳过无法识别的行（剩余纯空白或空时不再强制消费字符）

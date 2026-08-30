@@ -166,20 +166,38 @@ const CANVAS_MARGIN: f64 = 8.0;
 /// 画布最终尺寸 = 缩放后内容 + 2×`CANVAS_MARGIN`。
 ///
 /// 返回（适配后的节点, 画布宽, 画布高）。
-fn fit_to_canvas(
-    elements: Vec<SceneNode>,
-    config: &OutputConfig,
-) -> (Vec<SceneNode>, f64, f64) {
-    let Some((x0, y0, x1, y1)) = compute_bbox(&elements) else {
-        return (elements, config.width, config.height);
+fn fit_to_canvas(elements: Vec<SceneNode>, config: &OutputConfig) -> (Vec<SceneNode>, f64, f64) {
+    // 配置尺寸非法（NaN / Inf / 负数）时退回默认画布，避免产出负尺寸 viewBox。
+    let cfg_w = if config.width.is_finite() && config.width > 0.0 {
+        config.width
+    } else {
+        types::DEFAULT_WIDTH
     };
+    let cfg_h = if config.height.is_finite() && config.height > 0.0 {
+        config.height
+    } else {
+        types::DEFAULT_HEIGHT
+    };
+
+    let Some((x0, y0, x1, y1)) = compute_bbox(&elements) else {
+        return (elements, cfg_w, cfg_h);
+    };
+    if ![x0, y0, x1, y1].iter().all(|v| v.is_finite()) {
+        // 内容含非法坐标（NaN/Inf）时不做适配，避免污染整个画布变换。
+        return (elements, cfg_w, cfg_h);
+    }
     let content_w = (x1 - x0).max(1.0);
     let content_h = (y1 - y0).max(1.0);
-    let avail_w = config.width - 2.0 * CANVAS_MARGIN;
-    let avail_h = config.height - 2.0 * CANVAS_MARGIN;
+    // 可用区域至少 1pt：配置尺寸小于 2×边距时不能让 scale 变成负数/零，
+    // 否则画布尺寸会下溢为负值（曾出现 `viewBox="0 0 0 -20.41"`）。
+    let avail_w = (cfg_w - 2.0 * CANVAS_MARGIN).max(1.0);
+    let avail_h = (cfg_h - 2.0 * CANVAS_MARGIN).max(1.0);
 
     // 计算缩放比例（绝不放大）：配置尺寸是**上限**而非固定画布。
-    let scale = (avail_w / content_w).min(avail_h / content_h).min(1.0);
+    // 下限取最小正数，保证 scale 恒为正（画布尺寸不会退化）。
+    let scale = (avail_w / content_w)
+        .min(avail_h / content_h)
+        .clamp(f64::MIN_POSITIVE, 1.0);
 
     // 画布贴合内容（仅留边距），不再按 config 撑满。
     let canvas_w = content_w * scale + 2.0 * CANVAS_MARGIN;
