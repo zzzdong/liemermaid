@@ -160,24 +160,34 @@ fn compute_bbox(elements: &[SceneNode]) -> Option<(f64, f64, f64, f64)> {
 /// 画布边距（内容外留白，对应官方 mermaid 的 `diagramPadding` 量级）。
 const CANVAS_MARGIN: f64 = 8.0;
 
+/// 解析配置尺寸：`None`（不限）或非法值（NaN/Inf/负数）退回默认，用于空内容的兜底画布。
+fn resolve_cfg(limit: Option<f64>, default: f64) -> f64 {
+    match limit {
+        Some(v) if v.is_finite() && v > 0.0 => v,
+        _ => default,
+    }
+}
+
+/// 解析可用区域（配置尺寸减 2×边距）：`None` 表示不限该维度（无穷大），
+/// 从而支持「只按宽度 / 只按高度」约束输出尺寸。
+fn resolve_avail(limit: Option<f64>, default: f64) -> f64 {
+    match limit {
+        Some(v) if v.is_finite() && v > 0.0 => (v - 2.0 * CANVAS_MARGIN).max(1.0),
+        Some(_) => (default - 2.0 * CANVAS_MARGIN).max(1.0),
+        None => f64::INFINITY,
+    }
+}
+
 /// 将内容适配到画布，**画布尺寸贴合内容**（对齐官方 mermaid）：
 /// 官方输出 `width="100%"` + `viewBox=内容包围盒`，不留大片空白；
 /// 因此这里把 `config.width/height` 当作**上限**（内容超出才等比缩小，绝不放大），
-/// 画布最终尺寸 = 缩放后内容 + 2×`CANVAS_MARGIN`。
+/// `None` 表示不限该维度；画布最终尺寸 = 缩放后内容 + 2×`CANVAS_MARGIN`。
 ///
 /// 返回（适配后的节点, 画布宽, 画布高）。
 fn fit_to_canvas(elements: Vec<SceneNode>, config: &OutputConfig) -> (Vec<SceneNode>, f64, f64) {
-    // 配置尺寸非法（NaN / Inf / 负数）时退回默认画布，避免产出负尺寸 viewBox。
-    let cfg_w = if config.width.is_finite() && config.width > 0.0 {
-        config.width
-    } else {
-        types::DEFAULT_WIDTH
-    };
-    let cfg_h = if config.height.is_finite() && config.height > 0.0 {
-        config.height
-    } else {
-        types::DEFAULT_HEIGHT
-    };
+    // 配置尺寸为 `None`（不限）或非法（NaN/Inf/负数）时退回默认，用于空内容的兜底画布。
+    let cfg_w = resolve_cfg(config.width, types::DEFAULT_WIDTH);
+    let cfg_h = resolve_cfg(config.height, types::DEFAULT_HEIGHT);
 
     let Some((x0, y0, x1, y1)) = compute_bbox(&elements) else {
         return (elements, cfg_w, cfg_h);
@@ -188,16 +198,21 @@ fn fit_to_canvas(elements: Vec<SceneNode>, config: &OutputConfig) -> (Vec<SceneN
     }
     let content_w = (x1 - x0).max(1.0);
     let content_h = (y1 - y0).max(1.0);
+
     // 可用区域至少 1pt：配置尺寸小于 2×边距时不能让 scale 变成负数/零，
     // 否则画布尺寸会下溢为负值（曾出现 `viewBox="0 0 0 -20.41"`）。
-    let avail_w = (cfg_w - 2.0 * CANVAS_MARGIN).max(1.0);
-    let avail_h = (cfg_h - 2.0 * CANVAS_MARGIN).max(1.0);
+    // `None` 表示不限该维度（无穷大），从而支持「只按宽度 / 只按高度」约束。
+    let avail_w = resolve_avail(config.width, types::DEFAULT_WIDTH);
+    let avail_h = resolve_avail(config.height, types::DEFAULT_HEIGHT);
 
-    // 计算缩放比例（绝不放大）：配置尺寸是**上限**而非固定画布。
+    // 计算缩放比例：默认「绝不放大」（配置尺寸是**上限**，对齐官方 mermaid）。
+    // `config.upscale` 时允许放大到目标尺寸（PNG 位图需要足够像素）。
     // 下限取最小正数，保证 scale 恒为正（画布尺寸不会退化）。
-    let scale = (avail_w / content_w)
-        .min(avail_h / content_h)
-        .clamp(f64::MIN_POSITIVE, 1.0);
+    let natural = (avail_w / content_w).min(avail_h / content_h);
+    // 无任何约束（宽高均为 None）时 natural 为无穷，退化为不缩放（放大目标不明确）。
+    let natural = if natural.is_finite() { natural } else { 1.0 };
+    let max_scale = if config.upscale { f64::MAX } else { 1.0 };
+    let scale = natural.clamp(f64::MIN_POSITIVE, max_scale);
 
     // 画布贴合内容（仅留边距），不再按 config 撑满。
     let canvas_w = content_w * scale + 2.0 * CANVAS_MARGIN;
@@ -223,4 +238,87 @@ fn fit_to_canvas(elements: Vec<SceneNode>, config: &OutputConfig) -> (Vec<SceneN
         canvas_w,
         canvas_h,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lievisual::geometry::Rect;
+    use lievisual::scene::FillStrokeStyle;
+
+    fn rect_node(x0: f64, y0: f64, x1: f64, y1: f64) -> SceneNode {
+        SceneNode::new(Element::rect(
+            Rect::new(x0, y0, x1, y1),
+            FillStrokeStyle::default(),
+        ))
+    }
+
+    #[test]
+    fn fit_to_canvas_upscale_scales_up() {
+        // 内容 100×100，目标 800×600：upscale 时应放大（受 600 高限制，scale=5.84）。
+        let elements = vec![rect_node(0.0, 0.0, 100.0, 100.0)];
+        let config = OutputConfig {
+            upscale: true,
+            ..OutputConfig::default()
+        };
+        let (_, w, h) = fit_to_canvas(elements, &config);
+        assert!(
+            w > 500.0 && h > 500.0,
+            "upscale 应放大内容到目标尺寸，got {w}x{h}"
+        );
+    }
+
+    #[test]
+    fn fit_to_canvas_no_upscale_keeps_natural_size() {
+        // 内容 100×100，目标 800×600：不 upscale 时保持自然尺寸（仅加边距）。
+        let elements = vec![rect_node(0.0, 0.0, 100.0, 100.0)];
+        let config = OutputConfig::default();
+        let (_, w, h) = fit_to_canvas(elements, &config);
+        assert!(
+            w < 200.0 && h < 200.0,
+            "不 upscale 应保持自然尺寸，got {w}x{h}"
+        );
+    }
+
+    #[test]
+    fn fit_to_canvas_width_only_constraint() {
+        // 内容 100×100，只限宽 500（height=None），upscale 时按宽度放大、高度同比例。
+        let elements = vec![rect_node(0.0, 0.0, 100.0, 100.0)];
+        let config = OutputConfig {
+            width: Some(500.0),
+            height: None,
+            upscale: true,
+            ..OutputConfig::default()
+        };
+        let (_, w, h) = fit_to_canvas(elements, &config);
+        assert!(
+            (w - 500.0).abs() < 1.0,
+            "只限宽时应放大到目标宽度，got {w}"
+        );
+        assert!(
+            (h - 500.0).abs() < 1.0,
+            "高度应按比例同步放大，got {h}"
+        );
+    }
+
+    #[test]
+    fn fit_to_canvas_height_only_constraint() {
+        // 内容 100×100，只限高 500（width=None），upscale 时按高度放大、宽度同比例。
+        let elements = vec![rect_node(0.0, 0.0, 100.0, 100.0)];
+        let config = OutputConfig {
+            width: None,
+            height: Some(500.0),
+            upscale: true,
+            ..OutputConfig::default()
+        };
+        let (_, w, h) = fit_to_canvas(elements, &config);
+        assert!(
+            (h - 500.0).abs() < 1.0,
+            "只限高时应放大到目标高度，got {h}"
+        );
+        assert!(
+            (w - 500.0).abs() < 1.0,
+            "宽度应按比例同步放大，got {w}"
+        );
+    }
 }

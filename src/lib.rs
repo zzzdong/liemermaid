@@ -43,7 +43,8 @@ pub use ast::Diagram;
 /// 默认解析器入口（基于 winnow 手写组合式解析器，覆盖全部 8 种图表）。
 pub use parser::WinnowParser as MermaidParser;
 
-use builder::{build_diagram_with_config, types::OutputConfig};
+use builder::build_diagram_with_config;
+pub use builder::types::OutputConfig;
 
 /// 渲染 Mermaid 图表为 SVG 字符串。
 ///
@@ -71,8 +72,8 @@ pub fn render(mermaid_text: &str, width: u32, height: u32) -> error::DiagramResu
 
     // 使用用户指定的尺寸创建配置
     let config = OutputConfig {
-        width: width as f64,
-        height: height as f64,
+        width: Some(width as f64),
+        height: Some(height as f64),
         ..OutputConfig::default()
     };
 
@@ -85,13 +86,15 @@ pub fn render(mermaid_text: &str, width: u32, height: u32) -> error::DiagramResu
 /// 形态与 liecharts 的 `render_png` 对齐：`render_png(text, w, h) -> Result<Vec<u8>>`。
 /// 底层同样转换为 [`lievisual::Scene`]，交由 lievisual 的 vello_cpu 后端（`VelloPixmapRenderer`）栅格化并编码 PNG。
 ///
-/// `width` / `height` 同为**上限**（见 [`render`]）：PNG 按贴合内容后的尺寸栅格化。
+/// 与 [`render`]（SVG）不同，PNG 是位图：这里把 `width` / `height` 作为**目标尺寸**
+/// （内容放大到目标，提升分辨率），避免简单图自然尺寸偏小、被宿主放大到页宽后发虚。
 pub fn render_png(mermaid_text: &str, width: u32, height: u32) -> error::DiagramResult<Vec<u8>> {
     let diagram = MermaidParser::parse_mermaid(mermaid_text)?;
 
     let config = OutputConfig {
-        width: width as f64,
-        height: height as f64,
+        width: Some(width as f64),
+        height: Some(height as f64),
+        upscale: true,
         ..OutputConfig::default()
     };
 
