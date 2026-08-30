@@ -6,8 +6,8 @@
 
 use crate::ast::{ArrowType, Edge, Flowchart, Node, NodeShape, Subgraph};
 use crate::parser::common::{
-    PResult, attempt, direction, has_input, identifier, inline_ws_and_comments, peek_end,
-    rest_of_line, skip_ws_and_comments, text, ws1,
+    PResult, attempt, direction, has_input, identifier, inline_ws, inline_ws_and_comments,
+    peek_end, rest_of_line, skip_ws_and_comments, text, ws1,
 };
 use winnow::{
     Parser,
@@ -130,8 +130,17 @@ fn link_arrow<'i>(input: &mut &'i str) -> PResult<'i, (ArrowType, Option<String>
             arrow_type,
         )
             .map(|(_, label, arrow)| (arrow, Some(label))),
-        // A --label--> B（裸标签在箭头中间）
-        (alt(("--", "-.", "==")), text, arrow_type).map(|(_, label, arrow)| (arrow, Some(label))),
+        // A --label--> B（裸标签在箭头中间）；`text` 到空白即停，故标签两侧的
+        // 行内空白都要跳过（`-- yes -->` 里 `--`/`yes` 与 `yes`/`-->` 之间都是空格，
+        // 否则 `unquoted_text` 遇前导空格匹配 0 字符而失败、整条边被丢弃）。
+        (
+            alt(("--", "-.", "==")),
+            inline_ws,
+            text,
+            inline_ws,
+            arrow_type,
+        )
+            .map(|(_, _, label, _, arrow)| (arrow, Some(label))),
         // A -->|label| B（标签在箭头后）
         (arrow_type, opt(delimited("|", text, "|"))).map(|(arrow, label)| (arrow, label)),
         // 无标签
@@ -431,6 +440,21 @@ mod tests {
         assert_eq!(fc.edges.len(), 2);
         assert_eq!(fc.edges[0].label.as_deref(), Some("Yes"));
         assert_eq!(fc.edges[1].label.as_deref(), Some("No"));
+    }
+
+    #[test]
+    fn bare_label_edge_with_spaces() {
+        // `-- yes -->`：裸标签在箭头中间，且标签与箭头间有空格。
+        let fc = parse(
+            "flowchart TD\nA[Start]\nB{Check}\nC[End]\nA --> B\nB -- yes --> C\nB -- no --> A",
+        );
+        assert_eq!(fc.edges.len(), 3, "应解析出 3 条边");
+        assert_eq!(fc.edges[1].source, "B");
+        assert_eq!(fc.edges[1].target, "C");
+        assert_eq!(fc.edges[1].label.as_deref(), Some("yes"));
+        assert_eq!(fc.edges[2].source, "B");
+        assert_eq!(fc.edges[2].target, "A");
+        assert_eq!(fc.edges[2].label.as_deref(), Some("no"));
     }
 
     #[test]

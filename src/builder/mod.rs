@@ -78,7 +78,7 @@ fn compute_bbox(elements: &[SceneNode]) -> Option<(f64, f64, f64, f64)> {
                 expand!(center.x - radius, center.y - radius);
                 expand!(center.x + radius, center.y + radius);
             }
-            Element::Ellipse { center, radii, .. } => {
+            Element::Ellipse { center, radii, .. } | Element::Arc { center, radii, .. } => {
                 expand!(center.x - radii.x, center.y - radii.y);
                 expand!(center.x + radii.x, center.y + radii.y);
             }
@@ -90,7 +90,7 @@ fn compute_bbox(elements: &[SceneNode]) -> Option<(f64, f64, f64, f64)> {
                 expand!(start.x, start.y);
                 expand!(end.x, end.y);
             }
-            Element::Polyline { points, .. } => {
+            Element::Polyline { points, .. } | Element::Polygon { points, .. } => {
                 for p in points {
                     expand!(p.x, p.y);
                 }
@@ -141,13 +141,16 @@ fn compute_bbox(elements: &[SceneNode]) -> Option<(f64, f64, f64, f64)> {
                 expand!(tx0, ty0);
                 expand!(tx1, ty1);
             }
+            Element::Image { frame, .. } => {
+                expand!(frame.min_x(), frame.min_y());
+                expand!(frame.max_x(), frame.max_y());
+            }
             Element::Group { children } => {
                 if let Some((cx0, cy0, cx1, cy1)) = compute_bbox(children) {
                     expand!(cx0, cy0);
                     expand!(cx1, cy1);
                 }
             }
-            _ => {}
         }
     }
 
