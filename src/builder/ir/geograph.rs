@@ -209,6 +209,9 @@ pub struct Geograph {
     pub show_data: bool,
     /// 时序图激活条（`A->>+B` / `A-->>-B`）：参与者列上的纵向矩形，非 sequence 图为空。
     pub activations: Vec<GGActivation>,
+    /// 时序图分组块的分支分隔线（alt 的 else / par 的 and / critical 的 option），
+    /// 非 sequence 图为空。
+    pub sequence_dividers: Vec<GGSequenceDivider>,
 }
 
 /// 时序图激活条（纯几何：列 x + 纵向跨度）。
@@ -222,6 +225,17 @@ pub struct GGActivation {
     pub y0: f64,
     /// 终点 y（取消激活的消息行；未显式取消时取内容底部）。
     pub y1: f64,
+}
+
+/// 时序图分支分隔线（alt 的 else / par 的 and / critical 的 option）。
+#[derive(Debug, Clone)]
+pub struct GGSequenceDivider {
+    /// 所属分组块 id（用于取块的横向范围）。
+    pub block_id: ContainerId,
+    /// 分支标题文本（已含方括号，如 `[condition two]`，与官方 `<text class="sectionTitle">` 对齐）。
+    pub label: String,
+    /// 分隔虚线 y。
+    pub y: f64,
 }
 
 /// GG 节点（几何）。

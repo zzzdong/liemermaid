@@ -59,6 +59,7 @@ fn gg_with(shape: ShapeKind) -> Geograph {
         title: None,
         show_data: false,
         activations: vec![],
+        sequence_dividers: vec![],
     }
 }
 

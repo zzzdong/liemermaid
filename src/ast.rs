@@ -138,7 +138,19 @@ pub enum SequenceBlockKind {
 pub struct SequenceBlock {
     pub kind: SequenceBlockKind,
     pub label: Option<String>,
-    /// 块内的语句（消息、备注、嵌套块）
+    /// 分支段：首段是块头分支（`alt cond1` 之后的语句，条件存于 [`Self::label`]），
+    /// 后续每段对应一个 `else` / `and` / `option` 分隔出的分支。
+    /// 单分支块（loop / opt / break / rect）恒为 1 段。
+    pub branches: Vec<SequenceBranch>,
+}
+
+/// 时序图分组块的一个分支段（`alt` 的 else 段 / `par` 的 and 段 / `critical` 的 option 段）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct SequenceBranch {
+    /// 分支条件文本（`else condition two` 的 `condition two`；首分支为 `None`）。
+    pub label: Option<String>,
+    /// 分支内的语句（消息、备注、嵌套块）
     pub items: Vec<SequenceItem>,
 }
 

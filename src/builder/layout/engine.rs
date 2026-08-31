@@ -266,6 +266,8 @@ const SEQ_ROW_GAP: f64 = 46.0; // 首行距参与者盒底
 const SEQ_BLOCK_LABEL_H: f64 = 24.0;
 const SEQ_BLOCK_PAD: f64 = 10.0;
 const SEQ_BLOCK_INDENT: f64 = 24.0;
+/// 分支分隔行高度（分隔虚线 + 下方居中的分支标题）。
+const SEQ_DIVIDER_H: f64 = 40.0;
 
 /// 备注框横向几何（x 起点, 宽），据放置位置与目标列计算。
 fn seq_note_box_x(
@@ -323,16 +325,20 @@ fn seq_note_box_x(
 
 /// Sequence 家族的专属布局：参与者列（生命线 x） + 语句行（消息/备注 y） +
 /// 消息水平路由 + 分组块容器几何。
-fn sequence_geometry(
-    ug: &ir::Unigraph,
-    sizes: &HashMap<NodeId, Size>,
-    labels: &HashMap<NodeId, ir::common::MeasuredLabel>,
-) -> (
+/// Sequence 家族布局的产出：节点 / 边 / 分组容器 / 激活条 / 分支分隔线。
+type SequenceGeometry = (
     Vec<GGNode>,
     Vec<GGEdge>,
     Vec<GGContainer>,
     Vec<ir::geograph::GGActivation>,
-) {
+    Vec<ir::geograph::GGSequenceDivider>,
+);
+
+fn sequence_geometry(
+    ug: &ir::Unigraph,
+    sizes: &HashMap<NodeId, Size>,
+    labels: &HashMap<NodeId, ir::common::MeasuredLabel>,
+) -> SequenceGeometry {
     use ir::unigraph::SequenceRow;
 
     // —— 参与者列 ——
@@ -369,6 +375,8 @@ fn sequence_geometry(
     let mut cur_y = box_bottom + SEQ_ROW_GAP;
     // 分组块几何（id, label, depth, y_top, y_bot）。
     let mut block_geo: Vec<(String, String, usize, f64, f64)> = Vec::new();
+    // 分支分隔线（块 id, 分支标题, 虚线 y）。
+    let mut dividers: Vec<(String, String, f64)> = Vec::new();
     // 激活跨度（actor, y0, y1），由下方语句行循环产出（块内必然赋值）。
     let act_spans_out: Vec<(String, f64, f64)>;
     {
@@ -415,6 +423,12 @@ fn sequence_geometry(
                     });
                     prev_y = cur_y;
                     cur_y += SEQ_BLOCK_LABEL_H;
+                }
+                SequenceRow::BlockDivider(bid, label) => {
+                    // 分隔虚线画在行顶，分支标题在其下方居中（materialize 绘制）。
+                    dividers.push((bid.clone(), label.clone(), cur_y));
+                    prev_y = cur_y;
+                    cur_y += SEQ_DIVIDER_H;
                 }
                 SequenceRow::BlockEnd(_) => {
                     if let Some(f) = stack.pop() {
@@ -560,7 +574,17 @@ fn sequence_geometry(
     }
 
     let _ = content_bottom; // 生命线底端由 materialize 从边几何推导
-    (gg_nodes, gg_edges, gg_containers, activations)
+    let sequence_dividers = dividers
+        .into_iter()
+        .map(|(block_id, label, y)| ir::geograph::GGSequenceDivider { block_id, label, y })
+        .collect();
+    (
+        gg_nodes,
+        gg_edges,
+        gg_containers,
+        activations,
+        sequence_dividers,
+    )
 }
 
 // ==================== Hierarchy（git 分支列）====================
@@ -663,16 +687,25 @@ pub fn run(ug: &ir::Unigraph) -> Result<(Geograph, StyleIntent), String> {
     let gg_edges;
     let containers;
     let activations;
+    let sequence_dividers;
     let mut needs_routing = true;
     if ug.family == ir::unigraph::GraphFamily::Sequence {
-        (gg_nodes, gg_edges, containers, activations) = sequence_geometry(ug, &sizes, &labels);
+        (
+            gg_nodes,
+            gg_edges,
+            containers,
+            activations,
+            sequence_dividers,
+        ) = sequence_geometry(ug, &sizes, &labels);
         needs_routing = false;
     } else if ug.family == ir::unigraph::GraphFamily::Hierarchy {
         activations = Vec::new();
+        sequence_dividers = Vec::new();
         (gg_nodes, gg_edges, containers) = hierarchy_geometry(ug);
         needs_routing = false;
     } else {
         activations = Vec::new();
+        sequence_dividers = Vec::new();
         let centers = if ug.family == ir::unigraph::GraphFamily::Linear {
             linear_centers(ug, &sizes)
         } else if ug.family == ir::unigraph::GraphFamily::Radial {
@@ -761,6 +794,7 @@ pub fn run(ug: &ir::Unigraph) -> Result<(Geograph, StyleIntent), String> {
         title: ug.meta.title.clone(),
         show_data: ug.meta.show_data,
         activations,
+        sequence_dividers,
     };
     if needs_routing {
         // 正交/样条边路由（节点 + 容器回避）：容器包围盒仅依赖节点几何，

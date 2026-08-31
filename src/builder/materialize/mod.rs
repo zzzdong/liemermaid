@@ -1578,6 +1578,51 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             }
         }
     }
+
+    // —— 分支分隔线（alt 的 else / par 的 and / critical 的 option）——
+    // 与官方结构对齐：横贯块宽的虚线（loopLine + dasharray 3,3）+ 块内居中的
+    // 分支标题（sectionTitle，文本已含方括号）。
+    for d in &gg.sequence_dividers {
+        let Some(c) = gg.containers.iter().find(|c| c.id == d.block_id) else {
+            continue;
+        };
+        let r = c.bounds;
+        let stroke = Stroke {
+            color: theme::sequence::BLOCK_STROKE,
+            width: 1.0,
+            line_cap: LineCap::Butt,
+            line_join: LineJoin::Miter,
+            dash_array: vec![3.0, 3.0],
+            dash_offset: 0.0,
+            miter_limit: 4.0,
+        };
+        let mut path = ir::geograph::RoutePath::new();
+        path.push(ir::geograph::RouteSegment::Line {
+            from: Point::new(r.min_x(), d.y),
+            to: Point::new(r.max_x(), d.y),
+        });
+        items.push(SceneItem::Edge {
+            path,
+            stroke,
+            ends: (EdgeEnds::None, EdgeEnds::None),
+            z: 0,
+        });
+        if !d.label.is_empty() {
+            let ts = theme::text_style(
+                theme::sequence::BLOCK_TEXT,
+                theme::FONT_SIZE * 0.85,
+                TextAlign::Center,
+                TextBaseline::Middle,
+            );
+            items.push(SceneItem::Label {
+                text: vec![RichSpan::new(d.label.clone(), ts.clone())],
+                position: Point::new((r.min_x() + r.max_x()) / 2.0, d.y + 14.0),
+                style: ts,
+                anchor: ir::scenegraph::Anchor::Center,
+                z: 0,
+            });
+        }
+    }
 }
 
 /// 拆分分组块标签为「关键字」+「方括号描述」两段（官方两段独立文本）。

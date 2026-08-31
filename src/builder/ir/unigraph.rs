@@ -71,6 +71,9 @@ pub enum SequenceRow {
     Note(NodeId),
     /// 分组块开始（块 id, 标签文本）。
     BlockStart(String, String),
+    /// 分组块的分支分隔行（块 id, 分支条件文本）——alt 的 `else` / par 的 `and` /
+    /// critical 的 `option`。渲染为横贯块宽的虚线 + 居中分支标题。
+    BlockDivider(String, String),
     /// 分组块结束（块 id）。
     BlockEnd(String),
     /// 激活标记（`A->>+B` 激活 B / `A-->>-B` 取消激活 B）。

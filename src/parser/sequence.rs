@@ -9,7 +9,8 @@
 
 use crate::ast::{
     Message, MessageActivation, MessageArrow, Note, NotePlacement, Participant, ParticipantKind,
-    SequenceBlock, SequenceBlockKind, SequenceDiagram, SequenceItem, SequenceStatement,
+    SequenceBlock, SequenceBlockKind, SequenceBranch, SequenceDiagram, SequenceItem,
+    SequenceStatement,
 };
 use crate::parser::common::{
     PResult, attempt, consume_line, has_input, inline_ws, inline_ws_and_comments, keyword,
@@ -244,10 +245,17 @@ fn block_statement<'i>(input: &mut &'i str) -> PResult<'i, SequenceStatement> {
     ))
     .parse_next(input)?;
 
-    skip_ws_and_comments(input)?;
+    // 标签只取本行剩余（行内空白 + 注释，不跨行）：无标签块的下一行语句
+    // 不会被并进 label（此前用跨行的 skip_ws_and_comments，`loop\n msg` 会把
+    // `msg` 行吞成块标签）。
+    inline_ws_and_comments(input)?;
     let label = opt(rest_of_line).parse_next(input)?;
 
-    let mut items = Vec::new();
+    // 分支段：首段为块头分支；`else` / `and` / `option` 开启新分支。
+    let mut branches = vec![SequenceBranch {
+        label: None,
+        items: Vec::new(),
+    }];
     // 解析块内语句，直到 `end`
     loop {
         skip_ws_and_comments(input)?;
@@ -257,19 +265,39 @@ fn block_statement<'i>(input: &mut &'i str) -> PResult<'i, SequenceStatement> {
         if at_block_end(input) {
             break;
         }
+        // 分支分隔行（仅 alt / par / critical 识别）
+        if let Some(div_label) = scan_branch_divider(&kind, input) {
+            branches.push(SequenceBranch {
+                label: Some(div_label),
+                items: Vec::new(),
+            });
+            continue;
+        }
         // 嵌套块
         if let Some(SequenceStatement::Block(b)) = attempt(block_statement, input) {
-            items.push(SequenceItem::Block(b));
+            branches
+                .last_mut()
+                .expect("branches 至少含首段")
+                .items
+                .push(SequenceItem::Block(b));
             continue;
         }
         // 备注
         if let Some(SequenceStatement::Note(n)) = attempt(note_statement, input) {
-            items.push(SequenceItem::Note(n));
+            branches
+                .last_mut()
+                .expect("branches 至少含首段")
+                .items
+                .push(SequenceItem::Note(n));
             continue;
         }
         // 消息
         if let Some(SequenceStatement::Message(m)) = attempt(message_statement, input) {
-            items.push(SequenceItem::Message(m));
+            branches
+                .last_mut()
+                .expect("branches 至少含首段")
+                .items
+                .push(SequenceItem::Message(m));
             continue;
         }
         // 跳过未知行
@@ -283,8 +311,38 @@ fn block_statement<'i>(input: &mut &'i str) -> PResult<'i, SequenceStatement> {
     Ok(SequenceStatement::Block(SequenceBlock {
         kind,
         label,
-        items,
+        branches,
     }))
+}
+
+/// 尝试识别块内的分支分隔行：`else [cond]`（alt）/ `and [cond]`（par）/
+/// `option [cond]`（critical）。命中时消费整行并返回分支条件文本（可空）。
+///
+/// 关键字边界语义与 [`at_block_end`] 一致：后随空白 / 分号 / 行尾才算分隔行，
+/// 因此以关键字开头的参与者名（如 `endpoint`）不会被误判。
+/// 非对应块类型（loop / opt / break / rect）内不做分支识别，维持旧行为。
+fn scan_branch_divider(kind: &SequenceBlockKind, input: &mut &str) -> Option<String> {
+    let kw = match kind {
+        SequenceBlockKind::Alt => "else",
+        SequenceBlockKind::Par => "and",
+        SequenceBlockKind::Critical => "option",
+        _ => return None,
+    };
+    // `strip_prefix` 不消耗输入；仅当边界成立才真正消费。
+    let rest = input.strip_prefix(kw)?;
+    if !(rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == ';')) {
+        return None;
+    }
+    let mut rest: &str = rest;
+    inline_ws_and_comments(&mut rest).ok();
+    let label = opt(rest_of_line)
+        .parse_next(&mut rest)
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    consume_line(&mut rest).ok()?;
+    *input = rest;
+    Some(label)
 }
 
 #[cfg(test)]
@@ -347,7 +405,8 @@ mod tests {
             SequenceStatement::Block(b) => {
                 assert_eq!(b.kind, SequenceBlockKind::Loop);
                 assert_eq!(b.label.as_deref(), Some("every 5s"));
-                assert_eq!(b.items.len(), 1);
+                assert_eq!(b.branches.len(), 1);
+                assert_eq!(b.branches[0].items.len(), 1);
             }
             _ => panic!("expected block"),
         }

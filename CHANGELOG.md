@@ -2,7 +2,26 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [0.2.0-beta.1] - 2026-08-31
+
+首个 0.2 版本。主版本号提升对应一次**非向后兼容**的序列块数据模型调整
+（`SequenceBlock.items` → `branches`），以及许可 / CLI / 站点等工程面变更。
+
+### Added
+
+- **sequenceDiagram：`alt` / `par` / `critical` 多分支**。此前 `else` / `and` /
+  `option` 分隔出的后续分支被静默丢弃，只渲染首分支。现在：
+  - parser 识别 `else` / `and` / `option` 分隔行并拆分为多个分支段（`SequenceBranch`）；
+  - 渲染在分支交界处画出横贯块宽的虚线分隔线 + 块内居中的分支标题
+    （`[else 条件]`，与官方 `<text class="sectionTitle">` 对齐）。
+  - `loop` / `opt` / `break` / `rect` 内不识别分隔符，维持单分支旧行为。
+- 新增 golden 用例 `sequence__alt_branches`（与官方 mermaid-cli 对拍）。
+
+### Fixed
+
+- **无标签分组块吞掉下一行语句**：`loop` / `alt` 等关键字后若直接换行，下一行
+  消息会被并进块标签（渲染出 `[A->>B: x]` 这种伪标签）。块标签现只取本行，
+  与语句内空白语义一致。
 
 ### Changed
 
@@ -12,6 +31,8 @@
   填写版权行，新增 `LICENSE-MIT`；`Cargo.toml` 的 `license` 字段更新为 SPDX 表达式。
 - README 重写为英文精简版，补充在线演示入口。
 - 升级依赖 `lievisual` 至 `=0.2.0-beta.2`（API 兼容，golden 基线测试全部通过）。
+- **破坏性变更**：`ast::SequenceBlock.items` 替换为 `branches`（分支段列表），
+  `serde` 反序列化使用 `#[serde(default)]` 兼容旧 JSON。
 
 ### Fixed
 

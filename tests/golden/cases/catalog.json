@@ -38,6 +38,7 @@
     { "type": "sequence", "name": "three_party", "width": 800, "height": 500, "source": "sequence__three_party.mmd" },
     { "type": "sequence", "name": "notes", "width": 700, "height": 500, "source": "sequence__notes.mmd", "liemermaid": true, "compare": false },
     { "type": "sequence", "name": "loops", "width": 700, "height": 500, "source": "sequence__loops.mmd" },
+    { "type": "sequence", "name": "alt_branches", "width": 700, "height": 500, "source": "sequence__alt_branches.mmd" },
 
     { "type": "class", "name": "basic", "width": 800, "height": 500, "source": "class__basic.mmd" },
     { "type": "class", "name": "fields_methods", "width": 800, "height": 500, "source": "class__fields_methods.mmd" },

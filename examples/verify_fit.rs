@@ -10,12 +10,30 @@ use liemermaid::builder::build_diagram;
 use liemermaid::ast::Diagram;
 
 const CASES: &[(&str, &str)] = &[
-    ("flowchart", "flowchart TD\n  A[Start] --> B{Is it?}\n  B -->|Yes| C[OK]\n  B -->|No| D[End]\n  C --> D"),
-    ("class", "classDiagram\n  class Animal {\n    +String name\n    +makeSound()\n  }\n  class Dog\n  Animal <|-- Dog"),
-    ("state", "stateDiagram-v2\n  [*] --> Idle\n  Idle --> Running : start\n  Running --> Idle : stop\n  Running --> [*]"),
-    ("sequence", "sequenceDiagram\n  Alice->>John: Hello John\n  John-->>Alice: Hi Alice\n  Alice->>John: How are you?"),
-    ("pie", "pie title Pets\n  \"Dogs\" : 386\n  \"Cats\" : 85\n  \"Rats\" : 15"),
-    ("gitgraph", "gitGraph\n  commit\n  branch develop\n  commit\n  checkout main\n  commit\n  merge develop"),
+    (
+        "flowchart",
+        "flowchart TD\n  A[Start] --> B{Is it?}\n  B -->|Yes| C[OK]\n  B -->|No| D[End]\n  C --> D",
+    ),
+    (
+        "class",
+        "classDiagram\n  class Animal {\n    +String name\n    +makeSound()\n  }\n  class Dog\n  Animal <|-- Dog",
+    ),
+    (
+        "state",
+        "stateDiagram-v2\n  [*] --> Idle\n  Idle --> Running : start\n  Running --> Idle : stop\n  Running --> [*]",
+    ),
+    (
+        "sequence",
+        "sequenceDiagram\n  Alice->>John: Hello John\n  John-->>Alice: Hi Alice\n  Alice->>John: How are you?",
+    ),
+    (
+        "pie",
+        "pie title Pets\n  \"Dogs\" : 386\n  \"Cats\" : 85\n  \"Rats\" : 15",
+    ),
+    (
+        "gitgraph",
+        "gitGraph\n  commit\n  branch develop\n  commit\n  checkout main\n  commit\n  merge develop",
+    ),
 ];
 
 fn parse(text: &str) -> Diagram {
@@ -95,13 +113,24 @@ fn main() {
                     b.max_y()
                 );
             }
-            None => println!("{:<12} {:>18} {:>22}", name, format!("{cw:.2}×{ch:.2}"), "(空)"),
+            None => println!(
+                "{:<12} {:>18} {:>22}",
+                name,
+                format!("{cw:.2}×{ch:.2}"),
+                "(空)"
+            ),
         }
     }
     println!("{}", "-".repeat(70));
     println!("裁切数: {clipped}");
     let texts_missing = texts_total - texts_laid;
-    println!("文本节点: {texts_total} 个，{texts_laid} 个带预排版 layout（{texts_missing} 个缺失）");
+    println!(
+        "文本节点: {texts_total} 个，{texts_laid} 个带预排版 layout（{texts_missing} 个缺失）"
+    );
     // 缺失数 > 0 说明有文本未排版 —— 环境无字体（降级正常）或构造路径漏了排版。
-    std::process::exit(if clipped > 0 || texts_missing > 0 { 1 } else { 0 });
+    std::process::exit(if clipped > 0 || texts_missing > 0 {
+        1
+    } else {
+        0
+    });
 }

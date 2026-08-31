@@ -200,6 +200,100 @@ fn sequence_open_arrows_parse() {
     assert_eq!(d.statements.len(), 2, "`-)` / `--)` 是合法 mermaid 箭头");
 }
 
+/// alt / par / critical 的多分支：`else` / `and` / `option` 开启新分支段。
+#[test]
+fn sequence_alt_par_branches_parse() {
+    let d = match parse(
+        "sequenceDiagram\n A->>B: start\n alt first\n A->>B: ok\n else second\n B-->>A: err\n else third\n A->>B: retry\n end",
+    ) {
+        Diagram::Sequence(s) => s,
+        other => panic!("期望 Sequence，得到 {other:?}"),
+    };
+    // 首条消息 + alt 块。
+    assert_eq!(d.statements.len(), 2, "alt 块应解析为 1 条语句");
+    match &d.statements[1] {
+        liemermaid::ast::SequenceStatement::Block(b) => {
+            assert_eq!(b.kind, SequenceBlockKind::Alt);
+            assert_eq!(b.branches.len(), 3, "else × 2 应拆出 3 个分支段");
+            assert_eq!(b.branches[0].label, None, "首分支无独立条件标签");
+            assert_eq!(b.branches[1].label.as_deref(), Some("second"));
+            assert_eq!(b.branches[2].label.as_deref(), Some("third"));
+            // 首分支含 1 条消息，后续分支各含 1 条。
+            assert_eq!(b.branches[0].items.len(), 1);
+            assert_eq!(b.branches[1].items.len(), 1);
+            assert_eq!(b.branches[2].items.len(), 1);
+        }
+        other => panic!("期望 Block，得到 {other:?}"),
+    }
+}
+
+/// par 用 `and` 分隔、critical 用 `option` 分隔，各自拆出多分支。
+#[test]
+fn sequence_par_critical_branch_separators() {
+    for (kw, sep, expected_kind) in [
+        ("par", "and", SequenceBlockKind::Par),
+        ("critical", "option", SequenceBlockKind::Critical),
+    ] {
+        let src =
+            format!("sequenceDiagram\n {kw} header\n A->>B: p1\n {sep} p2\n A->>B: p2msg\n end");
+        let d = match parse(&src) {
+            Diagram::Sequence(s) => s,
+            other => panic!("期望 Sequence，得到 {other:?}"),
+        };
+        match &d.statements[0] {
+            liemermaid::ast::SequenceStatement::Block(b) => {
+                assert_eq!(b.kind, expected_kind, "{kw} 块类型");
+                assert_eq!(b.branches.len(), 2, "{kw} 应拆出 2 个分支段");
+                assert_eq!(b.branches[0].label, None);
+                assert_eq!(b.branches[1].label.as_deref(), Some("p2"), "{kw} 分支条件");
+                assert_eq!(b.branches[0].items.len(), 1);
+                assert_eq!(b.branches[1].items.len(), 1);
+            }
+            other => panic!("期望 Block，得到 {other:?}"),
+        }
+    }
+}
+
+/// 单分支块（loop / opt / break / rect）内的 `else` 普通行不被误判为分隔。
+#[test]
+fn single_branch_blocks_ignore_branch_separator() {
+    let d = match parse("sequenceDiagram\n loop L\n A->>B: x\n else not-a-branch\n A->>B: y\n end")
+    {
+        Diagram::Sequence(s) => s,
+        other => panic!("期望 Sequence，得到 {other:?}"),
+    };
+    match &d.statements[0] {
+        liemermaid::ast::SequenceStatement::Block(b) => {
+            assert_eq!(b.kind, SequenceBlockKind::Loop);
+            assert_eq!(b.branches.len(), 1, "loop 内 else 不应开启新分支");
+            assert_eq!(
+                b.branches[0].items.len(),
+                2,
+                "else 行被安全跳过，消息不丢失"
+            );
+        }
+        other => panic!("期望 Block，得到 {other:?}"),
+    }
+}
+
+/// 无标签块不把下一行语句吞成标签（此前 `loop\n msg` 会把消息行并进 label）。
+#[test]
+fn unlabeled_block_does_not_swallow_next_line() {
+    let d = match parse("sequenceDiagram\n loop\n A->>B: x\n end\n A->>C: y") {
+        Diagram::Sequence(s) => s,
+        other => panic!("期望 Sequence，得到 {other:?}"),
+    };
+    assert_eq!(d.statements.len(), 2, "块外消息不应被吞掉");
+    match &d.statements[0] {
+        liemermaid::ast::SequenceStatement::Block(b) => {
+            assert_eq!(b.kind, SequenceBlockKind::Loop);
+            assert_eq!(b.label, None, "无标签块 label 应为空");
+            assert_eq!(b.branches[0].items.len(), 1);
+        }
+        other => panic!("期望 Block，得到 {other:?}"),
+    }
+}
+
 /// 以 `end` 开头的参与者名不应被误判为块结束。
 #[test]
 fn participant_named_end_is_not_block_end() {

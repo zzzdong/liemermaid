@@ -183,16 +183,28 @@ fn collect_items(
                 let bid = format!("block{}", *block_counter);
                 *block_counter += 1;
                 rows.push(SequenceRow::BlockStart(bid.clone(), block_label(b)));
-                collect_items(
-                    &b.items,
-                    nodes,
-                    idx_of,
-                    edges,
-                    rows,
-                    edge_counter,
-                    note_counter,
-                    block_counter,
-                );
+                for (i, branch) in b.branches.iter().enumerate() {
+                    // 分支之间插入分隔行（alt 的 else / par 的 and / critical 的 option），
+                    // 文本与官方 sectionTitle 对齐：`[条件]`。
+                    if i > 0 {
+                        let div_label = branch
+                            .label
+                            .as_deref()
+                            .map(|l| format!("[{}]", l.trim()))
+                            .unwrap_or_default();
+                        rows.push(SequenceRow::BlockDivider(bid.clone(), div_label));
+                    }
+                    collect_items(
+                        &branch.items,
+                        nodes,
+                        idx_of,
+                        edges,
+                        rows,
+                        edge_counter,
+                        note_counter,
+                        block_counter,
+                    );
+                }
                 rows.push(SequenceRow::BlockEnd(bid));
             }
         }
@@ -322,6 +334,7 @@ mod tests {
                     "block-start"
                 }
                 SequenceRow::BlockEnd(_) => "block-end",
+                SequenceRow::BlockDivider(..) => "block-divider",
                 SequenceRow::Activation { on, .. } => {
                     if *on {
                         "activate"
@@ -358,6 +371,7 @@ mod tests {
                 SequenceRow::Message(_) => "msg",
                 SequenceRow::Note(_) => "note",
                 SequenceRow::BlockStart(..) => "block-start",
+                SequenceRow::BlockDivider(..) => "block-divider",
                 SequenceRow::BlockEnd(_) => "block-end",
                 SequenceRow::Activation { on, .. } => {
                     if *on {

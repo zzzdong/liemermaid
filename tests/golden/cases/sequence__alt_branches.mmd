@@ -1,0 +1,10 @@
+sequenceDiagram
+    participant A
+    participant B
+    alt condition one
+        A->>B: ok path
+        B-->>A: maybe
+    else condition two
+        B-->>A: error path
+    end
+    A->>B: done
