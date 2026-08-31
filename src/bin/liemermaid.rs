@@ -26,7 +26,7 @@ fn infer_format_from_ext(path: &Path) -> Option<Format> {
 
 /// 将 Mermaid 语法文件 (.mmd) 渲染为 PNG 或 SVG 图像
 #[derive(Parser, Debug)]
-#[command(name = "liemermaid")]
+#[command(name = "liemermaid-cli")]
 #[command(about = "Render Mermaid (.mmd) diagram to PNG/SVG images")]
 struct Args {
     /// 输入 Mermaid 文件 (.mmd)

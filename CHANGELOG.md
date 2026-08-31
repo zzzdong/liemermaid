@@ -2,6 +2,25 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Changed
+
+- **CLI 二进制更名为 `liemermaid-cli`**，与 `liemermaid` 库名区分（此前两者同名，
+  `cargo install` 后二进制与库易混淆）。clap 的命令名同步更新。
+- **许可改为 MIT OR Apache-2.0 双许可**：`LICENSE` 重命名为 `LICENSE-APACHE` 并
+  填写版权行，新增 `LICENSE-MIT`；`Cargo.toml` 的 `license` 字段更新为 SPDX 表达式。
+- README 重写为英文精简版，补充在线演示入口。
+- 升级依赖 `lievisual` 至 `=0.2.0-beta.2`（API 兼容，golden 基线测试全部通过）。
+
+### Fixed
+
+- **site: 补齐缺失的 `index.html`**（GitHub Pages 部署工作流会拷贝该文件，此前缺失
+  导致部署必失败）。新增品牌页头、8 种图表下拉、Docs/GitHub 导航；`.gitignore`
+  放行 `!site/index.html`。
+- site: 编辑器防抖实时预览（停止输入 700ms 后自动渲染）、PNG 预览 Blob URL 泄漏、
+  Monaco 与 WASM 初始化竞态兜底。
+
 ## [0.1.0] - 2026-08-30
 
 首个发布版本。支持 flowchart / sequence / class / state / er / pie / gitgraph /
