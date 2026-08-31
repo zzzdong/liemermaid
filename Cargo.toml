@@ -17,7 +17,7 @@ exclude = ["*.svg", "*.png"]
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4", features = ["derive"] }
-lievisual = "0.1"
+lievisual = "=0.2.0-beta.1"
 parley = "0.11"
 serde = { version = "1", features = ["derive"], optional = true }
 thiserror = "2"
