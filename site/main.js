@@ -3,6 +3,13 @@ let fontsReady = false;
 let monacoReady = false;
 let editorInstance = null;
 
+// 实时预览：内容变化后防抖自动渲染
+const AUTO_RENDER_DELAY = 700;
+let autoRenderTimer = null;
+let suppressAutoRender = false; // 程序化 setValue（载入示例）不触发自动渲染
+let pendingEditorValue = null; // Monaco 尚未就绪时暂存的编辑器内容
+let currentObjectUrl = null; // PNG 预览的 Blob URL（切换/重建时释放）
+
 // 与 liecharts 演示一致：注册 JetBrains Mono（等宽）与 Noto Sans CJK SC（CJK）。
 // parley 按字族名精确解析；CJK 字体必须命中，否则中文会渲染成豆腐块。
 const FONTS_TO_LOAD = [
@@ -117,6 +124,30 @@ function createEditor() {
         cursorBlinking: 'smooth',
         cursorSmoothCaretAnimation: 'on',
     });
+
+    // 应用 Monaco 就绪前暂存的示例内容（初始化竞态兜底）
+    if (pendingEditorValue !== null) {
+        const value = pendingEditorValue;
+        pendingEditorValue = null;
+        suppressAutoRender = true;
+        editorInstance.setValue(value);
+        suppressAutoRender = false;
+        if (wasmModule && fontsReady) {
+            generateChart();
+        }
+    }
+
+    editorInstance.onDidChangeModelContent(scheduleAutoRender);
+}
+
+function scheduleAutoRender() {
+    if (suppressAutoRender) return;
+    clearTimeout(autoRenderTimer);
+    autoRenderTimer = setTimeout(function () {
+        if (wasmModule && fontsReady) {
+            generateChart();
+        }
+    }, AUTO_RENDER_DELAY);
 }
 
 function getEditorValue() {
@@ -124,8 +155,11 @@ function getEditorValue() {
 }
 
 function setEditorValue(value) {
+    pendingEditorValue = value;
     if (editorInstance) {
+        suppressAutoRender = true;
         editorInstance.setValue(value);
+        suppressAutoRender = false;
     }
 }
 
@@ -265,6 +299,10 @@ async function loadExample() {
         const text = await response.text();
         setEditorValue(text);
         hideError();
+        // 载入示例后立即渲染（实时预览）
+        if (editorInstance && wasmModule && fontsReady) {
+            generateChart();
+        }
     } catch (err) {
         showError('Failed to load example: ' + err.message);
     }
@@ -298,12 +336,19 @@ async function generateChart() {
             currentPngBytes = pngBytes;
             currentSvg = null;
 
+            if (currentObjectUrl) {
+                URL.revokeObjectURL(currentObjectUrl);
+            }
             const uint8 = new Uint8Array(pngBytes);
             const blob = new Blob([uint8], { type: 'image/png' });
-            const url = URL.createObjectURL(blob);
+            currentObjectUrl = URL.createObjectURL(blob);
 
-            container.innerHTML = '<img src="' + url + '" alt="Diagram" />';
+            container.innerHTML = '<img src="' + currentObjectUrl + '" alt="Diagram" />';
         } else {
+            if (currentObjectUrl) {
+                URL.revokeObjectURL(currentObjectUrl);
+                currentObjectUrl = null;
+            }
             // render 的 width/height 是上限；传大值让内容按自然尺寸排版。
             const svg = wasmModule.render_mermaid(text, 2000, 2000);
             currentSvg = svg;
@@ -439,10 +484,9 @@ document.addEventListener('DOMContentLoaded', function () {
             return loadFonts();
         })
         .then(function () {
+            // loadExample 内部就绪后会立即渲染；Monaco 晚就绪时由 createEditor 的
+            // pendingEditorValue 兜底路径渲染。
             return loadExample();
-        })
-        .then(function () {
-            setTimeout(generateChart, 300);
         })
         .catch(function (err) {
             console.error('Initialization failed:', err);
