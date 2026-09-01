@@ -10,13 +10,11 @@ fn main() {
     // 本次新增语法：
     //   timeline LR           方向 (TD / LR)
     //   1950 : A : B          同一时间点包含多个事件（冒号分隔）
-    let input = r#"timeline LR
-    title 项目里程碑
-    section 启动
-        2020 : 立项 : 团队组建
-    section 开发
-        2021 : 内核完成
-        2022 : 发布 v1.0 : 用户破万
+    let input = r#"timeline
+    title Project Roadmap
+    2024 : Design : Prototype
+    2025 : Launch : Iterate : Feedback
+    2026 : Scale : Optimize : GA
 "#;
 
     let _diagram = MermaidParser::parse_mermaid(input).expect("parse failed");

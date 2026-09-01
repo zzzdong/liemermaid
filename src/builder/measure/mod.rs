@@ -214,7 +214,9 @@ fn measure_structured_label(label: &LabelOrMeasured, detail: &NodeDetail) -> Lab
             let attrs_w = if attrs.is_empty() {
                 0.0
             } else {
-                type_w + ER_ATTR_GAP + name_w
+                type_w
+                    + ER_ATTR_GAP
+                    + name_w
                     + if constraint_w > 0.0 {
                         ER_ATTR_GAP + constraint_w
                     } else {

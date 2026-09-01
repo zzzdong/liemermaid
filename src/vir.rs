@@ -11,8 +11,8 @@
 //! 历史 `src/visual.rs`（`VisualElement` 及其私有样式类型）已删除，统一改用 lievisual IR。
 
 use lievisual::geometry::BezPath;
-use lievisual::geometry::{Point, Rect};
 pub use lievisual::geometry::{Color, Point as GeoPoint, Rect as GeoRect, Transform};
+use lievisual::geometry::{Point, Rect};
 pub use lievisual::scene::{
     Element, Fill, FillStrokeStyle, GradientStop, LinearGradient, SceneNode, Stroke,
 };

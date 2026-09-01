@@ -34,6 +34,7 @@ pub fn timeline_diagram<'i>(input: &mut &'i str) -> PResult<'i, TimelineDiagram>
     let mut title = None;
     let mut sections: Vec<TimelineSection> = Vec::new();
     let mut current_section: String = String::new();
+    let mut explicit_section = false;
 
     while has_input(input) {
         skip_ws_and_comments(input)?;
@@ -47,6 +48,7 @@ pub fn timeline_diagram<'i>(input: &mut &'i str) -> PResult<'i, TimelineDiagram>
 
         let trimmed = line.trim();
         if let Some(name) = trimmed.strip_prefix("section ") {
+            explicit_section = true;
             current_section = name.trim().to_string();
             if !sections.iter().any(|s| s.name == current_section) {
                 sections.push(TimelineSection {
@@ -61,27 +63,38 @@ pub fn timeline_diagram<'i>(input: &mut &'i str) -> PResult<'i, TimelineDiagram>
             }
         } else if let Some(idx) = trimmed.find(':') {
             // 事件行：`time : event1 : event2`
-            let time = trimmed[..idx].trim();
+            let first = trimmed[..idx].trim();
             let rest = &trimmed[idx + 1..];
             let mut events: Vec<String> = rest
                 .split(':')
                 .map(|e| e.trim().to_string())
                 .filter(|e| !e.is_empty())
                 .collect();
-            // 时间标记本身作为首个事件
-            let mut all = vec![time.to_string()];
-            all.append(&mut events);
 
-            if let Some(sec) = sections
-                .iter_mut()
-                .find(|s: &&mut TimelineSection| s.name == current_section)
-            {
-                sec.events.extend(all);
-            } else {
+            if !explicit_section {
+                // 隐式 section 语法（无 `section` 关键字）：每行首 token 都是新 section 名。
+                // 例：`2024 : Design : Prototype` -> section "2024"，事件 ["Design", "Prototype"]
+                current_section = first.to_string();
                 sections.push(TimelineSection {
                     name: current_section.clone(),
-                    events: all,
+                    events,
                 });
+            } else {
+                // 显式 section 内部的事件行：首 token 也作为首个事件。
+                let mut all = vec![first.to_string()];
+                all.append(&mut events);
+
+                if let Some(sec) = sections
+                    .iter_mut()
+                    .find(|s: &&mut TimelineSection| s.name == current_section)
+                {
+                    sec.events.extend(all);
+                } else {
+                    sections.push(TimelineSection {
+                        name: current_section.clone(),
+                        events: all,
+                    });
+                }
             }
         }
         // 否则忽略该行
@@ -107,10 +120,13 @@ mod tests {
 
     #[test]
     fn basic_timeline() {
+        // 无 `section` 关键字时，每行首 token 作为隐式 section 名。
         let d = parse("timeline\n1950 : A : B\n2000 : C");
-        assert_eq!(d.sections.len(), 1);
-        // 时间标记作为首个事件：1950 -> [1950,A,B]，2000 -> [2000,C]
-        assert_eq!(d.sections[0].events, vec!["1950", "A", "B", "2000", "C"]);
+        assert_eq!(d.sections.len(), 2);
+        assert_eq!(d.sections[0].name, "1950");
+        assert_eq!(d.sections[0].events, vec!["A", "B"]);
+        assert_eq!(d.sections[1].name, "2000");
+        assert_eq!(d.sections[1].events, vec!["C"]);
     }
 
     #[test]

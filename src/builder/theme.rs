@@ -97,9 +97,9 @@ pub mod class {
 // ==================== Sequence（对齐 mermaid 默认主题）====================
 pub mod sequence {
     use super::Color;
-    // 官方 golden：`<rect fill="#eaeaea" stroke="#666" rx="3" ry="3" class="actor">`
-    pub const ACTOR_FILL: Color = Color::new(234, 234, 234, 255); // #eaeaea
-    pub const ACTOR_STROKE: Color = Color::new(102, 102, 102, 255); // #666
+    // 官方默认：参与者盒淡紫填充 + 紫色描边。
+    pub const ACTOR_FILL: Color = Color::new(236, 236, 255, 255); // #ECECFF
+    pub const ACTOR_STROKE: Color = Color::new(147, 112, 219, 255); // #9370DB
     pub const ACTOR_RADIUS: f64 = 3.0;
     pub const FILL: Color = Color::new(236, 236, 255, 255); // #ECECFF
     pub const STROKE: Color = Color::new(147, 112, 219, 255); // #9370DB
@@ -108,14 +108,16 @@ pub mod sequence {
     // 官方 `.actor>tspan{fill:black}`（参与者盒内名字用纯黑）。
     pub const ACTOR_TEXT: Color = Color::new(0, 0, 0, 255); // #000
     pub const EDGE: Color = super::EDGE_COLOR;
-    // 官方 golden：`<line class="actor-line" stroke-width="0.5px" stroke="#999"/>`（细实线，非虚线）
-    pub const LIFELINE: Color = Color::new(153, 153, 153, 255); // #999
+    // 生命线与参与者描边同色，紫色虚线。
+    pub const LIFELINE: Color = Color::new(147, 112, 219, 255); // #9370DB
     pub const LIFELINE_WIDTH: f64 = 0.5;
+    /// 生命线虚线样式。
+    pub const LIFELINE_DASH: [f64; 2] = [4.0, 4.0];
     /// 官方 golden：消息线 `stroke-width="2"`。
     pub const MESSAGE_WIDTH: f64 = 2.0;
     /// 官方虚线消息 `style="stroke-dasharray: 3, 3;"`。
     pub const MESSAGE_DASH: [f64; 2] = [3.0, 3.0];
-    // 官方 golden：`<rect fill="#EDF2AE" stroke="#666" width="10" class="activation0"/>`
+    // 官方默认主题 activationBkgColor：浅黄绿填充 + 灰色描边。
     pub const ACTIVATION_FILL: Color = Color::new(237, 242, 174, 255); // #EDF2AE
     pub const ACTIVATION_STROKE: Color = Color::new(102, 102, 102, 255); // #666
     pub const ACTIVATION_WIDTH: f64 = 10.0;
@@ -165,18 +167,23 @@ pub mod timeline {
     ];
 
     // 布局尺寸（测量与绘制共用单一来源）。
-    // 官方 timeline 布局（实测 golden）：时间轴把「时间点（task）」和「事件（event）」隔开——
-    // 顶部 section 标题块、下方近轴处时间点块（中心距轴约 85）、轴下方事件块（首个中心距轴约 107）。
+    // 官方 timeline 布局：时间轴水平，每列上方是 section 标题块，
+    // 轴下方是该 section 的事件块（垂直堆叠）。
     pub const BLOCK_W: f64 = 100.0;
-    pub const BLOCK_H: f64 = 44.0;
+    pub const BLOCK_H: f64 = 38.0;
     pub const BLOCK_RX: f64 = 6.0;
-    pub const DOT_R: f64 = 7.0;
-    pub const TITLE_Y: f64 = 25.0; // 标题 Y 位置
-    pub const LINE_Y: f64 = 130.0; // 时间线 Y 位置（从画布顶部计）
-    pub const SECTION_DY: f64 = 60.0; // section 标题块在时间点块上方的距离
-    pub const TASK_DY: f64 = 85.0; // 时间点块中心在时间轴上方的距离
-    pub const EVENT_DY: f64 = 107.0; // 事件块中心在时间线下方首个位置的距离
-    pub const EVENT_GAP: f64 = 15.0; // 同列多个 event 块之间的间距
+    pub const DOT_R: f64 = 6.0;
+    pub const TITLE_Y: f64 = 25.0; // 标题 Y 位置（保留兼容）
+    pub const LINE_Y: f64 = 130.0; // 时间线 Y 位置（保留兼容）
+    // 标题块中心到时间轴的距离（轴上方）。
+    pub const SECTION_DY: f64 = 68.0;
+    // 首个事件块中心到时间轴的距离（轴下方）。
+    pub const EVENT_DY: f64 = 55.0;
+    // 同列多个 event 块之间的间距。
+    pub const EVENT_GAP: f64 = 10.0;
+    // 已废弃：旧版把 events[0] 当“时间点块”放在轴上方近轴处，新版所有事件均在轴下方。
+    #[allow(dead_code)]
+    pub const TASK_DY: f64 = 85.0;
     pub const LINE_WIDTH: f64 = 2.5;
     pub const BLOCK_STROKE_W: f64 = 1.5;
     pub const CONNECTOR_W: f64 = 1.5;

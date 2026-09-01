@@ -988,9 +988,10 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
         let name_spans = vec![RichSpan::new(a.name.clone(), attr_ts.clone())];
         let type_layout = layout_text(&type_spans, None);
         let name_layout = layout_text(&name_spans, None);
-        let constraint_layout = a.constraint.as_ref().map(|c| {
-            layout_text(&[RichSpan::new(c.clone(), attr_ts.clone())], None)
-        });
+        let constraint_layout = a
+            .constraint
+            .as_ref()
+            .map(|c| layout_text(&[RichSpan::new(c.clone(), attr_ts.clone())], None));
         let max_ascent = [
             &type_layout,
             &name_layout,
@@ -1529,7 +1530,13 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
         let mut pct_ts = slice_ts.clone();
         let spans = vec![RichSpan::new(pct, pct_ts.clone())];
         let layout = layout_text(&spans, None);
-        let position = place_text(&layout, &mut pct_ts, lp, HAnchor::Center, VAnchor::InkMiddle);
+        let position = place_text(
+            &layout,
+            &mut pct_ts,
+            lp,
+            HAnchor::Center,
+            VAnchor::InkMiddle,
+        );
         items.push(SceneItem::Label {
             text: spans,
             position,
@@ -1627,13 +1634,13 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
     // 生命线止于底部盒上沿，底部盒在 content_bottom 处。
     let content_bottom = msg_bottom.max(note_bottom) + 20.0;
 
-    // 官方 golden：`<line class="actor-line" stroke-width="0.5px" stroke="#999"/>`——细**实线**。
+    // 生命线：与参与者描边同色的细虚线。
     let lifeline_stroke = Stroke {
         color: theme::sequence::LIFELINE,
         width: theme::sequence::LIFELINE_WIDTH,
         line_cap: LineCap::Butt,
         line_join: LineJoin::Miter,
-        dash_array: Vec::new(),
+        dash_array: theme::sequence::LIFELINE_DASH.to_vec(),
         dash_offset: 0.0,
         miter_limit: 4.0,
     };
@@ -1816,7 +1823,13 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             );
             let spans = vec![RichSpan::new(text.clone(), ts.clone())];
             let layout = layout_text(&spans, None);
-            let position = place_text(&layout, &mut ts, *anchor, HAnchor::Center, VAnchor::InkBottom);
+            let position = place_text(
+                &layout,
+                &mut ts,
+                *anchor,
+                HAnchor::Center,
+                VAnchor::InkBottom,
+            );
             items.push(SceneItem::Label {
                 text: spans,
                 position,
@@ -1928,7 +1941,8 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             let base_style = base_ts.clone();
             match tail {
                 Some(tail) => {
-                    let w = layout_text(&[RichSpan::new(head.clone(), base_ts.clone())], None).width;
+                    let w =
+                        layout_text(&[RichSpan::new(head.clone(), base_ts.clone())], None).width;
                     let head_ts = base_style.clone();
                     let head_spans = vec![RichSpan::new(head, head_ts.clone())];
                     let head_pos = Point::new(origin.x, baseline_y);
@@ -2099,11 +2113,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             TextBaseline::Top,
         );
         // 标题位于 section 标题块（轴上方最远处）之上。
-        let title_off = theme::timeline::TASK_DY
-            + theme::timeline::BLOCK_H
-            + theme::timeline::SECTION_DY
-            + theme::timeline::BLOCK_H / 2.0
-            + 40.0;
+        let title_off = theme::timeline::SECTION_DY + theme::timeline::BLOCK_H / 2.0 + 40.0;
         let pos = if horizontal {
             Point::new(span_mid, axis_c - title_off)
         } else {
@@ -2210,48 +2220,26 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             z: vir::Z_SUBGRAPH,
         });
 
-        // section 标题块（轴上方最远处）。官方 layout：标题在最顶部，
-        // 下方近轴是时间点块，时间轴把「时间点」与「事件」隔开。
+        // section 标题块（年份），在轴上方。
         let sec_center = if horizontal {
-            Point::new(
-                cx,
-                cy - theme::timeline::TASK_DY
-                    - theme::timeline::BLOCK_H
-                    - theme::timeline::SECTION_DY,
-            )
+            Point::new(cx, cy - theme::timeline::SECTION_DY)
         } else {
-            Point::new(
-                cx - theme::timeline::TASK_DY
-                    - theme::timeline::BLOCK_H
-                    - theme::timeline::SECTION_DY,
-                cy,
-            )
+            Point::new(cx - theme::timeline::SECTION_DY, cy)
         };
         emit_timeline_block(items, sec_center, color, &label_text, 14.0);
         emit_timeline_connector(items, dot, sec_center);
 
-        // 时间点块（轴上方近轴处，events[0]）→ 事件块（轴下方，events[1..]）。
-        // 官方 golden：时间点（如 2020）与标题同在轴上方，事件在轴下方，时间轴分隔内容。
-        if let Some((first, rest)) = events.split_first() {
-            let task_center = if horizontal {
-                Point::new(cx, cy - theme::timeline::TASK_DY)
+        // 事件块全部位于轴下方，从 EVENT_DY 开始垂直堆叠。
+        for (j, ev) in events.iter().enumerate() {
+            let off = theme::timeline::EVENT_DY
+                + j as f64 * (theme::timeline::BLOCK_H + theme::timeline::EVENT_GAP);
+            let ev_center = if horizontal {
+                Point::new(cx, cy + off)
             } else {
-                Point::new(cx - theme::timeline::TASK_DY, cy)
+                Point::new(cx + off, cy)
             };
-            emit_timeline_block(items, task_center, color, first, 13.0);
-            emit_timeline_connector(items, dot, task_center);
-
-            for (j, ev) in rest.iter().enumerate() {
-                let off = theme::timeline::EVENT_DY
-                    + j as f64 * (theme::timeline::BLOCK_H + theme::timeline::EVENT_GAP);
-                let ev_center = if horizontal {
-                    Point::new(cx, cy + off)
-                } else {
-                    Point::new(cx + off, cy)
-                };
-                emit_timeline_block(items, ev_center, color, ev, 13.0);
-                emit_timeline_connector(items, dot, ev_center);
-            }
+            emit_timeline_block(items, ev_center, color, ev, 13.0);
+            emit_timeline_connector(items, dot, ev_center);
         }
     }
 }
@@ -2286,7 +2274,7 @@ fn emit_timeline_block(
         fill: Some(Fill::Solid(color)),
         stroke: Some(stroke),
         name: None,
-        z: vir::Z_BACKGROUND,
+        z: vir::Z_SERIES,
     });
     let mut ts = theme::text_style(
         theme::timeline::BLOCK_TEXT,
@@ -2312,34 +2300,21 @@ fn emit_timeline_block(
     });
 }
 
-/// 时间点 → 任务块的连接线（虚线 + 指向块的箭头）。
+/// 时间轴上的点 → 任务块的连接线（虚线，无箭头）。
 fn emit_timeline_connector(items: &mut Vec<SceneItem>, dot: Point, block: Point) {
     // 同列垂直连（LR）或同行水平连（TD），由 dot 与 block 的坐标关系推断。
     let vert = (dot.x - block.x).abs() < 1e-6;
-    let (dir, from_c, to_c) = if vert {
+    let (from, to) = if vert {
         let dir = if block.y < dot.y { -1.0 } else { 1.0 };
         (
-            dir,
-            dot.y + dir * theme::timeline::DOT_R,
-            block.y - dir * theme::timeline::BLOCK_H / 2.0,
+            Point::new(dot.x, dot.y + dir * theme::timeline::DOT_R),
+            Point::new(block.x, block.y - dir * theme::timeline::BLOCK_H / 2.0),
         )
     } else {
         let dir = if block.x < dot.x { -1.0 } else { 1.0 };
         (
-            dir,
-            dot.x + dir * theme::timeline::DOT_R,
-            block.x - dir * theme::timeline::BLOCK_W / 2.0,
-        )
-    };
-    let (from, tip) = if vert {
-        (
-            Point::new(dot.x, from_c),
-            Point::new(dot.x, to_c - dir * 6.0),
-        )
-    } else {
-        (
-            Point::new(from_c, dot.y),
-            Point::new(to_c - dir * 6.0, dot.y),
+            Point::new(dot.x + dir * theme::timeline::DOT_R, dot.y),
+            Point::new(block.x - dir * theme::timeline::BLOCK_W / 2.0, block.y),
         )
     };
     let stroke = Stroke {
@@ -2352,35 +2327,10 @@ fn emit_timeline_connector(items: &mut Vec<SceneItem>, dot: Point, block: Point)
         miter_limit: 4.0,
     };
     items.push(SceneItem::Edge {
-        path: ir::geograph::line_route(&[from, tip]),
-        stroke: stroke.clone(),
-        ends: (EdgeEnds::None, EdgeEnds::None),
-        z: vir::Z_BACKGROUND,
-    });
-    // 箭头两翼（尖端在 tip，指向块）。
-    let asz = 6.0;
-    let (w1, w2) = if vert {
-        (
-            Point::new(tip.x - asz * 0.6, tip.y + dir * asz * 0.8),
-            Point::new(tip.x + asz * 0.6, tip.y + dir * asz * 0.8),
-        )
-    } else {
-        (
-            Point::new(tip.x + dir * asz * 0.8, tip.y - asz * 0.6),
-            Point::new(tip.x + dir * asz * 0.8, tip.y + asz * 0.6),
-        )
-    };
-    items.push(SceneItem::Edge {
-        path: ir::geograph::line_route(&[tip, w1]),
-        stroke: stroke.clone(),
-        ends: (EdgeEnds::None, EdgeEnds::None),
-        z: vir::Z_BACKGROUND,
-    });
-    items.push(SceneItem::Edge {
-        path: ir::geograph::line_route(&[tip, w2]),
+        path: ir::geograph::line_route(&[from, to]),
         stroke,
         ends: (EdgeEnds::None, EdgeEnds::None),
-        z: vir::Z_BACKGROUND,
+        z: vir::Z_GRID,
     });
 }
 
