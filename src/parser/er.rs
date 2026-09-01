@@ -67,12 +67,26 @@ fn entity<'i>(input: &mut &'i str) -> PResult<'i, ErEntity> {
             let type_ = alt((quoted_string, identifier)).parse_next(input)?;
             skip_ws_and_comments(input)?;
             let attr_name = alt((quoted_string, identifier)).parse_next(input)?;
-            // 消费行尾（PK/FK/UK/NN 等行内标记一并随行尾跳过；注意不能跨行）
+            // 消费当前行剩余空白（不跳过换行），避免把下一行 type 误读为约束。
+            let _ = take_while(0.., |c: char| c == ' ' || c == '\t').parse_next(input)?;
+            // 可选约束标记（PK/FK/UK/NN 等）。仅当同一行还有非换行内容时读取。
+            let constraint = if has_input(input)
+                && !input.starts_with('\n')
+                && !input.starts_with('\r')
+                && !input.starts_with('}')
+            {
+                let tok = identifier.parse_next(input)?;
+                Some(tok)
+            } else {
+                None
+            };
+            // 跳过本行剩余内容（注释 / 多余空白）。
             let _ =
                 take_while(0.., |c: char| c != '\n' && c != '}' && c != '\r').parse_next(input)?;
             attributes.push(ErAttribute {
                 type_,
                 name: attr_name,
+                constraint,
             });
         }
         let _ = '}'.parse_next(input)?;
@@ -124,7 +138,15 @@ fn relationship<'i>(input: &mut &'i str) -> PResult<'i, ErRelationship> {
 
     let label = opt(preceded(':', rest_of_line))
         .parse_next(input)?
-        .map(|s| s.trim().to_string());
+        .map(|s| {
+            let t = s.trim();
+            // 关系名可带引号（`: "places"`），去掉外层引号以对齐官方渲染。
+            if t.len() >= 2 && t.starts_with('"') && t.ends_with('"') {
+                t[1..t.len() - 1].to_string()
+            } else {
+                t.to_string()
+            }
+        });
     consume_line(input)?;
 
     Ok(ErRelationship {

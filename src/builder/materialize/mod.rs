@@ -458,8 +458,8 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
                     at: Point::new(bg.min_x(), bg.min_y()),
                     size: Size::new(bg.width(), bg.height()),
                 },
-                // 官方 mermaid 边标签底色：rgba(232,232,232,0.8)。
-                fill: Some(Fill::Solid(Color::new(232, 232, 232, 204))),
+                // 官方 mermaid 边标签底色：白色不透明，遮断连线。
+                fill: Some(Fill::Solid(Color::new(255, 255, 255, 255))),
                 stroke: None,
                 name: Some("edge-label".to_string()),
                 z: vir::Z_SUBGRAPH,
@@ -862,7 +862,7 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
         });
     }
 
-    // 属性分 type / name 两列（16px，与官方 ER 属性字号一致）。
+    // 属性分 type / name / constraint 三列（16px，与官方 ER 属性字号一致）。
     // ER 属性行使用基线对齐（方案一）：style 的 baseline 设为 Alphabetic，
     // position.y 即文字基线 y，渲染端 dominant-baseline="alphabetic" 直接对应。
     let attr_ts = theme::text_style(
@@ -872,15 +872,27 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
         TextBaseline::Alphabetic,
     );
     let mut type_max = 0.0f64;
+    let mut name_max = 0.0f64;
+    let mut constraint_max = 0.0f64;
     for a in attrs {
-        let l =
-            lievisual::text::layout_text(&[RichSpan::new(a.type_.clone(), attr_ts.clone())], None);
-        type_max = type_max.max(l.width);
+        let tl = layout_text(&[RichSpan::new(a.type_.clone(), attr_ts.clone())], None);
+        let nl = layout_text(&[RichSpan::new(a.name.clone(), attr_ts.clone())], None);
+        type_max = type_max.max(tl.width);
+        name_max = name_max.max(nl.width);
+        if let Some(c) = &a.constraint {
+            let cl = layout_text(&[RichSpan::new(c.clone(), attr_ts.clone())], None);
+            constraint_max = constraint_max.max(cl.width);
+        }
     }
     let type_x = rect.min_x() + ENTITY_PAD;
     let name_x = type_x + type_max + ER_ATTR_GAP;
+    let constraint_x = if constraint_max > 0.0 {
+        name_x + name_max + ER_ATTR_GAP
+    } else {
+        name_x
+    };
 
-    // 分栏线（官方 golden：header 与属性区之间的横线 + type/name 之间的竖线，
+    // 分栏线（官方 golden：header 与属性区之间的横线 + 各列之间的竖线，
     // 均为 `fill-rule="evenodd"` 的细分隔线）。
     let header_line_y = rect.min_y() + header_h;
     let divider_stroke = Stroke {
@@ -893,19 +905,31 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
         miter_limit: 4.0,
     };
 
-    // type / name 之间的竖线（从 header 底延伸到底边），仅在有属性时绘制。z=3，
+    // 各列之间的竖线（从 header 底延伸到底边），仅在有属性时绘制。z=3，
     // 使其位于所有行底横线之上，保持视觉上连续贯穿。
     if !attrs.is_empty() {
-        let div_x = name_x - ER_ATTR_GAP / 2.0;
+        let div1_x = name_x - ER_ATTR_GAP / 2.0;
         items.push(SceneItem::Edge {
             path: ir::geograph::line_route(&[
-                Point::new(div_x, header_line_y),
-                Point::new(div_x, rect.max_y()),
+                Point::new(div1_x, header_line_y),
+                Point::new(div1_x, rect.max_y()),
             ]),
             stroke: divider_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
             z: vir::Z_LABEL,
         });
+        if constraint_max > 0.0 {
+            let div2_x = constraint_x - ER_ATTR_GAP / 2.0;
+            items.push(SceneItem::Edge {
+                path: ir::geograph::line_route(&[
+                    Point::new(div2_x, header_line_y),
+                    Point::new(div2_x, rect.max_y()),
+                ]),
+                stroke: divider_stroke.clone(),
+                ends: (EdgeEnds::None, EdgeEnds::None),
+                z: vir::Z_LABEL,
+            });
+        }
     }
     // header 底部横线（横跨整宽）。z=3，与竖线同层；先画横线再画竖线，
     // 交点处竖线覆盖横线，符合官方效果。
@@ -957,39 +981,64 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
         // ink_cy_i 表示"若把排版盒左上角放在 y=0，该列文本的 ink 视觉中心 y"。
         // 取两列 ink_cy 的平均值为 common_cy，再把每个单元格的 ink 中心都对齐到
         // 方案一：公共行框 + 基线对齐（符合传统排版）。
-        // 取两列各自的 ascent/descent 最大值拼成公共行框 common_height，
+        // 取同行各列各自的 ascent/descent 最大值拼成公共行框 common_height，
         // 在单元格内垂直居中该虚拟行框，基线落在 virtual_top + max_ascent。
         // 这样整行所有文本严格基线对齐、且整体在行内居中。
         let type_spans = vec![RichSpan::new(a.type_.clone(), attr_ts.clone())];
         let name_spans = vec![RichSpan::new(a.name.clone(), attr_ts.clone())];
         let type_layout = layout_text(&type_spans, None);
         let name_layout = layout_text(&name_spans, None);
-        let type_metrics = line_metrics(&type_layout);
-        let name_metrics = line_metrics(&name_layout);
-        let max_ascent = type_metrics.ascent.max(name_metrics.ascent) as f64;
-        let max_descent = type_metrics.descent.max(name_metrics.descent) as f64;
+        let constraint_layout = a.constraint.as_ref().map(|c| {
+            layout_text(&[RichSpan::new(c.clone(), attr_ts.clone())], None)
+        });
+        let max_ascent = [
+            &type_layout,
+            &name_layout,
+            constraint_layout.as_ref().unwrap_or(&type_layout),
+        ]
+        .iter()
+        .map(|l| line_metrics(l).ascent as f64)
+        .fold(0.0, f64::max);
+        let max_descent = [
+            &type_layout,
+            &name_layout,
+            constraint_layout.as_ref().unwrap_or(&type_layout),
+        ]
+        .iter()
+        .map(|l| line_metrics(l).descent as f64)
+        .fold(0.0, f64::max);
         let common_height = max_ascent + max_descent;
         // 虚拟行框顶部 = 单元格垂直居中 common_height；基线 = 顶部 + max_ascent。
         let baseline_y = row_top + (ATTR_LINE_H - common_height) / 2.0 + max_ascent;
-        let type_pos = Point::new(type_x, baseline_y);
-        let name_pos = Point::new(name_x, baseline_y);
 
         let type_ts = attr_ts.clone();
         let name_ts = attr_ts.clone();
         items.push(SceneItem::Label {
             text: type_spans,
-            position: type_pos,
+            position: Point::new(type_x, baseline_y),
             style: type_ts,
             anchor: ir::scenegraph::Anchor::Left,
             z: vir::Z_TITLE,
         });
         items.push(SceneItem::Label {
             text: name_spans,
-            position: name_pos,
+            position: Point::new(name_x, baseline_y),
             style: name_ts,
             anchor: ir::scenegraph::Anchor::Left,
             z: vir::Z_TITLE,
         });
+        if let Some(c) = &a.constraint {
+            let constraint_ts = attr_ts.clone();
+            let constraint_spans = vec![RichSpan::new(c.clone(), constraint_ts.clone())];
+            items.push(SceneItem::Label {
+                text: constraint_spans,
+                position: Point::new(constraint_x, baseline_y),
+                style: constraint_ts,
+                anchor: ir::scenegraph::Anchor::Left,
+                z: vir::Z_TITLE,
+            });
+        }
+
         line_y += ATTR_LINE_H;
     }
 }

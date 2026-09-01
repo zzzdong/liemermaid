@@ -67,6 +67,7 @@ pub fn extract_er(ed: &ErDiagram) -> Unigraph {
             .map(|a| EntityAttr {
                 type_: a.type_.clone(),
                 name: a.name.clone(),
+                constraint: a.constraint.clone(),
             })
             .collect();
         push_entity(&mut nodes, &mut seen, &e.name, attrs);
@@ -151,6 +152,7 @@ mod tests {
                 attributes: vec![crate::ast::ErAttribute {
                     type_: "int".into(),
                     name: "id".into(),
+                    constraint: None,
                 }],
             }],
             relationships: vec![crate::ast::ErRelationship {

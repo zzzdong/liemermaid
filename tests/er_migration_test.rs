@@ -20,6 +20,7 @@ fn er_entities_layer_and_cardinality_render() {
             attributes: vec![ErAttribute {
                 type_: "int".into(),
                 name: "id".into(),
+                constraint: Some("PK".into()),
             }],
         }],
         relationships: vec![ErRelationship {

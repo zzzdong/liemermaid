@@ -235,11 +235,12 @@ pub enum ErCardinality {
     OneOrMany,
 }
 
-/// ER 实体属性（类型 + 名，分两列绘制）。
+/// ER 实体属性（类型 + 名 + 可选约束，分三列绘制）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct EntityAttr {
     pub type_: String,
     pub name: String,
+    pub constraint: Option<String>,
 }
 
 /// 结构化节点详情（类框 / 实体框等多栏节点）。
@@ -261,9 +262,9 @@ pub enum NodeDetail {
         /// 方法行（已格式化，如 `+ foo(): void`）。
         methods: Vec<String>,
     },
-    /// ER 实体框：header（实体名）+ 属性栏（属性分 type / name 两列）。
+    /// ER 实体框：header（实体名）+ 属性栏（属性分 type / name / constraint 三列）。
     Entity {
-        /// 属性列表（类型列 + 名称列）。
+        /// 属性列表（类型列 + 名称列 + 可选约束列）。
         attrs: Vec<EntityAttr>,
     },
     /// 时间轴 section 列：节点标签为 section 名，`events` 携带该列的事件文本。

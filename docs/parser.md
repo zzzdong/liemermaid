@@ -518,6 +518,7 @@ pub struct ErEntity {
 pub struct ErAttribute {
     pub type_: String,
     pub name: String,
+    pub constraint: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

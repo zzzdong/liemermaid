@@ -1,23 +1,34 @@
 erDiagram
-    CUSTOMER ||--o{ ORDER : places
-    ORDER ||--|{ LINE_ITEM : contains
-    PRODUCT ||--o{ LINE_ITEM
+    CUSTOMER ||--o{ ORDER : "places"
+    ORDER ||--|{ LINE_ITEM : "contains"
+    PRODUCT ||--o{ LINE_ITEM : "included in"
 
     CUSTOMER {
+        int id PK
         string name
         string email
         string phone
     }
+    
     ORDER {
-        int order_id
-        date created
-        float total
+        int id PK
+        int customer_id FK
+        datetime created_at
+        decimal total_amount
+        string status
     }
+    
     LINE_ITEM {
-        int qty
-        float price
+        int id PK
+        int order_id FK
+        string product_sku FK
+        int quantity
+        decimal unit_price
     }
+    
     PRODUCT {
-        string sku
+        string sku PK
         string title
+        decimal price
+        string description
     }

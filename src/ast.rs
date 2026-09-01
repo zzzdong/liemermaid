@@ -371,6 +371,8 @@ pub struct ErEntity {
 pub struct ErAttribute {
     pub type_: String,
     pub name: String,
+    /// 可选约束标记（如 PK / FK / UK / NN）。
+    pub constraint: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

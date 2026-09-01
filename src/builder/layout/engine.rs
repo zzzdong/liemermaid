@@ -25,7 +25,7 @@ use crate::builder::theme;
 /// （golden 实测：`flowchart__chain` 节点中心 y = 35 / 139 / 243，间隔 104 = 节点高 54 + 50）。
 const LAYER_GAP: f64 = 50.0;
 /// 同层节点间距，对齐官方 mermaid 的 `nodeSpacing: 50`。
-const NODE_GAP: f64 = 50.0;
+const NODE_GAP: f64 = 72.0;
 /// 当相邻两层之间存在带标签的边时，在层间距上额外预留的空间
 /// （标签行高 + 白底上下留白），避免标签与节点重叠。
 const EDGE_LABEL_GAP: f64 = 28.0;
@@ -637,7 +637,7 @@ fn hierarchy_geometry(ug: &ir::Unigraph) -> (Vec<GGNode>, Vec<GGEdge>, Vec<GGCon
             source: e.source.clone(),
             target: e.target.clone(),
             route: ir::geograph::RoutePath::new(),
-            label_text: None,
+            label_text: e.label_text.clone(),
             label_anchor: None,
             kind: e.kind,
             arrow: e.arrow,
@@ -801,6 +801,15 @@ pub fn run(ug: &ir::Unigraph) -> Result<(Geograph, StyleIntent), String> {
         // 故在路由前计算；路由把容器框视为障碍，使「两端均非容器成员」的
         // 边绕开子图，避免关系线穿容器。
         route_edges(&mut gg, ug.direction, &containers);
+    }
+
+    // ER/通用边的关系标签锚点：路由完成后取路径弧长中点（与 materialize
+    // 渲染关系名的位置一致）。此前 label_anchor 恒为 None，导致 ER 关系名
+    // （"places"/"contains" 等）完全不渲染。
+    for e in &mut gg.edges {
+        if e.label_text.as_deref().is_some_and(|s| !s.is_empty()) {
+            e.label_anchor = Some(e.route.midpoint());
+        }
     }
     gg.containers = containers;
 

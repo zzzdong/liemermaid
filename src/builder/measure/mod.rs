@@ -127,7 +127,7 @@ fn measure_node_label(
 
 // 类框 / 实体框的尺寸常量（对齐官方 mermaid 类图）。
 const CLASS_PAD: f64 = 12.0;
-const ENTITY_PAD: f64 = 14.0;
+const ENTITY_PAD: f64 = 18.0;
 /// 类图成员 / 类名字号（官方 CSS: g.classGroup text{font-size:10px}）。
 const SMALL_FONT: f64 = theme::class::MEMBER_FONT_SIZE;
 /// 空栏占位高度（官方空类成员/方法栏各 18px）。
@@ -135,7 +135,7 @@ const SECTION_MIN_H: f64 = 18.0;
 /// 成员/属性行高（16px 字号 × 1.5 行高）。
 const ATTR_LINE_H: f64 = 24.0;
 /// ER 实体属性 type 列与 name 列之间的间距。
-const ER_ATTR_GAP: f64 = 24.0;
+const ER_ATTR_GAP: f64 = 32.0;
 
 /// 结构化节点（类框 / 实体框）的多栏尺寸测量。
 ///
@@ -196,20 +196,30 @@ fn measure_structured_label(label: &LabelOrMeasured, detail: &NodeDetail) -> Lab
             let header_h = header_layout.height + 20.0;
             let attr_h = (attrs.len() as f64 * ATTR_LINE_H).max(18.0);
 
-            // 属性分 type / name 两列（官方 ER 属性继承根字号 16px）。
+            // 属性分 type / name / constraint 三列（官方 ER 属性继承根字号 16px）。
             let attr_style = text_style(FONT_SIZE, TextAlign::Left, TextBaseline::Top);
             let mut type_w = 0.0f64;
             let mut name_w = 0.0f64;
+            let mut constraint_w = 0.0f64;
             for a in attrs {
                 let tl = layout_text(&[RichSpan::new(a.type_.clone(), attr_style.clone())], None);
                 let nl = layout_text(&[RichSpan::new(a.name.clone(), attr_style.clone())], None);
                 type_w = type_w.max(tl.width);
                 name_w = name_w.max(nl.width);
+                if let Some(c) = &a.constraint {
+                    let cl = layout_text(&[RichSpan::new(c.clone(), attr_style.clone())], None);
+                    constraint_w = constraint_w.max(cl.width);
+                }
             }
             let attrs_w = if attrs.is_empty() {
                 0.0
             } else {
                 type_w + ER_ATTR_GAP + name_w
+                    + if constraint_w > 0.0 {
+                        ER_ATTR_GAP + constraint_w
+                    } else {
+                        0.0
+                    }
             };
             let max_w = header_layout.width.max(attrs_w) + ENTITY_PAD * 2.0;
 
