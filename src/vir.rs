@@ -12,8 +12,6 @@
 
 use lievisual::geometry::BezPath;
 use lievisual::geometry::{Point, Rect};
-use lievisual::text::TextStyle as LieTextStyle;
-
 pub use lievisual::geometry::{Color, Point as GeoPoint, Rect as GeoRect, Transform};
 pub use lievisual::scene::{
     Element, Fill, FillStrokeStyle, GradientStop, LinearGradient, SceneNode, Stroke,
@@ -50,7 +48,7 @@ pub fn text_style(
     align: TextAlign,
     baseline: TextBaseline,
 ) -> TextStyle {
-    LieTextStyle::new(color, font_size, font_family)
+    TextStyle::new(color, font_size, font_family)
         .with_align(align)
         .with_baseline(baseline)
 }

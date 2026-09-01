@@ -10,7 +10,10 @@ use std::collections::HashMap;
 
 use lievisual::geometry::{Color, Point, Rect, Size};
 use lievisual::scene::{Fill, LineCap, LineJoin, Stroke};
-use lievisual::text::{FontWeight, RichSpan, TextAlign, TextBaseline, TextStyle};
+use lievisual::text::{
+    FontWeight, LineMetrics, RichSpan, TextAlign, TextBaseline, TextLayout, TextStyle,
+    layout_metrics, layout_text,
+};
 
 use crate::builder::ir::{
     self, SceneGraph, SceneItem, StyleIntent,
@@ -20,8 +23,123 @@ use crate::builder::ir::{
     unigraph::EdgeKind,
 };
 use crate::builder::theme;
+use crate::vir;
 
 const NODE_STROKE_WIDTH: f64 = 1.0;
+
+// ---------------------------------------------------------------------------
+// 文本定位（以 TextLayout::ink_bounds 为基准）
+// ---------------------------------------------------------------------------
+
+/// 水平锚点：以**排版盒**（advance 宽度，即 [`TextLayout::width`]）为基准。
+///
+/// 刻意不用墨迹的水平边界：字形的左右侧边距（side bearing）因字符而异，
+/// 且部分字形（如 `A`）的墨迹宽度甚至为 0、CJK 缺字形时会退化为负值。
+/// 按墨迹左对齐会让多行文本参差不齐、居中会让不同文本左右晃动；
+/// 按排版盒对齐才是排版学意义上的对齐。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HAnchor {
+    /// 排版盒左边缘落在锚点 x（左对齐）。
+    Left,
+    /// 排版盒中心落在锚点 x（居中）。
+    Center,
+}
+
+/// 垂直锚点：以**墨迹**（可见字形外框，[`TextLayout::ink_bounds`]）为基准。
+///
+/// 排版盒高度 [`TextLayout::height`] 含行距（leading）与字体的 ascent/descent
+/// 设计边距，用它在固定高度的框/行内居中会让文本明显偏下——实测 16px 文本
+/// `init` 偏 2.7px，含下伸部的 `gy` 偏 6.1px。墨迹盒才是"所见即所得"的边界。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VAnchor {
+    /// 墨迹垂直中心落在锚点 y（框内 / 行内垂直居中）。
+    InkMiddle,
+    /// 墨迹顶边落在锚点 y。
+    InkTop,
+    /// 墨迹底边落在锚点 y。
+    InkBottom,
+    /// 字母基线落在锚点 y（等价于 `TextBaseline::Alphabetic`）。
+    Baseline,
+}
+
+/// 按锚点定位文本，返回 [`SceneItem::Label`] 应使用的 `position`。
+///
+/// 同时把 `style` 的 align / baseline **归一为 `Left` / `Top`**：这两个值的
+/// [`lievisual::text::compute_text_offset`] 恒为 `(0, 0)`，且与渲染端完全同源
+/// （实测 SVG 输出的 `y` 与预测值偏差为 0）。反之若交给渲染端解释
+/// `TextBaseline::Middle`，渲染端与 `compute_text_offset` 的结果并不一致
+/// （见 [`VAnchor`]）。归一之后，本函数返回的 position 即**排版盒左上角**，
+/// 文本位置完全由调用方掌控，不再受后端对 baseline 的解释影响。
+fn place_text(
+    layout: &TextLayout,
+    style: &mut TextStyle,
+    anchor: Point,
+    h: HAnchor,
+    v: VAnchor,
+) -> Point {
+    style.align = TextAlign::Left;
+    style.baseline = TextBaseline::Top;
+
+    let ib = layout.ink_bounds();
+    let ink_h = ib.height().max(0.0);
+    let x = match h {
+        HAnchor::Left => anchor.x,
+        HAnchor::Center => anchor.x - layout.width / 2.0,
+    };
+    let y = match v {
+        // 墨迹退化（空白文本 / 缺字形）时回退到排版盒，避免除零与跳变。
+        VAnchor::InkMiddle => {
+            if ink_h > 0.0 {
+                anchor.y - (ib.min_y() + ink_h / 2.0)
+            } else {
+                anchor.y - layout.height / 2.0
+            }
+        }
+        VAnchor::InkTop => anchor.y - ib.min_y(),
+        VAnchor::InkBottom => {
+            if ink_h > 0.0 {
+                anchor.y - ib.max_y()
+            } else {
+                anchor.y - layout.height
+            }
+        }
+        VAnchor::Baseline => anchor.y - layout_metrics(layout).alphabetic_baseline,
+    };
+    Point::new(x, y)
+}
+
+/// 返回文本首行的字体 metrics（ascent / descent / baseline / line_height）。
+/// 用于基线对齐场景：取同行多列的最大值拼成公共行框。
+fn line_metrics(layout: &TextLayout) -> LineMetrics {
+    layout
+        .lines
+        .first()
+        .map(|l| l.metrics)
+        .unwrap_or_else(|| LineMetrics {
+            ascent: 0.0,
+            descent: 0.0,
+            baseline: 0.0,
+            line_height: 0.0,
+        })
+}
+
+/// 文本配套背景框：水平取排版盒（宽度稳定）、垂直取墨迹（紧贴可见字形）。
+///
+/// `box_left_top` 为 [`place_text`] 的返回值（排版盒左上角）。
+fn text_bg_rect(layout: &TextLayout, box_left_top: Point, pad_x: f64, pad_y: f64) -> Rect {
+    let ib = layout.ink_bounds();
+    let (top, bottom) = if ib.height() > 0.0 {
+        (box_left_top.y + ib.min_y(), box_left_top.y + ib.max_y())
+    } else {
+        (box_left_top.y, box_left_top.y + layout.height)
+    };
+    Rect::new(
+        box_left_top.x - pad_x,
+        top - pad_y,
+        box_left_top.x + layout.width + pad_x,
+        bottom + pad_y,
+    )
+}
 
 /// 几何 + 视觉意图 → 视觉自足的场景图。
 pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
@@ -124,21 +242,26 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
         if let Some(title) = &c.title
             && !title.is_empty()
         {
-            let title_style = theme::text_style(
+            let mut title_style = theme::text_style(
                 theme::TEXT_COLOR,
                 theme::FONT_SIZE,
                 title_align,
                 TextBaseline::Middle,
             );
+            let spans = vec![RichSpan::new(title.clone(), title_style.clone())];
+            let layout = layout_text(&spans, None);
+            let h = if title_align == TextAlign::Center {
+                HAnchor::Center
+            } else {
+                HAnchor::Left
+            };
+            let position = place_text(&layout, &mut title_style, title_pos, h, VAnchor::InkMiddle);
             items.push(SceneItem::Label {
-                text: vec![lievisual::text::RichSpan::new(
-                    title.clone(),
-                    title_style.clone(),
-                )],
-                position: title_pos,
+                text: spans,
+                position,
                 style: title_style,
                 anchor: ir::scenegraph::Anchor::Left,
-                z: 0,
+                z: vir::Z_BACKGROUND,
             });
         }
     }
@@ -187,7 +310,7 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
                     fill: None,
                     stroke: Some(outer),
                     name: None,
-                    z: 0,
+                    z: vir::Z_BACKGROUND,
                 });
                 // 内圈实心小圆。
                 let inner_r = (n.size.width / 2.0) * 0.6;
@@ -200,7 +323,7 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
                     fill: Some(Fill::Solid(theme::state::STROKE)),
                     stroke: None,
                     name: None,
-                    z: 0,
+                    z: vir::Z_BACKGROUND,
                 });
             }
             _ => {
@@ -210,7 +333,7 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
                     fill: Some(fill),
                     stroke: Some(stroke),
                     name: None,
-                    z: 0,
+                    z: vir::Z_BACKGROUND,
                 });
             }
         }
@@ -220,17 +343,27 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
             && !label.text.is_empty()
             && !matches!(n.shape, ShapeKind::Bar)
         {
+            let mut style = theme::text_style(
+                theme::flowchart::TEXT,
+                theme::FONT_SIZE,
+                TextAlign::Center,
+                TextBaseline::Middle,
+            );
+            let spans = label.spans.clone();
+            let layout = layout_text(&spans, None);
+            let position = place_text(
+                &layout,
+                &mut style,
+                n.center,
+                HAnchor::Center,
+                VAnchor::InkMiddle,
+            );
             items.push(SceneItem::Label {
-                text: label.spans.clone(),
-                position: n.center,
-                style: theme::text_style(
-                    theme::flowchart::TEXT,
-                    theme::FONT_SIZE,
-                    TextAlign::Center,
-                    TextBaseline::Middle,
-                ),
+                text: spans,
+                position,
+                style,
                 anchor: ir::scenegraph::Anchor::Center,
-                z: 2,
+                z: vir::Z_SERIES,
             });
         }
     }
@@ -262,7 +395,7 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
             path: e.route.clone(),
             stroke: stroke.clone(),
             ends,
-            z: 1,
+            z: vir::Z_SUBGRAPH,
         });
 
         // ER 基数符号（source / target 端，沿「远离节点」方向排列）。
@@ -302,39 +435,41 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
         if let (Some(text), Some(anchor)) = (&e.label_text, &e.label_anchor)
             && !text.is_empty()
         {
-            let ts = theme::text_style(
+            let mut ts = theme::text_style(
                 theme::flowchart::TEXT,
                 theme::FONT_SIZE,
                 TextAlign::Center,
                 TextBaseline::Middle,
             );
-            let layout = lievisual::text::layout_text(
-                &[lievisual::text::RichSpan::new(text.clone(), ts.clone())],
-                None,
+            let spans = vec![RichSpan::new(text.clone(), ts.clone())];
+            let layout = layout_text(&spans, None);
+            let position = place_text(
+                &layout,
+                &mut ts,
+                *anchor,
+                HAnchor::Center,
+                VAnchor::InkMiddle,
             );
-            let pad_x = 4.0;
-            let pad_y = 2.0;
-            let bg = ShapeGeometry::Rect {
-                at: Point::new(
-                    anchor.x - layout.width / 2.0 - pad_x,
-                    anchor.y - layout.height / 2.0 - pad_y,
-                ),
-                size: Size::new(layout.width + 2.0 * pad_x, layout.height + 2.0 * pad_y),
-            };
+            // 背景框纵向紧贴**墨迹**（而非含行距的排版盒），否则 24px 行高
+            // 会让底色块比 12px 的字高出一大截、且文字不居中。
+            let bg = text_bg_rect(&layout, position, 4.0, 2.0);
             items.push(SceneItem::Shape {
-                geometry: bg,
+                geometry: ShapeGeometry::Rect {
+                    at: Point::new(bg.min_x(), bg.min_y()),
+                    size: Size::new(bg.width(), bg.height()),
+                },
                 // 官方 mermaid 边标签底色：rgba(232,232,232,0.8)。
                 fill: Some(Fill::Solid(Color::new(232, 232, 232, 204))),
                 stroke: None,
                 name: Some("edge-label".to_string()),
-                z: 1,
+                z: vir::Z_SUBGRAPH,
             });
             items.push(SceneItem::Label {
-                text: vec![lievisual::text::RichSpan::new(text.clone(), ts.clone())],
-                position: *anchor,
+                text: spans,
+                position,
                 style: ts,
                 anchor: ir::scenegraph::Anchor::Center,
-                z: 2,
+                z: vir::Z_SERIES,
             });
         }
     }
@@ -445,12 +580,19 @@ fn emit_cardinality_text(items: &mut Vec<SceneItem>, p: Point, dir: Point, text:
     // 沿垂直于边的方向偏移，避免压在关系线上。
     let perp = Point::new(-dir.y, dir.x);
     let pos = Point::new(p.x + perp.x * 12.0, p.y + perp.y * 12.0);
-    let ts = TextStyle::new(theme::class::TEXT, theme::FONT_SIZE, theme::FONT_FAMILY)
-        .with_align(TextAlign::Center)
-        .with_baseline(TextBaseline::Middle);
+    // 用 theme::text_style 保证带官方行高，与 measure 阶段的排版盒一致。
+    let mut ts = theme::text_style(
+        theme::class::TEXT,
+        theme::FONT_SIZE,
+        TextAlign::Center,
+        TextBaseline::Middle,
+    );
+    let spans = vec![RichSpan::new(text.to_string(), ts.clone())];
+    let layout = layout_text(&spans, None);
+    let position = place_text(&layout, &mut ts, pos, HAnchor::Center, VAnchor::InkMiddle);
     items.push(SceneItem::Label {
-        text: vec![RichSpan::new(text.to_string(), ts.clone())],
-        position: pos,
+        text: spans,
+        position,
         style: ts,
         anchor: ir::scenegraph::Anchor::Center,
         z,
@@ -508,7 +650,7 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
         fill: Some(Fill::Solid(theme::class::FILL)),
         stroke: Some(stroke.clone()),
         name: None,
-        z: 0,
+        z: vir::Z_BACKGROUND,
     });
     items.push(SceneItem::Shape {
         geometry: ShapeGeometry::Rect {
@@ -518,41 +660,59 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
         fill: Some(Fill::Solid(theme::class::HEADER_FILL)),
         stroke: Some(stroke.clone()),
         name: None,
-        z: 1,
+        z: vir::Z_SUBGRAPH,
     });
 
     // 注解（header 顶部）。
     if let Some(ann) = annotation {
-        let ts = theme::text_style(
+        let mut ts = theme::text_style(
             theme::class::TEXT,
             SMALL_FONT,
             TextAlign::Center,
             TextBaseline::Middle,
         );
+        let spans = vec![RichSpan::new(format!("«{}»", ann), ts.clone())];
+        let layout = layout_text(&spans, None);
+        let position = place_text(
+            &layout,
+            &mut ts,
+            Point::new(n.center.x, rect.min_y() + 9.0),
+            HAnchor::Center,
+            VAnchor::InkMiddle,
+        );
         items.push(SceneItem::Label {
-            text: vec![RichSpan::new(format!("«{}»", ann), ts.clone())],
-            position: Point::new(n.center.x, rect.min_y() + 9.0),
+            text: spans,
+            position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Center,
-            z: 2,
+            z: vir::Z_SERIES,
         });
     }
     // 类名（header 居中，官方 10px + 加粗）。
     if let Some(label) = &n.label {
         let name_y = rect.min_y() + header_h / 2.0 + if annotation.is_some() { 6.0 } else { 0.0 };
-        let ts = theme::text_style(
+        let mut ts = theme::text_style(
             theme::class::TEXT,
             SMALL_FONT,
             TextAlign::Center,
             TextBaseline::Middle,
         )
         .with_weight(FontWeight::Bold);
+        let spans = label.spans.clone();
+        let layout = layout_text(&spans, None);
+        let position = place_text(
+            &layout,
+            &mut ts,
+            Point::new(n.center.x, name_y),
+            HAnchor::Center,
+            VAnchor::InkMiddle,
+        );
         items.push(SceneItem::Label {
-            text: label.spans.clone(),
-            position: Point::new(n.center.x, name_y),
+            text: spans,
+            position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Center,
-            z: 2,
+            z: vir::Z_SERIES,
         });
     }
 
@@ -566,25 +726,34 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
             fill: Some(Fill::Solid(theme::class::SEPARATOR)),
             stroke: None,
             name: None,
-            z: 1,
+            z: vir::Z_SUBGRAPH,
         });
     }
 
-    // attrs 行（左对齐）。
+    // attrs 行（左对齐；垂直居中于行高 ATTR_LINE_H，而非把行顶当排版盒顶）。
     let mut line_y = rect.min_y() + header_h + 4.0;
     for a in attrs {
-        let ts = theme::text_style(
+        let mut ts = theme::text_style(
             theme::class::TEXT,
             SMALL_FONT,
             TextAlign::Left,
             TextBaseline::Top,
         );
+        let spans = vec![RichSpan::new(a.clone(), ts.clone())];
+        let layout = layout_text(&spans, None);
+        let position = place_text(
+            &layout,
+            &mut ts,
+            Point::new(rect.min_x() + CLASS_PAD, line_y + ATTR_LINE_H / 2.0),
+            HAnchor::Left,
+            VAnchor::InkMiddle,
+        );
         items.push(SceneItem::Label {
-            text: vec![RichSpan::new(a.clone(), ts.clone())],
-            position: Point::new(rect.min_x() + CLASS_PAD, line_y),
+            text: spans,
+            position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Left,
-            z: 2,
+            z: vir::Z_SERIES,
         });
         line_y += ATTR_LINE_H;
     }
@@ -592,18 +761,27 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
     // methods 行（左对齐，从成员栏分隔线下方开始）。
     line_y = rect.min_y() + header_h + attr_h + 4.0;
     for m in methods {
-        let ts = theme::text_style(
+        let mut ts = theme::text_style(
             theme::class::TEXT,
             SMALL_FONT,
             TextAlign::Left,
             TextBaseline::Top,
         );
+        let spans = vec![RichSpan::new(m.clone(), ts.clone())];
+        let layout = layout_text(&spans, None);
+        let position = place_text(
+            &layout,
+            &mut ts,
+            Point::new(rect.min_x() + CLASS_PAD, line_y + ATTR_LINE_H / 2.0),
+            HAnchor::Left,
+            VAnchor::InkMiddle,
+        );
         items.push(SceneItem::Label {
-            text: vec![RichSpan::new(m.clone(), ts.clone())],
-            position: Point::new(rect.min_x() + CLASS_PAD, line_y),
+            text: spans,
+            position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Left,
-            z: 2,
+            z: vir::Z_SERIES,
         });
         line_y += ATTR_LINE_H;
     }
@@ -642,42 +820,56 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
         fill: Some(Fill::Solid(theme::er::FILL)),
         stroke: Some(stroke.clone()),
         name: None,
-        z: 0,
+        z: vir::Z_BACKGROUND,
     });
+    // header 仅作填充块（不带描边），左右/上边描边由外层实体框负责，
+    // 底边横线由下方独立分隔线绘制，避免 header 框底边与分隔线重叠导致
+    // "看不到 field 分隔线"。
     items.push(SceneItem::Shape {
         geometry: ShapeGeometry::Rect {
             at: Point::new(rect.min_x(), rect.min_y()),
             size: Size::new(n.size.width, header_h),
         },
         fill: Some(Fill::Solid(theme::er::HEADER_FILL)),
-        stroke: Some(stroke.clone()),
+        stroke: None,
         name: None,
-        z: 1,
+        z: vir::Z_SUBGRAPH,
     });
 
     // 实体名（header 居中）。
     if let Some(label) = &n.label {
-        let ts = theme::text_style(
+        let mut ts = theme::text_style(
             theme::er::TEXT,
             theme::FONT_SIZE,
             TextAlign::Center,
             TextBaseline::Middle,
         );
+        let spans = label.spans.clone();
+        let layout = layout_text(&spans, None);
+        let position = place_text(
+            &layout,
+            &mut ts,
+            Point::new(n.center.x, rect.min_y() + header_h / 2.0),
+            HAnchor::Center,
+            VAnchor::InkMiddle,
+        );
         items.push(SceneItem::Label {
-            text: label.spans.clone(),
-            position: Point::new(n.center.x, rect.min_y() + header_h / 2.0),
+            text: spans,
+            position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Center,
-            z: 2,
+            z: vir::Z_LABEL,
         });
     }
 
     // 属性分 type / name 两列（16px，与官方 ER 属性字号一致）。
+    // ER 属性行使用基线对齐（方案一）：style 的 baseline 设为 Alphabetic，
+    // position.y 即文字基线 y，渲染端 dominant-baseline="alphabetic" 直接对应。
     let attr_ts = theme::text_style(
         theme::er::TEXT,
         theme::FONT_SIZE,
         TextAlign::Left,
-        TextBaseline::Top,
+        TextBaseline::Alphabetic,
     );
     let mut type_max = 0.0f64;
     for a in attrs {
@@ -700,17 +892,9 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
         dash_offset: 0.0,
         miter_limit: 4.0,
     };
-    // header 底部横线（横跨整宽）。
-    items.push(SceneItem::Edge {
-        path: ir::geograph::line_route(&[
-            Point::new(rect.min_x(), header_line_y),
-            Point::new(rect.max_x(), header_line_y),
-        ]),
-        stroke: divider_stroke.clone(),
-        ends: (EdgeEnds::None, EdgeEnds::None),
-        z: 1,
-    });
-    // type / name 之间的竖线（从 header 底延伸到底边），仅在有属性时绘制。
+
+    // type / name 之间的竖线（从 header 底延伸到底边），仅在有属性时绘制。z=3，
+    // 使其位于所有行底横线之上，保持视觉上连续贯穿。
     if !attrs.is_empty() {
         let div_x = name_x - ER_ATTR_GAP / 2.0;
         items.push(SceneItem::Edge {
@@ -720,25 +904,91 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
             ]),
             stroke: divider_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: 1,
+            z: vir::Z_LABEL,
         });
     }
+    // header 底部横线（横跨整宽）。z=3，与竖线同层；先画横线再画竖线，
+    // 交点处竖线覆盖横线，符合官方效果。
+    items.push(SceneItem::Edge {
+        path: ir::geograph::line_route(&[
+            Point::new(rect.min_x(), header_line_y),
+            Point::new(rect.max_x(), header_line_y),
+        ]),
+        stroke: divider_stroke.clone(),
+        ends: (EdgeEnds::None, EdgeEnds::None),
+        z: vir::Z_LABEL,
+    });
 
+    // attribute 行：斑马纹背景 + 每行底部横线 + 文字
     let mut line_y = rect.min_y() + header_h + 6.0;
-    for a in attrs {
+    for (i, a) in attrs.iter().enumerate() {
+        let row_top = line_y - 6.0;
+        let row_bottom = row_top + ATTR_LINE_H;
+
+        // 斑马纹行背景（整行宽度）：第 1/3/5 行白色，第 2/4/6 行淡紫。
+        let row_fill = if i % 2 == 0 {
+            theme::er::ATTR_ROW_LIGHT
+        } else {
+            theme::er::ATTR_ROW_DARK
+        };
+        items.push(SceneItem::Shape {
+            geometry: ShapeGeometry::Rect {
+                at: Point::new(rect.min_x(), row_top),
+                size: Size::new(rect.width(), row_bottom - row_top),
+            },
+            fill: Some(Fill::Solid(row_fill)),
+            stroke: None,
+            name: None,
+            z: vir::Z_SUBGRAPH,
+        });
+
+        // 每行底部横线（横跨整宽），z=2，位于行背景之上、竖线之下。
+        items.push(SceneItem::Edge {
+            path: ir::geograph::line_route(&[
+                Point::new(rect.min_x(), row_bottom),
+                Point::new(rect.max_x(), row_bottom),
+            ]),
+            stroke: divider_stroke.clone(),
+            ends: (EdgeEnds::None, EdgeEnds::None),
+            z: vir::Z_SERIES,
+        });
+
+        // 同行多单元格：用"公共视觉中线"对齐，比各自 ink 居中更统一。
+        // ink_cy_i 表示"若把排版盒左上角放在 y=0，该列文本的 ink 视觉中心 y"。
+        // 取两列 ink_cy 的平均值为 common_cy，再把每个单元格的 ink 中心都对齐到
+        // 方案一：公共行框 + 基线对齐（符合传统排版）。
+        // 取两列各自的 ascent/descent 最大值拼成公共行框 common_height，
+        // 在单元格内垂直居中该虚拟行框，基线落在 virtual_top + max_ascent。
+        // 这样整行所有文本严格基线对齐、且整体在行内居中。
+        let type_spans = vec![RichSpan::new(a.type_.clone(), attr_ts.clone())];
+        let name_spans = vec![RichSpan::new(a.name.clone(), attr_ts.clone())];
+        let type_layout = layout_text(&type_spans, None);
+        let name_layout = layout_text(&name_spans, None);
+        let type_metrics = line_metrics(&type_layout);
+        let name_metrics = line_metrics(&name_layout);
+        let max_ascent = type_metrics.ascent.max(name_metrics.ascent) as f64;
+        let max_descent = type_metrics.descent.max(name_metrics.descent) as f64;
+        let common_height = max_ascent + max_descent;
+        // 虚拟行框顶部 = 单元格垂直居中 common_height；基线 = 顶部 + max_ascent。
+        let baseline_y = row_top + (ATTR_LINE_H - common_height) / 2.0 + max_ascent;
+        let type_pos = Point::new(type_x, baseline_y);
+        let name_pos = Point::new(name_x, baseline_y);
+
+        let type_ts = attr_ts.clone();
+        let name_ts = attr_ts.clone();
         items.push(SceneItem::Label {
-            text: vec![RichSpan::new(a.type_.clone(), attr_ts.clone())],
-            position: Point::new(type_x, line_y),
-            style: attr_ts.clone(),
+            text: type_spans,
+            position: type_pos,
+            style: type_ts,
             anchor: ir::scenegraph::Anchor::Left,
-            z: 2,
+            z: vir::Z_TITLE,
         });
         items.push(SceneItem::Label {
-            text: vec![RichSpan::new(a.name.clone(), attr_ts.clone())],
-            position: Point::new(name_x, line_y),
-            style: attr_ts.clone(),
+            text: name_spans,
+            position: name_pos,
+            style: name_ts,
             anchor: ir::scenegraph::Anchor::Left,
-            z: 2,
+            z: vir::Z_TITLE,
         });
         line_y += ATTR_LINE_H;
     }
@@ -805,7 +1055,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 fill: Some(Fill::Solid(theme::gitgraph::HIGHLIGHT_OUTER)),
                 stroke: None,
                 name: None,
-                z: 1,
+                z: vir::Z_SUBGRAPH,
             });
             items.push(SceneItem::Shape {
                 geometry: ShapeGeometry::Rect {
@@ -815,7 +1065,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 fill: Some(Fill::Solid(theme::gitgraph::MERGE_INNER)),
                 stroke: None,
                 name: None,
-                z: 1,
+                z: vir::Z_SUBGRAPH,
             });
         } else if *is_merge {
             // merge：分支色外圆 + 白芯（对齐官方 commit + commit-merge 双圆）。
@@ -828,7 +1078,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 fill: Some(Fill::Solid(color)),
                 stroke: None,
                 name: None,
-                z: 1,
+                z: vir::Z_SUBGRAPH,
             });
             items.push(SceneItem::Shape {
                 geometry: ShapeGeometry::Ellipse {
@@ -839,7 +1089,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 fill: Some(Fill::Solid(theme::gitgraph::MERGE_INNER)),
                 stroke: None,
                 name: None,
-                z: 1,
+                z: vir::Z_SUBGRAPH,
             });
         } else {
             items.push(SceneItem::Shape {
@@ -851,7 +1101,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 fill: Some(Fill::Solid(color)),
                 stroke: None,
                 name: None,
-                z: 1,
+                z: vir::Z_SUBGRAPH,
             });
         }
         // commit id 标签：显式 id 优先；merge 无显式 id 不显示（官方 merge 无 id 时无 commit-label）；
@@ -860,51 +1110,64 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
             .clone()
             .or_else(|| if *is_merge { None } else { Some(n.id.clone()) });
         if let Some(text) = commit_label {
-            let ts = TextStyle::new(
+            let mut ts = theme::text_style(
                 theme::gitgraph::COMMIT_LABEL_FILL,
                 theme::gitgraph::LABEL_FONT,
-                theme::FONT_FAMILY,
-            )
-            .with_align(TextAlign::Center)
-            .with_baseline(TextBaseline::Alphabetic);
-            let tw = lievisual::text::layout_text(&[RichSpan::new(text.clone(), ts.clone())], None)
-                .width;
-            // 淡黄背景（官方 .commit-label-bkg #ffffde @0.5，包住文字：左 -2 / 右 +3，高 15）。
+                TextAlign::Center,
+                TextBaseline::Alphabetic,
+            );
+            let spans = vec![RichSpan::new(text, ts.clone())];
+            let layout = layout_text(&spans, None);
+            let position = place_text(
+                &layout,
+                &mut ts,
+                Point::new(n.center.x, line_y + 25.0),
+                HAnchor::Center,
+                VAnchor::Baseline,
+            );
+            // 淡黄背景（官方 .commit-label-bkg #ffffde @0.5），纵向紧贴墨迹。
+            let bg = text_bg_rect(&layout, position, 2.0, 2.0);
             items.push(SceneItem::Shape {
                 geometry: ShapeGeometry::Rect {
-                    at: Point::new(n.center.x - tw / 2.0 - 2.0, line_y + 13.5),
-                    size: Size::new(tw + 5.0, 15.0),
+                    at: Point::new(bg.min_x(), bg.min_y()),
+                    size: Size::new(bg.width(), bg.height()),
                 },
                 fill: Some(Fill::Solid(theme::gitgraph::COMMIT_LABEL_BKG)),
                 stroke: None,
                 name: None,
-                z: 0,
+                z: vir::Z_BACKGROUND,
             });
             items.push(SceneItem::Label {
-                text: vec![RichSpan::new(text, ts.clone())],
-                position: Point::new(n.center.x, line_y + 25.0),
+                text: spans,
+                position,
                 style: ts,
                 anchor: ir::scenegraph::Anchor::Center,
-                z: 2,
+                z: vir::Z_SERIES,
             });
         }
         // tag 标签：位于 commit 上方，灰色「左尖角矩形」背景（官方 tag 标签的简化），文字居中。
         if let Some(tag_text) = tag {
-            let ts = TextStyle::new(
+            let mut ts = theme::text_style(
                 theme::gitgraph::TAG_LABEL_FILL,
                 theme::gitgraph::LABEL_FONT,
-                theme::FONT_FAMILY,
-            )
-            .with_align(TextAlign::Center)
-            .with_baseline(TextBaseline::Alphabetic);
-            let tw =
-                lievisual::text::layout_text(&[RichSpan::new(tag_text.clone(), ts.clone())], None)
-                    .width;
-            // 背景盒：主体矩形 + 左侧尖角（指向 commit 一侧），包住文字（上下各留 ~2px）。
-            let x_left = n.center.x - tw / 2.0 - 4.0;
-            let x_right = n.center.x + tw / 2.0 + 4.0;
-            let y_top = line_y - 24.5;
-            let y_bottom = line_y - 10.5;
+                TextAlign::Center,
+                TextBaseline::Alphabetic,
+            );
+            let spans = vec![RichSpan::new(tag_text.clone(), ts.clone())];
+            let layout = layout_text(&spans, None);
+            let position = place_text(
+                &layout,
+                &mut ts,
+                Point::new(n.center.x, line_y - 16.0),
+                HAnchor::Center,
+                VAnchor::Baseline,
+            );
+            // 背景盒：主体矩形 + 左侧尖角（指向 commit 一侧），纵向紧贴墨迹（上下各留 ~2px）。
+            let bg = text_bg_rect(&layout, position, 4.0, 2.0);
+            let x_left = bg.min_x();
+            let x_right = bg.max_x();
+            let y_top = bg.min_y();
+            let y_bottom = bg.max_y();
             let tip = 6.0;
             let cy = (y_top + y_bottom) / 2.0;
             items.push(SceneItem::Shape {
@@ -920,14 +1183,14 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 fill: Some(Fill::Solid(theme::gitgraph::TAG_BKG)),
                 stroke: Some(git_stroke(theme::gitgraph::TAG_BKG_STROKE, 1.0)),
                 name: None,
-                z: 0,
+                z: vir::Z_BACKGROUND,
             });
             items.push(SceneItem::Label {
-                text: vec![RichSpan::new(tag_text.clone(), ts.clone())],
-                position: Point::new(n.center.x, line_y - 16.0),
+                text: spans,
+                position,
                 style: ts,
                 anchor: ir::scenegraph::Anchor::Center,
-                z: 2,
+                z: vir::Z_SERIES,
             });
         }
     }
@@ -962,7 +1225,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 path: ir::geograph::line_route(&[parent.center, child.center]),
                 stroke: git_stroke(branch_color(cb), theme::gitgraph::LINE_WIDTH),
                 ends: (EdgeEnds::None, EdgeEnds::None),
-                z: 0,
+                z: vir::Z_BACKGROUND,
             });
         } else {
             // 跨分支：颜色 = fork 用子分支色、merge 用父分支色（对齐官方箭头）。
@@ -1004,7 +1267,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 path,
                 stroke: git_stroke(color, theme::gitgraph::LINE_WIDTH),
                 ends: (EdgeEnds::None, EdgeEnds::None),
-                z: 0,
+                z: vir::Z_BACKGROUND,
             });
         }
     }
@@ -1042,23 +1305,32 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
             ]),
             stroke: branch_dash.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: 0,
+            z: vir::Z_BACKGROUND,
         });
-        let ts_label = TextStyle::new(
+        let mut ts_label = theme::text_style(
             Color::rgb(255, 255, 255),
             theme::FONT_SIZE,
-            theme::FONT_FAMILY,
-        )
-        .with_align(TextAlign::Center)
-        .with_baseline(TextBaseline::Middle);
-        let layout =
-            lievisual::text::layout_text(&[RichSpan::new(name.clone(), ts_label.clone())], None);
+            TextAlign::Center,
+            TextBaseline::Middle,
+        );
+        let spans = vec![RichSpan::new(name.clone(), ts_label.clone())];
+        let layout = layout_text(&spans, None);
         let pad_x = 12.0;
         let pad_y = 6.0;
         let lw = layout.width + pad_x * 2.0;
-        let lh = layout.height + pad_y * 2.0;
+        // 色块高度按**墨迹**高度（而非含行距的排版盒），避免标签块过高、
+        // 且文字在块内居中。
+        let ink_h = layout.ink_bounds().height();
+        let lh = if ink_h > 0.0 { ink_h } else { layout.height } + pad_y * 2.0;
         let lx = theme::gitgraph::LEFT_MARGIN - lw - 16.0;
         let ly = y - lh / 2.0;
+        let label_pos = place_text(
+            &layout,
+            &mut ts_label,
+            Point::new(lx + lw / 2.0, y),
+            HAnchor::Center,
+            VAnchor::InkMiddle,
+        );
         items.push(SceneItem::Shape {
             geometry: ShapeGeometry::RoundedRect {
                 at: Point::new(lx, ly),
@@ -1068,14 +1340,14 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
             fill: Some(Fill::Solid(color)),
             stroke: Some(git_stroke(color, 1.0)),
             name: None,
-            z: 0,
+            z: vir::Z_BACKGROUND,
         });
         items.push(SceneItem::Label {
-            text: vec![RichSpan::new(name.clone(), ts_label.clone())],
-            position: Point::new(lx + lw / 2.0, ly + lh / 2.0),
+            text: spans,
+            position: label_pos,
             style: ts_label,
             anchor: ir::scenegraph::Anchor::Center,
-            z: 2,
+            z: vir::Z_SERIES,
         });
         // 分支尾部延伸线（最后一个提交之后）。
         if let Some(last_id) = members.last()
@@ -1088,7 +1360,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 ]),
                 stroke: git_stroke(Color::new(180, 180, 180, 255), 1.0),
                 ends: (EdgeEnds::None, EdgeEnds::None),
-                z: 0,
+                z: vir::Z_BACKGROUND,
             });
         }
     }
@@ -1120,18 +1392,27 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
     if let Some(title) = &gg.title
         && !title.is_empty()
     {
-        let ts = theme::text_style(
+        let mut ts = theme::text_style(
             Color::BLACK,
             theme::pie::TITLE_FONT,
             TextAlign::Center,
             TextBaseline::Alphabetic,
         );
+        let spans = vec![RichSpan::new(title.clone(), ts.clone())];
+        let layout = layout_text(&spans, None);
+        let position = place_text(
+            &layout,
+            &mut ts,
+            Point::new(center.x, center.y - theme::pie::TITLE_DY),
+            HAnchor::Center,
+            VAnchor::Baseline,
+        );
         items.push(SceneItem::Label {
-            text: vec![RichSpan::new(title.clone(), ts.clone())],
-            position: Point::new(center.x, center.y - theme::pie::TITLE_DY),
+            text: spans,
+            position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Center,
-            z: 2,
+            z: vir::Z_SERIES,
         });
     }
 
@@ -1153,7 +1434,7 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
             miter_limit: 4.0,
         }),
         name: None,
-        z: 1,
+        z: vir::Z_SUBGRAPH,
     });
 
     let slice_stroke = Stroke {
@@ -1188,7 +1469,7 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
             fill: Some(Fill::Solid(color)),
             stroke: Some(slice_stroke.clone()),
             name: None,
-            z: 0,
+            z: vir::Z_BACKGROUND,
         });
 
         // 扇区标签：官方只放**百分比**（`40%`），名称交给右侧图例。
@@ -1196,12 +1477,16 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
         let lr = radius * theme::pie::LABEL_RADIUS_RATIO;
         let lp = Point::new(center.x + lr * mid.cos(), center.y + lr * mid.sin());
         let pct = format!("{}%", (value / total * 100.0).round() as i64);
+        let mut pct_ts = slice_ts.clone();
+        let spans = vec![RichSpan::new(pct, pct_ts.clone())];
+        let layout = layout_text(&spans, None);
+        let position = place_text(&layout, &mut pct_ts, lp, HAnchor::Center, VAnchor::InkMiddle);
         items.push(SceneItem::Label {
-            text: vec![RichSpan::new(pct, slice_ts.clone())],
-            position: lp,
-            style: slice_ts.clone(),
+            text: spans,
+            position,
+            style: pct_ts,
             anchor: ir::scenegraph::Anchor::Center,
-            z: 2,
+            z: vir::Z_SERIES,
         });
 
         start += sweep;
@@ -1238,19 +1523,29 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 miter_limit: 4.0,
             }),
             name: None,
-            z: 1,
+            z: vir::Z_SUBGRAPH,
         });
         let text = if gg.show_data {
             format!("{} [{}]", label, *value as i64)
         } else {
             label.clone()
         };
+        let mut ts = legend_ts.clone();
+        let spans = vec![RichSpan::new(text, ts.clone())];
+        let layout = layout_text(&spans, None);
+        let position = place_text(
+            &layout,
+            &mut ts,
+            Point::new(legend_x + theme::pie::LEGEND_TEXT_DX, row_y),
+            HAnchor::Left,
+            VAnchor::InkMiddle,
+        );
         items.push(SceneItem::Label {
-            text: vec![RichSpan::new(text, legend_ts.clone())],
-            position: Point::new(legend_x + theme::pie::LEGEND_TEXT_DX, row_y),
-            style: legend_ts.clone(),
+            text: spans,
+            position,
+            style: ts,
             anchor: ir::scenegraph::Anchor::Left,
-            z: 2,
+            z: vir::Z_SERIES,
         });
     }
 }
@@ -1322,21 +1617,30 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 miter_limit: 4.0,
             }),
             name: None,
-            z: 0,
+            z: vir::Z_BACKGROUND,
         });
         if let Some(label) = &n.label {
-            let ts = theme::text_style(
+            let mut ts = theme::text_style(
                 theme::sequence::ACTOR_TEXT,
                 theme::FONT_SIZE,
                 TextAlign::Center,
                 TextBaseline::Middle,
             );
+            let spans = label.spans.clone();
+            let layout = layout_text(&spans, None);
+            let position = place_text(
+                &layout,
+                &mut ts,
+                n.center,
+                HAnchor::Center,
+                VAnchor::InkMiddle,
+            );
             items.push(SceneItem::Label {
-                text: label.spans.clone(),
-                position: n.center,
+                text: spans,
+                position,
                 style: ts,
                 anchor: ir::scenegraph::Anchor::Center,
-                z: 2,
+                z: vir::Z_SERIES,
             });
         }
         // 生命线（单条虚线，从顶部盒底向下延伸到底部盒上沿）。
@@ -1347,7 +1651,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             ]),
             stroke: lifeline_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: 0,
+            z: vir::Z_BACKGROUND,
         });
     }
 
@@ -1372,21 +1676,30 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 miter_limit: 4.0,
             }),
             name: None,
-            z: 0,
+            z: vir::Z_BACKGROUND,
         });
         if let Some(label) = &n.label {
-            let ts = theme::text_style(
+            let mut ts = theme::text_style(
                 theme::sequence::ACTOR_TEXT,
                 theme::FONT_SIZE,
                 TextAlign::Center,
                 TextBaseline::Middle,
             );
+            let spans = label.spans.clone();
+            let layout = layout_text(&spans, None);
+            let position = place_text(
+                &layout,
+                &mut ts,
+                Point::new(n.center.x, bottom_y + n.size.height / 2.0),
+                HAnchor::Center,
+                VAnchor::InkMiddle,
+            );
             items.push(SceneItem::Label {
-                text: label.spans.clone(),
-                position: Point::new(n.center.x, bottom_y + n.size.height / 2.0),
+                text: spans,
+                position,
                 style: ts,
                 anchor: ir::scenegraph::Anchor::Center,
-                z: 2,
+                z: vir::Z_SERIES,
             });
         }
     }
@@ -1414,7 +1727,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 miter_limit: 4.0,
             }),
             name: None,
-            z: 0,
+            z: vir::Z_BACKGROUND,
         });
     }
 
@@ -1441,23 +1754,26 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             path: e.route.clone(),
             stroke: stroke.clone(),
             ends,
-            z: 1,
+            z: vir::Z_SUBGRAPH,
         });
         if let (Some(text), Some(anchor)) = (&e.label_text, &e.label_anchor)
             && !text.is_empty()
         {
-            let ts = theme::text_style(
+            let mut ts = theme::text_style(
                 theme::sequence::TEXT,
                 theme::FONT_SIZE,
                 TextAlign::Center,
                 TextBaseline::Bottom,
             );
+            let spans = vec![RichSpan::new(text.clone(), ts.clone())];
+            let layout = layout_text(&spans, None);
+            let position = place_text(&layout, &mut ts, *anchor, HAnchor::Center, VAnchor::InkBottom);
             items.push(SceneItem::Label {
-                text: vec![RichSpan::new(text.clone(), ts.clone())],
-                position: *anchor,
+                text: spans,
+                position,
                 style: ts,
                 anchor: ir::scenegraph::Anchor::Center,
-                z: 2,
+                z: vir::Z_SERIES,
             });
         }
     }
@@ -1492,20 +1808,29 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 miter_limit: 4.0,
             }),
             name: None,
-            z: 0,
+            z: vir::Z_BACKGROUND,
         });
-        let ts = theme::text_style(
+        let mut ts = theme::text_style(
             theme::sequence::TEXT,
             theme::FONT_SIZE,
             TextAlign::Center,
             TextBaseline::Middle,
         );
+        let spans = vec![RichSpan::new(text.clone(), ts.clone())];
+        let layout = layout_text(&spans, None);
+        let position = place_text(
+            &layout,
+            &mut ts,
+            n.center,
+            HAnchor::Center,
+            VAnchor::InkMiddle,
+        );
         items.push(SceneItem::Label {
-            text: vec![RichSpan::new(text.clone(), ts.clone())],
-            position: n.center,
+            text: spans,
+            position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Center,
-            z: 2,
+            z: vir::Z_SERIES,
         });
     }
 
@@ -1536,45 +1861,58 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             z: -1,
         });
         if let Some(label) = &c.title {
-            let ts = theme::text_style(
+            // 分组块标签用基线对齐（方案一）：style baseline 设 Alphabetic，
+            // position.y 即基线 y，head/tail 同行共享同一条基线。
+            let base_ts = theme::text_style(
                 theme::sequence::BLOCK_TEXT,
                 theme::FONT_SIZE * 0.85,
                 TextAlign::Left,
-                TextBaseline::Middle,
+                TextBaseline::Alphabetic,
             );
             let origin = Point::new(r.min_x() + 8.0, r.min_y() + 12.0);
             // 官方把标签拆成两段文本：`loop` + `[Each item]`（并列排布，非合并为
             // `loop [Each item]`），与 golden 的 `<text>` 集合保持一致。
+            // 两段在同一行，用基线对齐（方案一）：baseline_y 由该字号行的 ascent 决定。
             let (head, tail) = split_block_label(label);
+            let base_layout = layout_text(&[RichSpan::new("M", base_ts.clone())], None);
+            let baseline_y = origin.y + line_metrics(&base_layout).ascent as f64;
+            let base_style = base_ts.clone();
             match tail {
                 Some(tail) => {
-                    let w = lievisual::text::layout_text(
-                        &[RichSpan::new(head.clone(), ts.clone())],
-                        None,
-                    )
-                    .width;
+                    let w = layout_text(&[RichSpan::new(head.clone(), base_ts.clone())], None).width;
+                    let head_ts = base_style.clone();
+                    let head_spans = vec![RichSpan::new(head, head_ts.clone())];
+                    let head_pos = Point::new(origin.x, baseline_y);
                     items.push(SceneItem::Label {
-                        text: vec![RichSpan::new(head, ts.clone())],
-                        position: origin,
-                        style: ts.clone(),
+                        text: head_spans,
+                        position: head_pos,
+                        style: head_ts,
                         anchor: ir::scenegraph::Anchor::Left,
-                        z: 0,
+                        z: vir::Z_BACKGROUND,
                     });
+                    let tail_ts = base_style;
+                    let tail_spans = vec![RichSpan::new(tail, tail_ts.clone())];
+                    let tail_pos = Point::new(origin.x + w + 4.0, baseline_y);
                     items.push(SceneItem::Label {
-                        text: vec![RichSpan::new(tail, ts.clone())],
-                        position: Point::new(origin.x + w + 4.0, origin.y),
-                        style: ts,
+                        text: tail_spans,
+                        position: tail_pos,
+                        style: tail_ts,
                         anchor: ir::scenegraph::Anchor::Left,
-                        z: 0,
+                        z: vir::Z_BACKGROUND,
                     });
                 }
-                None => items.push(SceneItem::Label {
-                    text: vec![RichSpan::new(head, ts.clone())],
-                    position: origin,
-                    style: ts,
-                    anchor: ir::scenegraph::Anchor::Left,
-                    z: 0,
-                }),
+                None => {
+                    let ts = base_style;
+                    let spans = vec![RichSpan::new(head, ts.clone())];
+                    let position = Point::new(origin.x, baseline_y);
+                    items.push(SceneItem::Label {
+                        text: spans,
+                        position,
+                        style: ts,
+                        anchor: ir::scenegraph::Anchor::Left,
+                        z: vir::Z_BACKGROUND,
+                    })
+                }
             }
         }
     }
@@ -1605,21 +1943,30 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             path,
             stroke,
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: 0,
+            z: vir::Z_BACKGROUND,
         });
         if !d.label.is_empty() {
-            let ts = theme::text_style(
+            let mut ts = theme::text_style(
                 theme::sequence::BLOCK_TEXT,
                 theme::FONT_SIZE * 0.85,
                 TextAlign::Center,
                 TextBaseline::Middle,
             );
+            let spans = vec![RichSpan::new(d.label.clone(), ts.clone())];
+            let layout = layout_text(&spans, None);
+            let position = place_text(
+                &layout,
+                &mut ts,
+                Point::new((r.min_x() + r.max_x()) / 2.0, d.y + 14.0),
+                HAnchor::Center,
+                VAnchor::InkMiddle,
+            );
             items.push(SceneItem::Label {
-                text: vec![RichSpan::new(d.label.clone(), ts.clone())],
-                position: Point::new((r.min_x() + r.max_x()) / 2.0, d.y + 14.0),
+                text: spans,
+                position,
                 style: ts,
                 anchor: ir::scenegraph::Anchor::Center,
-                z: 0,
+                z: vir::Z_BACKGROUND,
             });
         }
     }
@@ -1696,9 +2043,12 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
     if let Some(title) = &gg.title
         && !title.is_empty()
     {
-        let ts = TextStyle::new(theme::timeline::TITLE, 22.0, theme::FONT_FAMILY)
-            .with_align(TextAlign::Center)
-            .with_baseline(TextBaseline::Top);
+        let mut ts = theme::text_style(
+            theme::timeline::TITLE,
+            22.0,
+            TextAlign::Center,
+            TextBaseline::Top,
+        );
         // 标题位于 section 标题块（轴上方最远处）之上。
         let title_off = theme::timeline::TASK_DY
             + theme::timeline::BLOCK_H
@@ -1710,12 +2060,15 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
         } else {
             Point::new(axis_c - title_off, span_mid)
         };
+        let spans = vec![RichSpan::new(title.clone(), ts.clone())];
+        let layout = layout_text(&spans, None);
+        let position = place_text(&layout, &mut ts, pos, HAnchor::Center, VAnchor::InkTop);
         items.push(SceneItem::Label {
-            text: vec![RichSpan::new(title.clone(), ts.clone())],
-            position: pos,
+            text: spans,
+            position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Center,
-            z: 2,
+            z: vir::Z_SERIES,
         });
     }
 
@@ -1730,7 +2083,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             path: ir::geograph::line_route(&[Point::new(x0, y), Point::new(tip, y)]),
             stroke: axis_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: 0,
+            z: vir::Z_BACKGROUND,
         });
         items.push(SceneItem::Edge {
             path: ir::geograph::line_route(&[
@@ -1739,7 +2092,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             ]),
             stroke: axis_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: 0,
+            z: vir::Z_BACKGROUND,
         });
         items.push(SceneItem::Edge {
             path: ir::geograph::line_route(&[
@@ -1748,7 +2101,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             ]),
             stroke: axis_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: 0,
+            z: vir::Z_BACKGROUND,
         });
     } else {
         let x = axis_c;
@@ -1759,7 +2112,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             path: ir::geograph::line_route(&[Point::new(x, y0), Point::new(x, tip)]),
             stroke: axis_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: 0,
+            z: vir::Z_BACKGROUND,
         });
         items.push(SceneItem::Edge {
             path: ir::geograph::line_route(&[
@@ -1768,7 +2121,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             ]),
             stroke: axis_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: 0,
+            z: vir::Z_BACKGROUND,
         });
         items.push(SceneItem::Edge {
             path: ir::geograph::line_route(&[
@@ -1777,7 +2130,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             ]),
             stroke: axis_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: 0,
+            z: vir::Z_BACKGROUND,
         });
     }
 
@@ -1805,7 +2158,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             fill: Some(Fill::Solid(theme::timeline::DOT)),
             stroke: Some(dot_stroke.clone()),
             name: None,
-            z: 1,
+            z: vir::Z_SUBGRAPH,
         });
 
         // section 标题块（轴上方最远处）。官方 layout：标题在最顶部，
@@ -1884,20 +2237,29 @@ fn emit_timeline_block(
         fill: Some(Fill::Solid(color)),
         stroke: Some(stroke),
         name: None,
-        z: 0,
+        z: vir::Z_BACKGROUND,
     });
-    let ts = theme::text_style(
+    let mut ts = theme::text_style(
         theme::timeline::BLOCK_TEXT,
         font_size,
         TextAlign::Center,
         TextBaseline::Middle,
     );
+    let spans = vec![RichSpan::new(text.to_string(), ts.clone())];
+    let layout = layout_text(&spans, None);
+    let position = place_text(
+        &layout,
+        &mut ts,
+        center,
+        HAnchor::Center,
+        VAnchor::InkMiddle,
+    );
     items.push(SceneItem::Label {
-        text: vec![RichSpan::new(text.to_string(), ts.clone())],
-        position: center,
+        text: spans,
+        position,
         style: ts,
         anchor: ir::scenegraph::Anchor::Center,
-        z: 2,
+        z: vir::Z_SERIES,
     });
 }
 
@@ -1944,7 +2306,7 @@ fn emit_timeline_connector(items: &mut Vec<SceneItem>, dot: Point, block: Point)
         path: ir::geograph::line_route(&[from, tip]),
         stroke: stroke.clone(),
         ends: (EdgeEnds::None, EdgeEnds::None),
-        z: 0,
+        z: vir::Z_BACKGROUND,
     });
     // 箭头两翼（尖端在 tip，指向块）。
     let asz = 6.0;
@@ -1963,13 +2325,13 @@ fn emit_timeline_connector(items: &mut Vec<SceneItem>, dot: Point, block: Point)
         path: ir::geograph::line_route(&[tip, w1]),
         stroke: stroke.clone(),
         ends: (EdgeEnds::None, EdgeEnds::None),
-        z: 0,
+        z: vir::Z_BACKGROUND,
     });
     items.push(SceneItem::Edge {
         path: ir::geograph::line_route(&[tip, w2]),
         stroke,
         ends: (EdgeEnds::None, EdgeEnds::None),
-        z: 0,
+        z: vir::Z_BACKGROUND,
     });
 }
 

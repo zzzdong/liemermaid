@@ -131,6 +131,10 @@ pub mod er {
     use super::Color;
     pub const FILL: Color = Color::new(236, 236, 255, 255); // #ECECFF
     pub const HEADER_FILL: Color = Color::new(236, 236, 255, 255); // #ECECFF
+    /// attribute 斑马纹：奇数行（1st/3rd/...）用白色。
+    pub const ATTR_ROW_LIGHT: Color = Color::new(255, 255, 255, 255); // #FFFFFF
+    /// attribute 斑马纹：偶数行（2nd/4th/...）用淡紫（与实体填充同色）。
+    pub const ATTR_ROW_DARK: Color = Color::new(236, 236, 255, 255); // #ECECFF
     pub const STROKE: Color = Color::new(147, 112, 219, 255); // #9370DB
     pub const TEXT: Color = super::TEXT_COLOR;
     pub const EDGE: Color = super::EDGE_COLOR;
