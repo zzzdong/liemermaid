@@ -77,8 +77,11 @@ impl WinnowParser {
         if kw("gitgraph").is_some() {
             return Self::parse_gitgraph(trimmed);
         }
-        if trimmed.starts_with("flowchart") || trimmed.starts_with("graph") {
-            return Self::parse_flowchart(input);
+        // flowchart/graph 与其他图表保持一致：大小写不敏感、去掉前导空白后传给解析器
+        // （原实现用 `trimmed.starts_with` 区分大小写且把未 trim 的 input 传入，`Flowchart TD`
+        // / 前导空格都会解析失败）。
+        if kw("flowchart").is_some() || kw("graph").is_some() {
+            return Self::parse_flowchart(trimmed);
         }
         Err(ParseError::UnsupportedDiagram)
     }

@@ -481,16 +481,17 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
     }
 }
 
-// 类框 / 实体框绘制常量（与 measure 阶段 `measure_structured_label` 对齐）。
+// 类框 / 实体框绘制常量（与 measure 阶段 `measure_structured_label` 保持一致；
+// 值必须同步，否则文本起点与测量框宽/列距不符。修改请两处同改）。
 const CLASS_PAD: f64 = 12.0;
-const ENTITY_PAD: f64 = 14.0;
+const ENTITY_PAD: f64 = 18.0;
 /// 类图成员 / 类名字号（官方 CSS: g.classGroup text{font-size:10px}）。
 const SMALL_FONT: f64 = theme::class::MEMBER_FONT_SIZE;
 const ATTR_LINE_H: f64 = 24.0;
 /// 空栏占位高度（官方空类成员/方法栏各 18px）。
 const SECTION_MIN_H: f64 = 18.0;
 /// ER 实体属性 type 列与 name 列之间的间距。
-const ER_ATTR_GAP: f64 = 24.0;
+const ER_ATTR_GAP: f64 = 32.0;
 
 /// 绘制 ER 基数符号（`||` / `|o` / `}|` / `}o`）在边端点处。
 /// `p` = 端点，`away` = 远离节点方向的单位向量，`card` = 基数类型。
@@ -633,7 +634,22 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
         return;
     };
     let header_layout_h = n.label.as_ref().map(|l| l.layout.height).unwrap_or(20.0);
-    let ann_h = if annotation.is_some() { 16.0 } else { 0.0 };
+    // 注解占位高度必须与 measure 阶段公式一致（真实行高 + 4），不能硬编码：
+    // 原实现写死 16.0，而 measure 用 `ann.layout.height + 4.0`（16px 字号行高 24 →
+    // 28），导致分隔线位置与整框测量高度不匹配。
+    let ann_extra_h = annotation
+        .as_ref()
+        .map(|a| {
+            let ts = theme::text_style(
+                theme::class::TEXT,
+                SMALL_FONT,
+                TextAlign::Left,
+                TextBaseline::Top,
+            );
+            layout_text(&[RichSpan::new(format!("«{}»", a), ts)], None).height + 4.0
+        })
+        .unwrap_or(0.0);
+    let ann_h = ann_extra_h;
     let header_h = header_layout_h + 24.0 + ann_h;
     let attr_h = if attrs.is_empty() {
         SECTION_MIN_H

@@ -8,7 +8,7 @@ use winnow::{
     token::{one_of, take_until, take_while},
 };
 
-use crate::ast::{Direction, ParticipantKind};
+use crate::ast::ParticipantKind;
 
 /// 大小写不敏感地匹配给定关键字（仅 ASCII 字母），匹配后消耗输入。
 ///
@@ -34,18 +34,6 @@ pub fn keyword<'i>(kw: &'static str) -> impl Parser<&'i str, &'i str, InputError
         }
         Err(InputError::at(*input))
     }
-}
-
-/// 解析方向关键字（大小写不敏感），返回 [`Direction`]。
-pub fn direction_ci<'i>(input: &mut &'i str) -> PResult<'i, Direction> {
-    alt((
-        keyword("TB").map(|_| Direction::TB),
-        keyword("TD").map(|_| Direction::TD),
-        keyword("BT").map(|_| Direction::BT),
-        keyword("RL").map(|_| Direction::RL),
-        keyword("LR").map(|_| Direction::LR),
-    ))
-    .parse_next(input)
 }
 
 /// 解析 sequence 图的参与者种类（大小写不敏感）。

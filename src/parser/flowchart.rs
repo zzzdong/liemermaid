@@ -307,9 +307,27 @@ fn subgraph<'i>(input: &mut &'i str) -> PResult<'i, Subgraph> {
 
 // ---------- 流程图主解析器 ----------
 
+/// 大小写不敏感地消费关键字。
+///
+/// `parser/mod.rs` 的分派已对 `flowchart`/`graph` 放开大小写（与其它图表一致），
+/// 若这里仍用字面量匹配，`Flowchart TD` 会被分派进来却在首关键字处失败。
+fn keyword_ci<'i>(kw: &'static str) -> impl FnMut(&mut &'i str) -> PResult<'i, ()> {
+    move |input: &mut &'i str| {
+        let head = input
+            .get(..kw.len())
+            .ok_or_else(|| winnow::error::InputError::at(*input))?;
+        if head.eq_ignore_ascii_case(kw) {
+            *input = &input[kw.len()..];
+            Ok(())
+        } else {
+            Err(winnow::error::InputError::at(*input))
+        }
+    }
+}
+
 /// 顶层入口：`flowchart` / `graph` 图表。
 pub fn flowchart_diagram<'i>(input: &mut &'i str) -> PResult<'i, Flowchart> {
-    let _ = alt(("graph", "flowchart")).parse_next(input)?;
+    let _ = alt((keyword_ci("graph"), keyword_ci("flowchart"))).parse_next(input)?;
     skip_ws_and_comments(input)?;
 
     let dir = opt(direction).parse_next(input)?;
@@ -368,24 +386,7 @@ pub fn flowchart_diagram<'i>(input: &mut &'i str) -> PResult<'i, Flowchart> {
             }
         }
     }
-    // 同时处理子图内出现的边端点
-    for sg in &mut subgraphs {
-        let sg_ids: std::collections::HashSet<String> =
-            sg.nodes.iter().map(|n| n.id.clone()).collect();
-        let mut extra = Vec::new();
-        for e in &sg.edges {
-            for ep in [&e.source, &e.target] {
-                if !sg_ids.contains(ep) && !node_ids.contains(ep) {
-                    extra.push(Node {
-                        id: ep.clone(),
-                        shape: None,
-                        text: None,
-                    });
-                }
-            }
-        }
-        sg.nodes.extend(extra);
-    }
+    // 注：子图内部边的端点已在 `subgraph()` 返回前补入 sg.nodes，此处无需再补。
 
     Ok(Flowchart {
         direction: dir,

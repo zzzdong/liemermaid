@@ -98,6 +98,14 @@ fn emit_commit(
         .push(id);
 }
 
+/// 按显式 `id` 查找已产生的 commit 节点索引（官方语法中 commit id 唯一）。
+fn commit_idx_by_id(nodes: &[UGNode], id: &str) -> Option<usize> {
+    nodes.iter().position(|n| match &n.detail {
+        NodeDetail::GitCommit { id: Some(eid), .. } => eid == id,
+        _ => false,
+    })
+}
+
 /// 提取 gitgraph 为统一拓扑图（Hierarchy 家族）。
 pub fn extract_gitgraph(graph: &GitGraphDiagram) -> Unigraph {
     let mut nodes: Vec<UGNode> = Vec::new();
@@ -169,7 +177,10 @@ pub fn extract_gitgraph(graph: &GitGraphDiagram) -> Unigraph {
                     p2,
                 );
             }
-            GitGraphStatement::CherryPick { id, .. } => {
+            GitGraphStatement::CherryPick { id, parent } => {
+                // `parent` = 被 cherry-pick 的来源 commit：像 merge 一样为当前提交补一条
+                // 指向来源 commit 的父边（此前 `..` 丢弃 parent，该连接缺失）。
+                let extra_parent = parent.as_deref().and_then(|p| commit_idx_by_id(&nodes, p));
                 emit_commit(
                     &mut nodes,
                     &mut edges,
@@ -181,7 +192,7 @@ pub fn extract_gitgraph(graph: &GitGraphDiagram) -> Unigraph {
                     None,
                     None,
                     false,
-                    None,
+                    extra_parent,
                 );
             }
         }
@@ -342,5 +353,25 @@ mod tests {
             }
             other => panic!("期望 GitCommit, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn cherry_pick_links_to_parent_commit() {
+        // 回归：cherry-pick 的 `parent` 应像 merge 一样给当前提交补一条指向来源
+        // commit 的父边；原实现 `CherryPick { id, .. }` 丢弃 parent，导致连接缺失。
+        let g = parse(
+            "gitGraph\ncommit id: \"A1\"\nbranch dev\ncheckout dev\ncommit id: \"B1\"\ncheckout main\ncherry-pick id: \"C1\" parent: \"B1\"",
+        );
+        let ug = extract_gitgraph(&g);
+        // c0 main(A1) / c1 dev(B1) / c2 cherry-pick(main)。
+        assert_eq!(ug.nodes.len(), 3);
+        // c2 应有两条父边：c2→c0（main 当前头）与 c2→c1（parent: B1）。
+        let c2_out: Vec<String> = ug
+            .edges
+            .iter()
+            .filter(|e| e.source == "c2")
+            .map(|e| e.target.clone())
+            .collect();
+        assert_eq!(c2_out, vec!["c0".to_string(), "c1".to_string()]);
     }
 }

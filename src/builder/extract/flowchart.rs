@@ -72,6 +72,34 @@ pub fn map_line(arrow: &ArrowType) -> LineKind {
     }
 }
 
+/// 单条边 → UGEdge（id 用连续序号，保证全图唯一）。
+fn flow_edge(e: &crate::ast::Edge, i: usize, direction: Option<crate::ast::Direction>) -> UGEdge {
+    // 线方向：TB/TD 默认自上而下（source 底部 → target 顶部）；LR 自左向右。
+    let (src_port, tgt_port) = match direction {
+        Some(crate::ast::Direction::LR) | Some(crate::ast::Direction::RL) => {
+            (PortHint::Right, PortHint::Left)
+        }
+        _ => (PortHint::Bottom, PortHint::Top),
+    };
+    UGEdge {
+        id: format!("e{}", i),
+        source: e.source.clone(),
+        target: e.target.clone(),
+        source_port: src_port,
+        target_port: tgt_port,
+        kind: EdgeKind::Flow,
+        label_text: e.label.clone(),
+        label: None,
+        priority: EdgePriority::Primary,
+        routing_hint: ir::common::RoutingHint::Spline,
+        arrow: map_arrow(&e.arrow_type),
+        line_kind: map_line(&e.arrow_type),
+        repulsion: 1.0,
+        cardinality: (None, None),
+        cardinality_text: (None, None),
+    }
+}
+
 /// 提取 flowchart 为统一拓扑图。
 pub fn extract_flowchart(fc: &Flowchart) -> Unigraph {
     // 节点形状/文本真相源：顶层 fc.nodes + 所有 subgraph 内部节点（按 id 合并）。
@@ -136,31 +164,18 @@ pub fn extract_flowchart(fc: &Flowchart) -> Unigraph {
     }
 
     let mut edges = Vec::new();
-    for (i, e) in fc.edges.iter().enumerate() {
-        // 线方向：TB/TD 默认自上而下（source 底部 → target 顶部）；LR 自左向右。
-        let (src_port, tgt_port) = match fc.direction {
-            Some(crate::ast::Direction::LR) | Some(crate::ast::Direction::RL) => {
-                (PortHint::Right, PortHint::Left)
-            }
-            _ => (PortHint::Bottom, PortHint::Top),
-        };
-        edges.push(UGEdge {
-            id: format!("e{}", i),
-            source: e.source.clone(),
-            target: e.target.clone(),
-            source_port: src_port,
-            target_port: tgt_port,
-            kind: EdgeKind::Flow,
-            label_text: e.label.clone(),
-            label: None,
-            priority: EdgePriority::Primary,
-            routing_hint: ir::common::RoutingHint::Spline,
-            arrow: map_arrow(&e.arrow_type),
-            line_kind: map_line(&e.arrow_type),
-            repulsion: 1.0,
-            cardinality: (None, None),
-            cardinality_text: (None, None),
-        });
+    // parser 把写在 `subgraph … end` 块内的边放入 `subgraphs[i].edges`（顶层 fc.edges
+    // 只含子图外的边）。原先只遍历 fc.edges 导致**子图内部连线整体丢失**，这里一并收集。
+    let mut edge_idx = 0usize;
+    for sg in &fc.subgraphs {
+        for e in &sg.edges {
+            edges.push(flow_edge(e, edge_idx, fc.direction));
+            edge_idx += 1;
+        }
+    }
+    for e in &fc.edges {
+        edges.push(flow_edge(e, edge_idx, fc.direction));
+        edge_idx += 1;
     }
 
     // 子图：收集每个 subgraph 的成员节点 id（含嵌套 subgraph 展平后的节点）。
@@ -187,5 +202,57 @@ pub fn extract_flowchart(fc: &Flowchart) -> Unigraph {
             title: None,
             show_data: false,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(src: &str) -> Flowchart {
+        crate::MermaidParser::parse_mermaid(src)
+            .map(|d| match d {
+                crate::ast::Diagram::Flowchart(f) => f,
+                _ => panic!("not a flowchart"),
+            })
+            .expect("parse")
+    }
+
+    #[test]
+    fn subgraph_internal_edges_are_collected() {
+        // 回归：`B --> C` 写在 `subgraph One … end` 块内，parser 把它放入
+        // subgraphs[0].edges 而非顶层 fc.edges；extract 原先只遍历 fc.edges，
+        // 导致子图内部连线整体丢失。
+        let fc = parse(
+            "flowchart TD\nA[Start]\nsubgraph One\nB[Process]\nC[Decision]\nB --> C\nend\nA --> B\n",
+        );
+        let ug = extract_flowchart(&fc);
+        // 顶层 1 条跨子图边 + 子图内部 1 条。
+        assert_eq!(ug.edges.len(), 2, "子图内部边不得丢失");
+        let pairs: Vec<(String, String)> = ug
+            .edges
+            .iter()
+            .map(|e| (e.source.clone(), e.target.clone()))
+            .collect();
+        assert!(pairs.contains(&("B".into(), "C".into())), "缺子图内部边 B→C");
+        assert!(pairs.contains(&("A".into(), "B".into())), "缺跨子图边 A→B");
+        // 边 id 全图唯一且连续。
+        let ids: Vec<String> = ug.edges.iter().map(|e| e.id.clone()).collect();
+        assert_eq!(ids, vec!["e0", "e1"]);
+    }
+
+    #[test]
+    fn flowchart_dispatch_is_case_insensitive_and_trims_leading_space() {
+        // 回归：parser/mod.rs 曾用区分大小写的 starts_with 并把未 trim 的原始输入
+        // 传给 parse_flowchart，`Flowchart TD` 与前导空格的图均解析失败。
+        for src in [
+            "flowchart TD\nA[Start] --> B[End]\n",
+            "Flowchart TD\nA[Start] --> B[End]\n",
+            "  flowchart TD\nA[Start] --> B[End]\n",
+            "graph LR\nA[Start] --> B[End]\n",
+        ] {
+            let fc = parse(src);
+            assert_eq!(fc.edges.len(), 1, "src: {src:?}");
+        }
     }
 }

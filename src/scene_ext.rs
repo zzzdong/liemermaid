@@ -71,19 +71,25 @@ fn to_official_svg(svg: String, width: f64, height: f64) -> String {
 }
 
 /// 删除覆盖整个画布的透明背景矩形（若存在）。
+///
+/// 不依赖 fill 属性写法：lievisual 0.2.0-beta.2 输出 `fill="#00000000"`（单属性十六进制），
+/// 0.2.0 起改为 `fill="#000000" fill-opacity="0.000"`（alpha 拆为独立属性）。这里只按
+/// 「紧贴画布尺寸的 `<rect>`」定位，把该元素整体删掉，兼容两种格式。
 fn strip_canvas_background_rect(svg: String, width: f64, height: f64) -> String {
-    // 只匹配紧贴画布尺寸的全幅矩形，避免误删内容矩形。
-    let needle = format!(
-        r##"<rect x="0" y="0" width="{:.2}" height="{:.2}" fill="#00000000"/>"##,
-        width, height
-    );
-    match svg.find(&needle) {
-        Some(i) => {
-            let mut out = String::with_capacity(svg.len());
-            out.push_str(&svg[..i]);
-            out.push_str(&svg[i + needle.len()..]);
-            // 顺带去掉因删除而残留的空行
-            out.replace("\r\n\r\n", "\r\n")
+    let prefix = format!(r##"<rect x="0" y="0" width="{:.2}" height="{:.2}""##, width, height);
+    match svg.find(&prefix) {
+        Some(start) => {
+            // 元素以 `/>` 结尾（self-closing），删到该处为止。
+            if let Some(rel) = svg[start..].find("/>") {
+                let end = start + rel + 2;
+                let mut out = String::with_capacity(svg.len());
+                out.push_str(&svg[..start]);
+                out.push_str(&svg[end..]);
+                // 顺带去掉因删除而残留的空行
+                out.replace("\r\n\r\n", "\r\n")
+            } else {
+                svg
+            }
         }
         None => svg,
     }
