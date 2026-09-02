@@ -58,7 +58,10 @@ pub fn timeline_diagram<'i>(input: &mut &'i str) -> PResult<'i, TimelineDiagram>
             }
         // `get(..5)` 保证切片不落在多字节字符中间（原 `trimmed[..5]` 遇 emoji 会 panic）。
         // 只有前 5 字节构成合法字符边界时 `get(..5)` 才返回 Some，因此 `get(5..)` 必为 Some。
-        } else if trimmed.get(..5).is_some_and(|h| h.eq_ignore_ascii_case("title")) {
+        } else if trimmed
+            .get(..5)
+            .is_some_and(|h| h.eq_ignore_ascii_case("title"))
+        {
             let t = trimmed.get(5..).map(str::trim).unwrap_or("");
             if !t.is_empty() {
                 title = Some(t.to_string());

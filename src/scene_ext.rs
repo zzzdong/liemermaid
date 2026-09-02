@@ -76,7 +76,10 @@ fn to_official_svg(svg: String, width: f64, height: f64) -> String {
 /// 0.2.0 起改为 `fill="#000000" fill-opacity="0.000"`（alpha 拆为独立属性）。这里只按
 /// 「紧贴画布尺寸的 `<rect>`」定位，把该元素整体删掉，兼容两种格式。
 fn strip_canvas_background_rect(svg: String, width: f64, height: f64) -> String {
-    let prefix = format!(r##"<rect x="0" y="0" width="{:.2}" height="{:.2}""##, width, height);
+    let prefix = format!(
+        r##"<rect x="0" y="0" width="{:.2}" height="{:.2}""##,
+        width, height
+    );
     match svg.find(&prefix) {
         Some(start) => {
             // 元素以 `/>` 结尾（self-closing），删到该处为止。

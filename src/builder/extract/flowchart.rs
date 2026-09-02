@@ -234,7 +234,10 @@ mod tests {
             .iter()
             .map(|e| (e.source.clone(), e.target.clone()))
             .collect();
-        assert!(pairs.contains(&("B".into(), "C".into())), "缺子图内部边 B→C");
+        assert!(
+            pairs.contains(&("B".into(), "C".into())),
+            "缺子图内部边 B→C"
+        );
         assert!(pairs.contains(&("A".into(), "B".into())), "缺跨子图边 A→B");
         // 边 id 全图唯一且连续。
         let ids: Vec<String> = ug.edges.iter().map(|e| e.id.clone()).collect();

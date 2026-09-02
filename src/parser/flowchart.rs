@@ -327,7 +327,7 @@ fn keyword_ci<'i>(kw: &'static str) -> impl FnMut(&mut &'i str) -> PResult<'i, (
 
 /// 顶层入口：`flowchart` / `graph` 图表。
 pub fn flowchart_diagram<'i>(input: &mut &'i str) -> PResult<'i, Flowchart> {
-    let _ = alt((keyword_ci("graph"), keyword_ci("flowchart"))).parse_next(input)?;
+    alt((keyword_ci("graph"), keyword_ci("flowchart"))).parse_next(input)?;
     skip_ws_and_comments(input)?;
 
     let dir = opt(direction).parse_next(input)?;
