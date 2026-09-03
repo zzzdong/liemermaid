@@ -1,6 +1,6 @@
 [package]
 name = "liemermaid"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 rust-version = "1.92"
 description = "Mermaid diagram parser + renderer (SVG / vello_cpu PNG), unified through lievisual Scene IR."
