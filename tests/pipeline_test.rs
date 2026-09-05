@@ -74,6 +74,12 @@ fn pie_diagram_produces_valid_svg_structure() {
         svg.contains("width=\"18.00\" height=\"18.00\""),
         "图例色块应为 18×18"
     );
+    // 7. 扇区分隔线：官方 `.pieCircle{stroke:black;stroke-width:2px}`，
+    //    黑描边才能在相邻浅色扇区之间看清切分边界。
+    assert!(
+        svg.matches("stroke=\"#000000\"").count() >= 4,
+        "3 个扇区 + 外圈均应有黑色描边"
+    );
 }
 
 #[test]

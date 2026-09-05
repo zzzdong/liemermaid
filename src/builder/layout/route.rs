@@ -231,22 +231,49 @@ pub fn route_edges(
 
     // —— 端口分配 ——
     // 自环 / 双向对使用专用路由，不参与槽位分组。
-    let mut edge_ports: Vec<Option<(Port, Port)>> = Vec::with_capacity(gg.edges.len());
+    //
+    // 分两轮：先普通边，并记录每个节点的出/入端面占用；回边随后避让 ——
+    // 默认端面已被**反向用途**占用（同一端面一进一出）时改走侧面端口，
+    // 让输入与输出尽量不挤在节点的同一个端面上。
+    let mut edge_ports: Vec<Option<(Port, Port)>> = vec![None; gg.edges.len()];
+    let mut used_out: HashMap<String, HashSet<Port>> = HashMap::new();
+    let mut used_in: HashMap<String, HashSet<Port>> = HashMap::new();
+
+    // 第一轮：普通边（pick_port 只依赖节点对，与分配顺序无关）。
     for (i, e) in gg.edges.iter().enumerate() {
-        let pair = (node_map.get(&e.source), node_map.get(&e.target));
-        let ports = match plans[i] {
-            Some(Plan::SelfLoop) | Some(Plan::Mutual { .. }) => None,
-            Some(Plan::BackBow { .. }) => match pair {
-                (Some(s), Some(t)) => Some(ports_for(s, t, direction, true)),
-                _ => None,
-            },
-            Some(Plan::BackChannel { side, .. }) => Some(channel_ports(side, direction)),
-            Some(Plan::Normal) | None => match pair {
-                (Some(s), Some(t)) => Some(ports_for(s, t, direction, false)),
-                _ => None,
-            },
-        };
-        edge_ports.push(ports);
+        if !matches!(plans[i], Some(Plan::Normal) | None) {
+            continue;
+        }
+        if let (Some(s), Some(t)) = (node_map.get(&e.source), node_map.get(&e.target)) {
+            let sp = edge_port(s, t, direction, true, false, 0.0, used_in.get(&e.source));
+            let tp = edge_port(t, s, direction, false, false, 0.0, used_out.get(&e.target));
+            used_out.entry(e.source.clone()).or_default().insert(sp);
+            used_in.entry(e.target.clone()).or_default().insert(tp);
+            edge_ports[i] = Some((sp, tp));
+        }
+    }
+
+    // 第二轮：回边按优先级序列避让；BackChannel 固定侧面通道端口（通道几何
+    // 要求），但同样登记占用，供后续边避让侧面。
+    for (i, e) in gg.edges.iter().enumerate() {
+        match plans[i] {
+            Some(Plan::BackBow { side }) => {
+                if let (Some(s), Some(t)) = (node_map.get(&e.source), node_map.get(&e.target)) {
+                    let sp = edge_port(s, t, direction, true, true, side, used_in.get(&e.source));
+                    let tp = edge_port(t, s, direction, false, true, side, used_out.get(&e.target));
+                    used_out.entry(e.source.clone()).or_default().insert(sp);
+                    used_in.entry(e.target.clone()).or_default().insert(tp);
+                    edge_ports[i] = Some((sp, tp));
+                }
+            }
+            Some(Plan::BackChannel { side, .. }) => {
+                let (sp, tp) = channel_ports(side, direction);
+                used_out.entry(e.source.clone()).or_default().insert(sp);
+                used_in.entry(e.target.clone()).or_default().insert(tp);
+                edge_ports[i] = Some((sp, tp));
+            }
+            _ => {}
+        }
     }
 
     // 分组：key = (节点 id, 端口)，value = [(边索引, 对端在该端口边轴向上的投影)]
@@ -414,8 +441,10 @@ fn mutual_dual_route(s: &GGNode, t: &GGNode, side: f64) -> RoutePath {
 // 回边
 // ============================================================
 
-/// 回边路由（无阻挡时的侧向 U 形贝塞尔）：源节点主轴反向端口出，
-/// 目标节点对侧端口入，控制点沿主轴外扩，形成侧向绕行的弧线。
+/// 回边路由：两端都在主轴上时为侧向 U 形贝塞尔（源主轴反向端口出、目标对侧
+/// 端口入，控制点沿主轴外扩）；端口避让后任一端改走侧面端口时，控制点分别
+/// 沿两端口的**外法向**延伸，形成「源端口直出 → 转弯 → 沿目标端口法向进入」
+/// 的光滑弧线。
 fn back_edge_route(
     s: &GGNode,
     t: &GGNode,
@@ -428,6 +457,19 @@ fn back_edge_route(
     let p3 = port_point_at(t, tp, t_slot.1);
 
     let mut r = RoutePath::new();
+    let src_side = matches!(sp, Port::Left | Port::Right);
+    let tgt_side = matches!(tp, Port::Left | Port::Right);
+    if src_side || tgt_side {
+        // 任一端走侧面端口：控制点 = 端口点 + 外法向 × 延伸量。
+        let dx = p3.x - p0.x;
+        let dy = p3.y - p0.y;
+        let ext = ((dx * dx + dy * dy).sqrt() * 0.45).clamp(24.0, 200.0);
+        let (n1, n2) = (port_normal(sp), port_normal(tp));
+        let p1 = Point::new(p0.x + n1.0 * ext, p0.y + n1.1 * ext);
+        let p2 = Point::new(p3.x + n2.0 * ext, p3.y + n2.1 * ext);
+        r.push(RouteSegment::CubicBezier { p0, p1, p2, p3 });
+        return r;
+    }
     if matches!(sp, Port::Top | Port::Bottom) {
         // 垂直主轴：控制点沿 y 外扩、x 按 side 错开。
         let d = if p3.y >= p0.y { 1.0 } else { -1.0 };
@@ -1091,27 +1133,106 @@ fn channel_ports(side: f64, direction: crate::ast::Direction) -> (Port, Port) {
     }
 }
 
-/// 一条边实际使用的（出端口, 入端口）。
+/// 单端端口选择（简易避让规则）：
 ///
-/// back edge 走专用端口（沿主轴反向绕行），普通边由 [`pick_port`] 双向决定。
-/// 统计槽位与生成路由**必须**共用此函数，否则槽位序号会与端口错配。
-fn ports_for(
-    s: &GGNode,
-    t: &GGNode,
+/// 优先级 —— **出边：下端 → 左右 → 上端；入边：上端 → 左右 → 下端**（垂直主轴；
+/// 水平主轴转置）。回边沿主轴反向，序列随之反转；侧面（或上下）的先后按对端
+/// 相对位置决定，朝向对端一侧优先（回边则由绕行侧 `side` 统一决定，保证两端
+/// 同侧绕行、曲线不横穿节点群）。
+///
+/// 首选：普通边沿用 [`pick_port`] 的几何判断（斜边会直接选中侧面，通常就是
+/// 序列首位）；回边用主轴反向端口。若首选已被**反向用途**占用（同一端面
+/// 一进一出），按序列跳到下一个空闲端面；全部冲突时退回首选，交给槽位分散。
+///
+/// 统计槽位与生成路由**必须**共用此函数的分配结果，否则槽位序号会与端口错配。
+fn edge_port(
+    n: &GGNode,
+    peer: &GGNode,
     direction: crate::ast::Direction,
+    is_out: bool,
     is_back: bool,
-) -> (Port, Port) {
+    side: f64,
+    used_reverse: Option<&HashSet<Port>>,
+) -> Port {
     use crate::ast::Direction;
-    if is_back {
-        match direction {
-            Direction::TB | Direction::TD => (Port::Top, Port::Bottom),
-            Direction::BT => (Port::Bottom, Port::Top),
-            Direction::LR => (Port::Right, Port::Left),
-            Direction::RL => (Port::Left, Port::Right),
-        }
+    // 主轴端口：forward 出 = 顺主轴面，forward 入 = 逆主轴面；回边反转。
+    let (out_main, in_main) = match direction {
+        Direction::TB | Direction::TD => (Port::Bottom, Port::Top),
+        Direction::BT => (Port::Top, Port::Bottom),
+        Direction::LR => (Port::Right, Port::Left),
+        Direction::RL => (Port::Left, Port::Right),
+    };
+    let (main, anti) = match (is_back, is_out) {
+        (false, true) | (true, false) => (out_main, in_main),
+        (false, false) | (true, true) => (in_main, out_main),
+    };
+    // 侧面顺序：普通边朝向对端一侧优先；回边按绕行侧（两端统一）。
+    let (s1, s2) = if is_back {
+        side_pair_centered(direction, side)
     } else {
-        (pick_port(s, t, direction), pick_port(t, s, direction))
+        side_pair(n, peer, direction)
+    };
+
+    let first = if is_back {
+        main
+    } else {
+        pick_port(n, peer, direction)
+    };
+    let mut cands = vec![first];
+    for p in [main, s1, s2, anti] {
+        if !cands.contains(&p) {
+            cands.push(p);
+        }
     }
+    match used_reverse {
+        Some(m) => cands.into_iter().find(|p| !m.contains(p)).unwrap_or(first),
+        None => first,
+    }
+}
+
+/// 回边与普通边共用的侧面顺序生成器：
+/// - 垂直主轴：`bias > 0` → 右先左后，否则左先右后；
+/// - 水平主轴：`bias > 0` → 下先上后，否则上先下后。
+fn side_pair_centered(direction: crate::ast::Direction, bias: f64) -> (Port, Port) {
+    use crate::ast::Direction;
+    match direction {
+        Direction::TB | Direction::TD | Direction::BT => {
+            if bias > 0.0 {
+                (Port::Right, Port::Left)
+            } else {
+                (Port::Left, Port::Right)
+            }
+        }
+        Direction::LR | Direction::RL => {
+            if bias > 0.0 {
+                (Port::Bottom, Port::Top)
+            } else {
+                (Port::Top, Port::Bottom)
+            }
+        }
+    }
+}
+
+/// 普通边的侧面顺序：按对端相对位置，朝向对端一侧优先
+/// （垂直主轴比水平位置，水平主轴比垂直位置）。
+fn side_pair(n: &GGNode, peer: &GGNode, direction: crate::ast::Direction) -> (Port, Port) {
+    let bias = match direction {
+        crate::ast::Direction::TB | crate::ast::Direction::TD | crate::ast::Direction::BT => {
+            if peer.center.x >= n.center.x {
+                1.0
+            } else {
+                -1.0
+            }
+        }
+        _ => {
+            if peer.center.y >= n.center.y {
+                1.0
+            } else {
+                -1.0
+            }
+        }
+    };
+    side_pair_centered(direction, bias)
 }
 
 /// 对端节点在 `port` 所在边**轴向**上的投影坐标，用于给同一端口上的多条边排序。
@@ -1450,7 +1571,6 @@ mod tests {
     /// 2. 任意两条出边互不相交。
     #[test]
     fn fan_out_spline_edges_stay_in_corridor_and_never_cross() {
-        use crate::ast::Direction;
         let xs = [-336.0, -168.0, 0.0, 168.0, 336.0];
         let mut nodes = vec![mk_node("A", 0.0, 0.0, 120.0, 60.0)];
         for (i, x) in xs.iter().enumerate() {
@@ -1473,7 +1593,7 @@ mod tests {
             activations: vec![],
             sequence_dividers: vec![],
         };
-        route_edges(&mut gg, Direction::TB, &[]);
+        route_edges(&mut gg, crate::ast::Direction::TB, &[]);
 
         // A 底边 y = 30，子节点顶边 y = 86 → 走廊 [30, 86]
         for e in &gg.edges {
@@ -1513,6 +1633,88 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// 端口避让规则（回归）：回边 D→B 的目标端默认端口（Bottom）已被 B→C 的
+    /// 出边占用（同一端面一进一出），应按优先级序列改走侧面端口。
+    /// 注意 B↔C 不能同时互指（那是 mutual 对，走专用双向路由，无端口概念）。
+    #[test]
+    fn back_edge_enters_target_on_a_free_side() {
+        let mut gg = Geograph {
+            size: lievisual::geometry::Size::new(0.0, 0.0),
+            background: lievisual::geometry::Color::default(),
+            nodes: vec![
+                mk_node("A", 0.0, 0.0, 60.0, 40.0),
+                mk_node("B", 0.0, 150.0, 60.0, 40.0),
+                mk_node("C", 0.0, 300.0, 60.0, 40.0),
+                mk_node("D", 0.0, 450.0, 60.0, 40.0),
+            ],
+            edges: vec![
+                mk_edge("A", "B"),
+                mk_edge("B", "C"),
+                mk_edge("C", "D"),
+                mk_edge("D", "B"),
+            ],
+            containers: vec![],
+            title: None,
+            show_data: false,
+            activations: vec![],
+            sequence_dividers: vec![],
+        };
+        route_edges(&mut gg, crate::ast::Direction::TB, &[]);
+
+        // 回边 D→B：入端不得落在 B 的底边（y = 170，已被 B→C 出边占用），
+        // 应落在 B 的左/右侧面（x = ±30）。
+        let back = &gg.edges[3];
+        let end = back.route.end();
+        let on_side = ((end.x - 30.0).abs() < 1.0) || ((end.x + 30.0).abs() < 1.0);
+        assert!(on_side, "回边应从 B 的侧面进入, end={end:?}");
+        assert!(
+            (end.y - 170.0).abs() > 1.0,
+            "回边不应与 B→C 的出边共用底部端面: end={end:?}"
+        );
+
+        // 普通边行为不变：A→B 仍从 B 的顶部进入。
+        let end = gg.edges[0].route.end();
+        assert!(
+            (end.y - 130.0).abs() < 1.0,
+            "A→B 仍应从 B 顶部进入, end={end:?}"
+        );
+    }
+
+    /// sketch_demo 拓扑：Retry→Input 回边不得与 Input→Decision 的出边共用
+    /// Input 的底部端面（同端面一进一出）。
+    #[test]
+    fn retry_back_edge_avoids_input_bottom() {
+        let mut gg = Geograph {
+            size: lievisual::geometry::Size::new(0.0, 0.0),
+            background: lievisual::geometry::Color::default(),
+            nodes: vec![
+                mk_node("Input", 0.0, 104.0, 60.0, 40.0),
+                mk_node("Decision", 0.0, 208.0, 60.0, 40.0),
+                mk_node("Retry", 80.0, 312.0, 60.0, 40.0),
+            ],
+            edges: vec![
+                mk_edge("Input", "Decision"),
+                mk_edge("Decision", "Retry"),
+                mk_edge("Retry", "Input"),
+            ],
+            containers: vec![],
+            title: None,
+            show_data: false,
+            activations: vec![],
+            sequence_dividers: vec![],
+        };
+        route_edges(&mut gg, crate::ast::Direction::TB, &[]);
+
+        let back = &gg.edges[2];
+        let end = back.route.end();
+        // Input 的底边 y = 124（x≈0）已被 Input→Decision 出边占用；
+        // 侧面在 x = ±30。
+        let on_side = ((end.x - 30.0).abs() < 1.0) || ((end.x + 30.0).abs() < 1.0);
+        assert!(on_side, "回边应从 Input 的侧面进入, end={end:?}");
+        let on_bottom = end.y > 123.0 && end.x.abs() < 1.0;
+        assert!(!on_bottom, "回边不应从 Input 底部进入: end={end:?}");
     }
 
     #[test]
@@ -1618,7 +1820,6 @@ mod tests {
     /// 双向对：两条相对边应一左一右分开（不重合）。
     #[test]
     fn mutual_pair_edges_are_separated() {
-        use crate::ast::Direction;
         let mut gg = Geograph {
             size: lievisual::geometry::Size::new(0.0, 0.0),
             background: lievisual::geometry::Color::default(),
@@ -1635,7 +1836,7 @@ mod tests {
         };
         gg.edges[0].routing_hint = crate::builder::ir::common::RoutingHint::Spline;
         gg.edges[1].routing_hint = crate::builder::ir::common::RoutingHint::Spline;
-        route_edges(&mut gg, Direction::TB, &[]);
+        route_edges(&mut gg, crate::ast::Direction::TB, &[]);
         let x0 = gg.edges[0].route.start().x;
         let x1 = gg.edges[1].route.start().x;
         assert!(
@@ -1669,7 +1870,6 @@ mod tests {
     /// 0.3 容器避障：两端点均非容器成员时，普通边应绕开容器框（不得穿过）。
     #[test]
     fn normal_edge_avoids_container() {
-        use crate::ast::Direction;
         // 容器框覆盖 A 与 B 之间走廊的中部（x∈[-40,40], y∈[-20,100]），
         // 两侧都留有足够的空白走廊（A 上方 / B 下方），侧边通道可绕行。
         let container = GGContainer {
@@ -1694,7 +1894,7 @@ mod tests {
             sequence_dividers: vec![],
         };
         gg.edges[0].routing_hint = crate::builder::ir::common::RoutingHint::Spline;
-        route_edges(&mut gg, Direction::TB, &[container]);
+        route_edges(&mut gg, crate::ast::Direction::TB, &[container]);
         let route = &gg.edges[0].route;
         // 朴素 Spline 会沿 x≈0 直线穿过容器；避障后任何采样点不得落入容器框内部。
         for p in sample_path(route, 64) {
@@ -1708,7 +1908,6 @@ mod tests {
     /// 0.3 容器避障：容器内边（两端点均为成员）允许保持原路由，不绕行。
     #[test]
     fn intra_container_edge_stays_inside() {
-        use crate::ast::Direction;
         let container = GGContainer {
             id: "sub1".into(),
             bounds: Rect::new(-80.0, -30.0, 80.0, 130.0),
@@ -1731,7 +1930,7 @@ mod tests {
             sequence_dividers: vec![],
         };
         gg.edges[0].routing_hint = crate::builder::ir::common::RoutingHint::Spline;
-        route_edges(&mut gg, Direction::TB, &[container]);
+        route_edges(&mut gg, crate::ast::Direction::TB, &[container]);
         // 朴素 Spline 不穿过任何障碍 → 应保持朴素路由（单段贝塞尔），不生成绕行折线。
         assert_eq!(gg.edges[0].route.len(), 1, "容器内边不应被绕行");
     }
@@ -1739,7 +1938,6 @@ mod tests {
     /// 0.6 正交边-边避让：同层间的并行正交边主干不得重叠（同 x 且 y 跨度交叠）。
     #[test]
     fn orthogonal_edges_do_not_share_trunk() {
-        use crate::ast::Direction;
         // 交叉对：A1→B1 与 A2→B2 的主干中线都为 x=0 且跨度重叠，
         // 若无边间避让，两条边会画在同一条垂直主干上。
         let mut gg = Geograph {
@@ -1758,7 +1956,7 @@ mod tests {
             activations: vec![],
             sequence_dividers: vec![],
         };
-        route_edges(&mut gg, Direction::TB, &[]);
+        route_edges(&mut gg, crate::ast::Direction::TB, &[]);
         // 收集所有长垂直主干段（stub 长 18 < 40，只捕获主干）。
         let mut trunk_x: Vec<f64> = Vec::new();
         for e in &gg.edges {

@@ -1503,9 +1503,11 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
         z: vir::Z_SUBGRAPH,
     });
 
+    // 扇区分隔线：官方 `.pieCircle{stroke:black;stroke-width:2px}`（黑描边勾出
+    // 每个扇区的两条半径边与外弧，切分情况一目了然）。
     let slice_stroke = Stroke {
-        color: Color::rgb(255, 255, 255),
-        width: 2.0,
+        color: theme::pie::SLICE_STROKE,
+        width: theme::pie::SLICE_STROKE_WIDTH,
         line_cap: LineCap::Butt,
         line_join: LineJoin::Miter,
         dash_array: Vec::new(),

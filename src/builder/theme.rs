@@ -239,6 +239,10 @@ pub mod pie {
     pub const OUTER_RADIUS: f64 = 186.0;
     pub const OUTER_STROKE: Color = Color::new(0, 0, 0, 255); // 官方 `.pieOuterCircle{stroke:black}`
     pub const OUTER_STROKE_WIDTH: f64 = 2.0;
+    /// 扇区分隔描边（官方 `.pieCircle{stroke:black;stroke-width:2px}` —— 黑线
+    /// 才能在相邻浅色扇区之间看清切分边界，白线在白底上不可见）。
+    pub const SLICE_STROKE: Color = Color::new(0, 0, 0, 255);
+    pub const SLICE_STROKE_WIDTH: f64 = 2.0;
     /// 扇区百分比标签所在半径（官方实测 = 0.75 × 半径）。
     pub const LABEL_RADIUS_RATIO: f64 = 0.75;
     /// 图例色块尺寸与排版（官方 `<rect width="18" height="18"/>` + `<text x="22">`）。
