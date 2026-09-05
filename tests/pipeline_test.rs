@@ -37,10 +37,10 @@ fn pie_diagram_produces_valid_svg_structure() {
         "SVG should start with proper namespace"
     );
     assert!(svg.ends_with("</svg>\n"), "SVG should end with closing tag");
-    // 画布语义对齐官方：`width="100%"` + 贴合内容的 viewBox（600×400 为上限）。
+    // 画布语义对齐官方：响应式视口（根节点只写 viewBox）+ 贴合内容（600×400 为上限）。
     assert!(
-        svg.contains(r##"width="100%""##),
-        "SVG 根节点 width 应为 100%"
+        !svg.contains("<svg width=\""),
+        "SVG 根节点不应写死 width（视口交给 CSS）"
     );
     assert!(svg.contains("viewBox="), "SVG 应带 viewBox");
 
@@ -192,14 +192,14 @@ fn flowchart_with_node_text() {
     assert!(text.contains("End"), "Should render node text 'End'");
 }
 
-/// 画布语义对齐官方 mermaid：`width="100%"` + `viewBox` 贴合内容，
-/// `config` 的 800×600 是**上限**而非固定画布（内容更小则不撑满）。
+/// 画布语义对齐官方 mermaid：`viewBox` 贴合内容、视口交给 CSS（`width` / `height`
+/// 不写死），`config` 的 800×600 是**上限**而非固定画布（内容更小则不撑满）。
 #[test]
 fn flowchart_canvas_fits_content_like_official() {
     let svg = render_to_svg("flowchart TD\nX --> Y", 800, 600);
     assert!(
-        svg.contains(r##"width="100%""##),
-        "官方 SVG 根节点 width 为 100%"
+        !svg.contains("<svg width=\""),
+        "官方 SVG 根节点不写死 width"
     );
     assert!(
         svg.contains("max-width:"),

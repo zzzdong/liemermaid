@@ -13,89 +13,33 @@
 //! | `z` 层级 | `SceneNode.z_index` |
 //! | 文本样式 | `lievisual::text::TextStyle` |
 
-use lievisual::geometry::Color;
-use lievisual::render::{Renderer, SvgRenderer};
+use lievisual::render::{Renderer, SvgRenderer, SvgSizing};
 
 /// 用 lievisual 的 SVG 后端渲染场景为字符串。
 ///
-/// SVG 输出使用透明背景：mermaid 的默认 SVG 不绘制背景 `<rect>`，底色由 CSS 的
-/// `background-color` 决定。透明背景让导出的 SVG 与官方结构对齐，嵌入时也可由容器/
-/// 样式决定底色，避免多一层整画布矩形。PNG 路径仍保留白底（见 [`render_scene_png`]）。
+/// 背景与 PNG 路径**一致**：取 [`lievisual::Scene::background`]（由
+/// [`crate::OutputConfig::background`] 写入，默认不透明白）。
+///
+/// 想要官方 mermaid 那样的透明底，把背景设为
+/// [`lievisual::geometry::Color::TRANSPARENT`] 即可 —— 与 PNG 一样什么都不铺（SVG 里表现为一个 `fill-opacity="0"` 的全画布矩形，无可见像素）。
 pub fn render_scene_svg(scene: &lievisual::Scene) -> String {
-    let mut renderer =
-        SvgRenderer::new(scene.width, scene.height).with_background(Color::TRANSPARENT);
+    let bg_css = if scene.background.a == 0 {
+        "transparent".to_string()
+    } else {
+        scene.background.to_hex()
+    };
+    // 响应式视口：[`SvgSizing::Intrinsic`] 省略根节点的 `width` / `height`，只保留
+    // `viewBox`（SVG 2 中缺省值 `auto` ≈ `100%`，按 viewBox 的宽高比定高），再用
+    // `max-width` 封顶，使容器比图更宽时不被放大。
+    let mut renderer = SvgRenderer::new(scene.width, scene.height)
+        .with_background(scene.background)
+        .with_sizing(SvgSizing::Intrinsic)
+        .with_style(format!(
+            "max-width: {:.3}px; background-color: {bg_css};",
+            scene.width
+        ));
     renderer.render_scene(scene);
-    to_official_svg(renderer.into_string(), scene.width, scene.height)
-}
-
-/// 把 lievisual 的 SVG 输出改写为**官方 mermaid 的根节点形态**。
-///
-/// lievisual 的 `SvgRenderer` 固定输出 `<svg width="{w}" height="{h}" viewBox="0 0 w h">`
-/// 且总是追加一个整画布背景 `<rect>`；官方 mermaid 则是
-/// `<svg width="100%" style="max-width: {w}px; background-color: transparent;" viewBox="...">`
-/// 且**不画背景矩形**（底色交给 CSS 的 `background-color`）。
-///
-/// 由于 `SvgRenderer` 未开放 viewBox/根属性定制，这里在渲染后做一次**纯字符串后处理**：
-/// 只改根节点标签、去掉整画布的透明背景矩形，不动任何内容节点。
-fn to_official_svg(svg: String, width: f64, height: f64) -> String {
-    let mut out = svg;
-
-    // 1) 根节点：把 `width="{w}"` 就地替换为 `width="100%"`，并在标签末尾追加
-    //    `style="max-width: {w}px; background-color: transparent;"`。
-    //    保持原有属性顺序（`<svg xmlns=...` 开头），viewBox 沿用 `0 0 w h`。
-    if let Some(start) = out.find("<svg")
-        && let Some(end) = out[start..].find('>').map(|i| start + i)
-    {
-        let tag = &out[start..end];
-        let new_tag = tag
-            .split_whitespace()
-            .map(|a| {
-                if a.starts_with("width=") {
-                    r##"width="100%""##
-                } else {
-                    a
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ");
-        let rest = out[end..].to_string();
-        out = format!(
-            "{new_tag} style=\"max-width: {width:.3}px; background-color: transparent;\"{rest}"
-        );
-    }
-
-    // 2) 去掉 lievisual 追加的整画布背景矩形（官方无此元素）。
-    //    形如 `<rect x="0" y="0" width="W" height="H" fill="#00000000"/>`，位于 `<svg ...>` 之后。
-    out = strip_canvas_background_rect(out, width, height);
-    out
-}
-
-/// 删除覆盖整个画布的透明背景矩形（若存在）。
-///
-/// 不依赖 fill 属性写法：lievisual 0.2.0-beta.2 输出 `fill="#00000000"`（单属性十六进制），
-/// 0.2.0 起改为 `fill="#000000" fill-opacity="0.000"`（alpha 拆为独立属性）。这里只按
-/// 「紧贴画布尺寸的 `<rect>`」定位，把该元素整体删掉，兼容两种格式。
-fn strip_canvas_background_rect(svg: String, width: f64, height: f64) -> String {
-    let prefix = format!(
-        r##"<rect x="0" y="0" width="{:.2}" height="{:.2}""##,
-        width, height
-    );
-    match svg.find(&prefix) {
-        Some(start) => {
-            // 元素以 `/>` 结尾（self-closing），删到该处为止。
-            if let Some(rel) = svg[start..].find("/>") {
-                let end = start + rel + 2;
-                let mut out = String::with_capacity(svg.len());
-                out.push_str(&svg[..start]);
-                out.push_str(&svg[end..]);
-                // 顺带去掉因删除而残留的空行
-                out.replace("\r\n\r\n", "\r\n")
-            } else {
-                svg
-            }
-        }
-        None => svg,
-    }
+    renderer.into_string()
 }
 
 /// 用 lievisual 的 vello_cpu 后端渲染场景为 PNG 字节。
@@ -110,10 +54,49 @@ pub fn render_scene_png(scene: &lievisual::Scene) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lievisual::geometry::Color;
 
     #[test]
     fn svg_is_nonempty() {
         let scene = lievisual::Scene::new(100.0, 100.0);
         assert!(!render_scene_svg(&scene).is_empty());
+    }
+
+    /// 背景照 `scene.background` 绘制；全透明时矩形为零不透明度（与 PNG 不铺底色等价）。
+    #[test]
+    fn svg_background_follows_scene_background() {
+        let scene = lievisual::Scene::new(100.0, 100.0).with_background(Color::WHITE);
+        let svg = render_scene_svg(&scene);
+        assert!(svg.contains("background-color: #ffffff;"), "{svg}");
+        assert!(
+            svg.contains(r##"<rect x="0" y="0" width="100.00" height="100.00" fill="#ffffff""##),
+            "不透明背景应铺满画布: {svg}"
+        );
+
+        let scene = lievisual::Scene::new(100.0, 100.0).with_background(Color::TRANSPARENT);
+        let svg = render_scene_svg(&scene);
+        assert!(svg.contains("background-color: transparent;"), "{svg}");
+        assert!(
+            svg.contains(r##"fill-opacity="0.000""##),
+            "透明背景不应产生可见像素: {svg}"
+        );
+    }
+
+    /// 端到端：`OutputConfig::background` 为透明时，SVG 与 PNG 一样不铺底色。
+    #[test]
+    fn transparent_output_config_renders_no_visible_background() {
+        let config = crate::OutputConfig {
+            background: Color::TRANSPARENT,
+            ..Default::default()
+        };
+        let svg = crate::render_with_config("flowchart TD\nA --> B", &config).expect("render");
+        // 响应式视口：根节点不写死 width / height，几何只在 viewBox 里。
+        assert!(!svg.contains("<svg width=\""), "{svg}");
+        assert!(svg.contains("viewBox="), "{svg}");
+        assert!(svg.contains("background-color: transparent;"), "{svg}");
+        assert!(
+            svg.contains(r##"fill-opacity="0.000""##),
+            "透明底不应有可见像素: {svg}"
+        );
     }
 }

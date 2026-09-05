@@ -116,11 +116,18 @@ fn cohen_sutherland_clip(
     }
 }
 
-/// 从 `<svg ... width="W" height="H">` 根元素解析画布尺寸。
+/// 从 `<svg ... viewBox="0 0 W H">` 解析逻辑画布尺寸。
+///
+/// 根节点的 `width` 已被改写为 `100%`（官方形态，见 `scene_ext`），只有 `viewBox`
+/// 才等于真实逻辑尺寸 —— 整画布背景 `<rect>` 用的也是它。
 fn parse_canvas_size(svg: &str) -> Option<(f64, f64)> {
     let root = svg.lines().find(|l| l.contains("<svg"))?;
-    let w = parse_attr(root, " width=\"")?;
-    let h = parse_attr(root, " height=\"")?;
+    let rest = root.split_once("viewBox=\"")?.1;
+    let vb = &rest[..rest.find('"')?];
+    let mut nums = vb.split_whitespace();
+    let _ = (nums.next()?, nums.next()?); // min-x, min-y
+    let w = nums.next()?.parse::<f64>().ok()?;
+    let h = nums.next()?.parse::<f64>().ok()?;
     Some((w, h))
 }
 

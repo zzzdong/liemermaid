@@ -11,7 +11,10 @@ pub struct OutputConfig {
     pub width: Option<f64>,
     /// 画布高度上限/目标（pt）。`None` 表示不限高度。
     pub height: Option<f64>,
-    /// 背景色，写入生成的 [`lievisual::Scene`]（`scene.background`），由渲染后端绘制
+    /// 背景色，写入生成的 [`lievisual::Scene`]（`scene.background`），由渲染后端绘制。
+    ///
+    /// SVG 与 PNG 语义一致：默认不透明白；设为 [`Color::TRANSPARENT`] 时两者都不铺底色
+    /// （SVG 的全画布矩形为零不透明度，不产生可见像素）。
     pub background: Color,
     /// 是否把内容**放大**到 `width`/`height`（而非仅作上限）。
     ///

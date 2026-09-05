@@ -61,7 +61,7 @@ fn fit_options(config: &OutputConfig) -> FitOptions {
 }
 
 /// 画布边距（内容外留白，对应官方 mermaid 的 `diagramPadding` 量级）。
-const CANVAS_MARGIN: f64 = 8.0;
+pub(crate) const CANVAS_MARGIN: f64 = 8.0;
 
 /// 解析配置尺寸：`None`（不限）或非法值（NaN/Inf/负数）退回默认，用于空内容的兜底画布。
 fn resolve_cfg(limit: Option<f64>, default: f64) -> f64 {

@@ -21,7 +21,6 @@ lievisual = "0.2"
 parley = "0.11"
 serde = { version = "1", features = ["derive"], optional = true }
 thiserror = "2"
-vello_cpu = "0.2"
 winnow = "1.0.4"
 
 [dev-dependencies]
