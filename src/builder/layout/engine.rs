@@ -683,7 +683,7 @@ pub fn run(ug: &ir::Unigraph) -> Result<(Geograph, StyleIntent), String> {
     }
 
     // —— 坐标分配 / GG 构建：Sequence 家族走专属布局；其余走线性或分层 ——
-    let gg_nodes;
+    let mut gg_nodes;
     let gg_edges;
     let containers;
     let activations;
@@ -768,6 +768,20 @@ pub fn run(ug: &ir::Unigraph) -> Result<(Geograph, StyleIntent), String> {
 
         // —— 子图容器 ——
         containers = compute_containers(ug, &gg_nodes);
+        // 容器框与外部节点解重叠：层内排布并不知道容器范围，紧挨 subgraph 的
+        // 外部节点可能被容器框罩住一角，迫使连向它的边绕行容器（产生不必要
+        // 的折线）。将重叠的外部节点沿主轴法向平移出容器后再路由。
+        let container_members: std::collections::HashSet<String> = ug
+            .subgraphs
+            .iter()
+            .flat_map(|sg| sg.member_ids.iter().cloned())
+            .collect();
+        separate_nodes_from_containers(
+            ug.direction,
+            &container_members,
+            &mut gg_nodes,
+            &containers,
+        );
     }
 
     // —— StyleIntent 抽取 ——
@@ -816,6 +830,61 @@ pub fn run(ug: &ir::Unigraph) -> Result<(Geograph, StyleIntent), String> {
     let bbox = compute_bbox(&gg.nodes, &gg.edges);
     gg.size = bbox;
     Ok((gg, style))
+}
+
+/// 将与子图容器框重叠的外部节点沿主轴法向平移出容器（层坐标不变）。
+///
+/// 容器框由成员节点推导，但层内排布并不知道容器范围：紧挨 subgraph 的外部
+/// 节点（例如与容器同层带的 Retry）可能被容器框罩住一角，迫使连向它的边
+/// 绕行容器（产生不必要的折线）。这里把与容器框相交的外部节点沿主轴法向
+/// 平移到容器外侧（取节点中心相对容器中心的侧向），成员节点与容器 bounds
+/// 均保持不变。
+fn separate_nodes_from_containers(
+    direction: crate::ast::Direction,
+    members: &std::collections::HashSet<String>,
+    nodes: &mut [GGNode],
+    containers: &[GGContainer],
+) {
+    use crate::ast::Direction;
+    const GAP: f64 = 12.0;
+    // 垂直主轴（TB/TD/BT）：容器沿水平方向占据层带 → 水平推开；水平主轴反之。
+    let vertical = matches!(direction, Direction::TB | Direction::TD | Direction::BT);
+    for c in containers {
+        let b = c.bounds;
+        for n in nodes.iter_mut() {
+            if members.contains(&n.id) {
+                continue;
+            }
+            let (hw, hh) = (n.size.width / 2.0, n.size.height / 2.0);
+            let n_rect = lievisual::geometry::Rect::new(
+                n.center.x - hw,
+                n.center.y - hh,
+                n.center.x + hw,
+                n.center.y + hh,
+            );
+            // AABB 相交（贴边不算）。
+            let overlaps = n_rect.max_x() > b.min_x()
+                && n_rect.min_x() < b.max_x()
+                && n_rect.max_y() > b.min_y()
+                && n_rect.min_y() < b.max_y();
+            if !overlaps {
+                continue;
+            }
+            // 沿主轴法向平移出容器：节点中心在容器中心正向侧 → 向正向推。
+            if vertical {
+                if n.center.x >= (b.min_x() + b.max_x()) / 2.0 {
+                    n.center.x = b.max_x() + GAP + hw;
+                } else {
+                    n.center.x = b.min_x() - GAP - hw;
+                }
+            } else if n.center.y >= (b.min_y() + b.max_y()) / 2.0 {
+                n.center.y = b.max_y() + GAP + hh;
+            } else {
+                n.center.y = b.min_y() - GAP - hh;
+            }
+            n.ports = resolve_ports(n.center, n.size);
+        }
+    }
 }
 
 /// 据子图成员节点坐标计算容器包围盒（含留白与标题区）。
