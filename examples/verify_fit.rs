@@ -46,7 +46,7 @@ fn parse(text: &str) -> Diagram {
 /// `layout: None` 只允许出现在空文本或无字体的降级场景。
 fn text_layout_stats(scene: &lievisual::Scene) -> (usize, usize) {
     fn walk(node: &lievisual::SceneNode, total: &mut usize, laid: &mut usize) {
-        if let lievisual::scene::Element::Text { spans, layout, .. } = &node.element {
+        if let Some(lievisual::scene::Element::Text { spans, layout, .. }) = node.element() {
             *total += 1;
             // 空文本不排版（lievisual 的约定），不计为漏排版。
             let non_empty = spans.iter().any(|s| !s.text.is_empty());
@@ -54,7 +54,7 @@ fn text_layout_stats(scene: &lievisual::Scene) -> (usize, usize) {
                 *laid += 1;
             }
         }
-        if let lievisual::scene::Element::Group { children } = &node.element {
+        if let Some(children) = node.children() {
             for c in children {
                 walk(c, total, laid);
             }

@@ -275,7 +275,7 @@ pub fn text_node(
 }
 
 pub fn group_node(children: Vec<SceneNode>, transform: Option<Transform>, z: i32) -> SceneNode {
-    let mut n = SceneNode::new(Element::Group { children });
+    let mut n = SceneNode::group(children);
     if let Some(t) = transform {
         n = n.with_transform(t);
     }

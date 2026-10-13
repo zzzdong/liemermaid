@@ -28,7 +28,7 @@ use crate::vir;
 const NODE_STROKE_WIDTH: f64 = 1.0;
 
 // ---------------------------------------------------------------------------
-// 文本定位（以 TextLayout::ink_bounds 为基准）
+// 文本定位（以字体级视觉盒 cap/logical bounds 为基准）
 // ---------------------------------------------------------------------------
 
 /// 水平锚点：以**排版盒**（advance 宽度，即 [`TextLayout::width`]）为基准。
@@ -45,11 +45,13 @@ enum HAnchor {
     Center,
 }
 
-/// 垂直锚点：以**墨迹**（可见字形外框，[`TextLayout::ink_bounds`]）为基准。
+/// 垂直锚点：以**字体级视觉盒**为基准（[`TextLayout::cap_bounds`] / [`TextLayout::logical_bounds`]）。
 ///
 /// 排版盒高度 [`TextLayout::height`] 含行距（leading）与字体的 ascent/descent
-/// 设计边距，用它在固定高度的框/行内居中会让文本明显偏下——实测 16px 文本
-/// `init` 偏 2.7px，含下伸部的 `gy` 偏 6.1px。墨迹盒才是"所见即所得"的边界。
+/// 设计边距，用它在固定高度的框/行内居中会让文本明显偏下。lievisual 0.3 起移除了
+/// 逐字形墨迹盒（`ink_bounds`），改用字体级盒：居中 / 顶对齐取 **cap 盒**
+/// （`baseline − cap_height → baseline`，字体级常量、不随文本内容跳动），底对齐取
+/// **logical 盒**（含 descent，避免 `g`/`y`/`p`/`q` 下伸部被裁）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum VAnchor {
     /// 墨迹垂直中心落在锚点 y（框内 / 行内垂直居中）。
@@ -80,25 +82,27 @@ fn place_text(
     style.align = TextAlign::Left;
     style.baseline = TextBaseline::Top;
 
-    let ib = layout.ink_bounds();
-    let ink_h = ib.height().max(0.0);
+    // lievisual 0.3 起移除逐字形墨迹盒：居中 / 顶对齐用字体级 cap 盒，底对齐用 logical 盒。
+    let cb = layout.cap_bounds();
+    let cap_h = cb.height().max(0.0);
     let x = match h {
         HAnchor::Left => anchor.x,
         HAnchor::Center => anchor.x - layout.width / 2.0,
     };
     let y = match v {
-        // 墨迹退化（空白文本 / 缺字形）时回退到排版盒，避免除零与跳变。
+        // cap 盒退化（空白文本 / 缺字形）时回退到排版盒，避免除零与跳变。
         VAnchor::InkMiddle => {
-            if ink_h > 0.0 {
-                anchor.y - (ib.min_y() + ink_h / 2.0)
+            if cap_h > 0.0 {
+                anchor.y - (cb.min_y() + cap_h / 2.0)
             } else {
                 anchor.y - layout.height / 2.0
             }
         }
-        VAnchor::InkTop => anchor.y - ib.min_y(),
+        VAnchor::InkTop => anchor.y - cb.min_y(),
         VAnchor::InkBottom => {
-            if ink_h > 0.0 {
-                anchor.y - ib.max_y()
+            let lb = layout.logical_bounds();
+            if lb.height() > 0.0 {
+                anchor.y - lb.max_y()
             } else {
                 anchor.y - layout.height
             }
@@ -116,20 +120,24 @@ fn line_metrics(layout: &TextLayout) -> LineMetrics {
         .first()
         .map(|l| l.metrics)
         .unwrap_or_else(|| LineMetrics {
-            ascent: 0.0,
-            descent: 0.0,
-            baseline: 0.0,
             line_height: 0.0,
+            baseline: 0.0,
+            block_min: 0.0,
+            block_max: 0.0,
+            content_block_min: 0.0,
+            content_block_max: 0.0,
+            cap_height: 0.0,
+            x_height: 0.0,
         })
 }
 
-/// 文本配套背景框：水平取排版盒（宽度稳定）、垂直取墨迹（紧贴可见字形）。
+/// 文本配套背景框：水平取排版盒（宽度稳定）、垂直取 logical 盒（含 ascent/descent）。
 ///
 /// `box_left_top` 为 [`place_text`] 的返回值（排版盒左上角）。
 fn text_bg_rect(layout: &TextLayout, box_left_top: Point, pad_x: f64, pad_y: f64) -> Rect {
-    let ib = layout.ink_bounds();
-    let (top, bottom) = if ib.height() > 0.0 {
-        (box_left_top.y + ib.min_y(), box_left_top.y + ib.max_y())
+    let lb = layout.logical_bounds();
+    let (top, bottom) = if lb.height() > 0.0 {
+        (box_left_top.y + lb.min_y(), box_left_top.y + lb.max_y())
     } else {
         (box_left_top.y, box_left_top.y + layout.height)
     };
@@ -1014,7 +1022,7 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
             constraint_layout.as_ref().unwrap_or(&type_layout),
         ]
         .iter()
-        .map(|l| line_metrics(l).ascent as f64)
+        .map(|l| line_metrics(l).ascent() as f64)
         .fold(0.0, f64::max);
         let max_descent = [
             &type_layout,
@@ -1022,7 +1030,7 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
             constraint_layout.as_ref().unwrap_or(&type_layout),
         ]
         .iter()
-        .map(|l| line_metrics(l).descent as f64)
+        .map(|l| line_metrics(l).descent() as f64)
         .fold(0.0, f64::max);
         let common_height = max_ascent + max_descent;
         // 虚拟行框顶部 = 单元格垂直居中 common_height；基线 = 顶部 + max_ascent。
@@ -1384,10 +1392,14 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
         let pad_x = 12.0;
         let pad_y = 6.0;
         let lw = layout.width + pad_x * 2.0;
-        // 色块高度按**墨迹**高度（而非含行距的排版盒），避免标签块过高、
-        // 且文字在块内居中。
-        let ink_h = layout.ink_bounds().height();
-        let lh = if ink_h > 0.0 { ink_h } else { layout.height } + pad_y * 2.0;
+        // 色块高度按 **logical 盒**（ascent + descent，而非含行距的排版盒），
+        // 避免标签块过高，且文字在块内居中。
+        let logical_h = layout.logical_bounds().height();
+        let lh = if logical_h > 0.0 {
+            logical_h
+        } else {
+            layout.height
+        } + pad_y * 2.0;
         let lx = theme::gitgraph::LEFT_MARGIN - lw - 16.0;
         let ly = y - lh / 2.0;
         let label_pos = place_text(
@@ -1955,7 +1967,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             // 两段在同一行，用基线对齐（方案一）：baseline_y 由该字号行的 ascent 决定。
             let (head, tail) = split_block_label(label);
             let base_layout = layout_text(&[RichSpan::new("M", base_ts.clone())], None);
-            let baseline_y = origin.y + line_metrics(&base_layout).ascent as f64;
+            let baseline_y = origin.y + line_metrics(&base_layout).ascent() as f64;
             let base_style = base_ts.clone();
             match tail {
                 Some(tail) => {
