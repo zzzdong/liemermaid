@@ -368,14 +368,14 @@ pub fn gradient_def(angle_deg: f64, stops: Vec<(f64, Color)>) -> LinearGradient 
     let half = 0.5;
     let start = lievisual::geometry::Point::new(0.5 - dx * half, 0.5 - dy * half);
     let end = lievisual::geometry::Point::new(0.5 + dx * half, 0.5 + dy * half);
-    LinearGradient {
+    LinearGradient::new(
         start,
         end,
-        stops: stops
+        stops
             .into_iter()
             .map(|(offset, color)| GradientStop { offset, color })
             .collect(),
-    }
+    )
 }
 
 // ---------------------------------------------------------------------------
