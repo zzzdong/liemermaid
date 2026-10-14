@@ -409,12 +409,14 @@ fn gitgraph_renders_commit_ids_branches_and_dashed_lanes() {
         500,
     );
     let text = strip_xml(&svg);
-    // commit id 标签（除 merge 外）。
-    assert!(text.contains("c0"), "应渲染 commit id c0");
-    assert!(text.contains("c1"), "应渲染 commit id c1");
-    assert!(text.contains("c2"), "应渲染 commit id c2");
-    assert!(text.contains("c3"), "应渲染 commit id c3");
-    assert!(text.contains("c5"), "应渲染 commit id c5");
+    // commit id 标签：官方无显式 id 时为 `<序号>-<7位十六进制>` 自动哈希
+    // （序号 = 提交序，merge 不占标签），此处断言同格式。
+    let re = |needle: &str| text.contains(needle);
+    assert!(re("0-"), "应渲染 0 号提交的哈希标签");
+    assert!(re("1-"), "应渲染 1 号提交的哈希标签");
+    assert!(re("2-"), "应渲染 2 号提交的哈希标签");
+    assert!(re("3-"), "应渲染 3 号提交的哈希标签");
+    assert!(re("5-"), "应渲染 5 号提交的哈希标签（merge 4 无标签）");
     // merge 无显式标签时不应出现默认 "merge develop" 标签（对齐官方）。
     assert!(
         !text.contains("merge develop"),

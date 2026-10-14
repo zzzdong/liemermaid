@@ -1107,6 +1107,26 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
     }
 }
 
+/// 官方 gitgraph 无显式 id 的提交标签为 `<序号>-<7位十六进制>`（每次渲染随机），
+/// 此处用确定性 FNV-1a 由节点 id 派生同格式标签（渲染可复现）。
+/// 例：`c0` → `0-28a41f8` 形态的 `<idx>-<7hex>`。
+fn auto_commit_label(node_id: &str) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in node_id.as_bytes() {
+        h ^= *b as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    // splitmix64 收尾混合：短 id（c0/c1/...）的 FNV 前缀相近，avalanche 后
+    // 低 28 位才分散得开（官方随机哈希观感）。
+    h ^= h >> 30;
+    h = h.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    h ^= h >> 27;
+    h = h.wrapping_mul(0x94d0_49bb_1331_11eb);
+    h ^= h >> 31;
+    let seq = node_id.trim_start_matches('c');
+    format!("{seq}-{:07x}", h & 0x0fff_ffff)
+}
+
 /// 绘制 gitgraph 图表（Hierarchy 家族）：提交点 + 分支线 + 合并曲线 + 标签。
 ///
 /// 几何由 engine `hierarchy_geometry` 产生：提交按声明序沿 x 推进、分支按容器序映射到 y 行；
@@ -1218,10 +1238,14 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
             });
         }
         // commit id 标签：显式 id 优先；merge 无显式 id 不显示（官方 merge 无 id 时无 commit-label）；
-        // 普通提交无 id 显示节点 id（官方为随机哈希，此处用 cN 近似）。
-        let commit_label = id
-            .clone()
-            .or_else(|| if *is_merge { None } else { Some(n.id.clone()) });
+        // 普通提交无 id 时显示官方同格式的 `<序号>-<7位十六进制>` 自动哈希标签。
+        let commit_label = id.clone().or_else(|| {
+            if *is_merge {
+                None
+            } else {
+                Some(auto_commit_label(&n.id))
+            }
+        });
         if let Some(text) = commit_label {
             let mut ts = theme::text_style(
                 theme::gitgraph::COMMIT_LABEL_FILL,
@@ -1993,59 +2017,66 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             z: -1,
         });
         if let Some(label) = &c.title {
-            // 分组块标签用基线对齐（方案一）：style baseline 设 Alphabetic，
-            // position.y 即基线 y，head/tail 同行共享同一条基线。
-            let base_ts = theme::text_style(
+            // 官方把标签拆成两段文本：`loop` + `[Each item]`（并列排布，非合并为
+            // `loop [Each item]`），且关键字置于左上角的 labelBox 小tab内
+            // （golden：`<polygon points="64,75 114,75 114,88 105.6,95 64,95"
+            // class="labelBox"/>`，fill #ECECFF / stroke #9370DB，右下角斜切）。
+            let (head, tail) = split_block_label(label);
+            let head_ts = theme::text_style(
                 theme::sequence::BLOCK_TEXT,
-                theme::FONT_SIZE * 0.85,
+                theme::FONT_SIZE,
                 TextAlign::Left,
                 TextBaseline::Alphabetic,
             );
-            let origin = Point::new(r.min_x() + 8.0, r.min_y() + 12.0);
-            // 官方把标签拆成两段文本：`loop` + `[Each item]`（并列排布，非合并为
-            // `loop [Each item]`），与 golden 的 `<text>` 集合保持一致。
-            // 两段在同一行，用基线对齐（方案一）：baseline_y 由该字号行的 ascent 决定。
-            let (head, tail) = split_block_label(label);
-            let base_layout = layout_text(&[RichSpan::new("M", base_ts.clone())], None);
-            let baseline_y = origin.y + line_metrics(&base_layout).ascent() as f64;
-            let base_style = base_ts.clone();
-            match tail {
-                Some(tail) => {
-                    let w =
-                        layout_text(&[RichSpan::new(head.clone(), base_ts.clone())], None).width;
-                    let head_ts = base_style.clone();
-                    let head_spans = vec![RichSpan::new(head, head_ts.clone())];
-                    let head_pos = Point::new(origin.x, baseline_y);
-                    items.push(SceneItem::Label {
-                        text: head_spans,
-                        position: head_pos,
-                        style: head_ts,
-                        anchor: ir::scenegraph::Anchor::Left,
-                        z: vir::Z_BACKGROUND,
-                    });
-                    let tail_ts = base_style;
-                    let tail_spans = vec![RichSpan::new(tail, tail_ts.clone())];
-                    let tail_pos = Point::new(origin.x + w + 4.0, baseline_y);
-                    items.push(SceneItem::Label {
-                        text: tail_spans,
-                        position: tail_pos,
-                        style: tail_ts,
-                        anchor: ir::scenegraph::Anchor::Left,
-                        z: vir::Z_BACKGROUND,
-                    });
-                }
-                None => {
-                    let ts = base_style;
-                    let spans = vec![RichSpan::new(head, ts.clone())];
-                    let position = Point::new(origin.x, baseline_y);
-                    items.push(SceneItem::Label {
-                        text: spans,
-                        position,
-                        style: ts,
-                        anchor: ir::scenegraph::Anchor::Left,
-                        z: vir::Z_BACKGROUND,
-                    })
-                }
+            let head_layout = layout_text(&[RichSpan::new(head.clone(), head_ts.clone())], None);
+            // tab 宽 = 关键字文本宽 + 左右各 10（官方 "loop" ≈30 宽 → tab 50）。
+            let tab_w = (head_layout.width + 20.0).max(40.0);
+            let tab_x = r.min_x();
+            let tab_y = r.min_y();
+            let tab_h = 20.0;
+            let chamfer_x = 8.4;
+            let chamfer_y = 7.0;
+            items.push(SceneItem::Shape {
+                geometry: ShapeGeometry::Polygon {
+                    points: vec![
+                        Point::new(tab_x, tab_y),
+                        Point::new(tab_x + tab_w, tab_y),
+                        Point::new(tab_x + tab_w, tab_y + tab_h - chamfer_y),
+                        Point::new(tab_x + tab_w - chamfer_x, tab_y + tab_h),
+                        Point::new(tab_x, tab_y + tab_h),
+                    ],
+                },
+                fill: Some(Fill::Solid(theme::sequence::BLOCK_FILL)),
+                stroke: Some(Stroke {
+                    color: theme::sequence::BLOCK_STROKE,
+                    width: 1.0,
+                    line_cap: LineCap::Butt,
+                    line_join: LineJoin::Miter,
+                    dash_array: Vec::new(),
+                    dash_offset: 0.0,
+                    miter_limit: 4.0,
+                }),
+                name: None,
+                z: -1,
+            });
+            // 关键字文本：tab 内水平居中，基线距 tab 顶 13（官方 text y=88 = tab 顶 75 + 13）。
+            let baseline_y = tab_y + 13.0;
+            items.push(SceneItem::Label {
+                text: vec![RichSpan::new(head, head_ts.clone())],
+                position: Point::new(tab_x + tab_w / 2.0, baseline_y),
+                style: head_ts.clone(),
+                anchor: ir::scenegraph::Anchor::Center,
+                z: vir::Z_BACKGROUND,
+            });
+            // 方括号描述段：紧随 tab 右侧（官方为独立 loopText 文本）。
+            if let Some(tail) = tail {
+                items.push(SceneItem::Label {
+                    text: vec![RichSpan::new(tail, head_ts.clone())],
+                    position: Point::new(tab_x + tab_w + 6.0, baseline_y),
+                    style: head_ts,
+                    anchor: ir::scenegraph::Anchor::Left,
+                    z: vir::Z_BACKGROUND,
+                });
             }
         }
     }
