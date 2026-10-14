@@ -314,12 +314,33 @@ fn arrow_element(
         let p2 = Point::new(tip.x - px * size * 0.7, tip.y - py * size * 0.7);
         vec![SceneNode::new(Element::polygon(vec![front, p1, back, p2], f.clone())).with_z(z)]
     };
+    // 开口箭头（class 依赖/实现）：官方 marker `M 18,7 L9,13 L14,7 L9,1 Z` 的
+    // 等价比——前端尖点 + 上下两撇 + 内凹缺口（缺口 recessed 0.5×size）。
+    let open_arrow = |f: &FillStrokeStyle| -> Vec<SceneNode> {
+        let barb_top = Point::new(
+            tip.x - ux * size * 1.125 + px * size * 0.75,
+            tip.y - uy * size * 1.125 + py * size * 0.75,
+        );
+        let barb_bot = Point::new(
+            tip.x - ux * size * 1.125 - px * size * 0.75,
+            tip.y - uy * size * 1.125 - py * size * 0.75,
+        );
+        let notch = Point::new(tip.x - ux * size * 0.5, tip.y - uy * size * 0.5);
+        vec![
+            SceneNode::new(Element::polygon(
+                vec![tip, barb_top, notch, barb_bot],
+                f.clone(),
+            ))
+            .with_z(z),
+        ]
+    };
     match ends {
         // 官方 flowchart / state 箭头为**实心**（`.arrowheadPath{fill:#333333}`，
         // marker path `M 0 0 L 10 5 L 0 10 z` 闭合填充）；class 继承的空心三角
         // 才是 `fill:none`。
         EdgeEnds::Arrow | EdgeEnds::TriangleFilled => out.extend(triangle(&solid)),
         EdgeEnds::Triangle => out.extend(triangle(&hollow)),
+        EdgeEnds::ArrowOpen => out.extend(open_arrow(&solid)),
         EdgeEnds::DiamondFilled => out.extend(diamond(&solid)),
         EdgeEnds::DiamondHollow => out.extend(diamond(&hollow)),
         EdgeEnds::Circle => {

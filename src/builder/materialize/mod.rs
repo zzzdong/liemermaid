@@ -360,10 +360,28 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
                 items.push(SceneItem::Shape {
                     geometry,
                     fill: Some(fill),
-                    stroke: Some(stroke),
+                    stroke: Some(stroke.clone()),
                     name: None,
                     z: vir::Z_BACKGROUND,
                 });
+                // 官方 subroutine（`[[X]]`）= 内矩形 + 左右各一条外竖线
+                // （golden polygon 同时勾廓内外两个矩形，外侧各外扩 8px）。
+                if n.shape == ShapeKind::Subroutine {
+                    let half_w = n.size.width / 2.0;
+                    let half_h = n.size.height / 2.0;
+                    for sx in [-1.0, 1.0] {
+                        let x = n.center.x + sx * half_w;
+                        items.push(SceneItem::Edge {
+                            path: ir::geograph::line_route(&[
+                                Point::new(x, n.center.y - half_h),
+                                Point::new(x, n.center.y + half_h),
+                            ]),
+                            stroke: stroke.clone(),
+                            ends: (EdgeEnds::None, EdgeEnds::None),
+                            z: vir::Z_BACKGROUND,
+                        });
+                    }
+                }
             }
         }
 
@@ -2527,13 +2545,19 @@ fn edge_ends(kind: EdgeKind, arrow: ArrowSpec) -> (EdgeEnds, EdgeEnds) {
         EdgeKind::ClassComposition => (EdgeEnds::DiamondFilled, EdgeEnds::None),
         EdgeKind::ClassAggregation => (EdgeEnds::DiamondHollow, EdgeEnds::None),
         EdgeKind::ClassAssociation => (EdgeEnds::None, EdgeEnds::TriangleFilled),
-        EdgeKind::ClassDependency => (EdgeEnds::None, EdgeEnds::TriangleFilled),
+        EdgeKind::ClassDependency | EdgeKind::ClassRealization => {
+            // 官方 class 依赖/实现用开口箭头（`classDiagram-dependencyEnd`，
+            // marker `M 18,7 L9,13 L14,7 L9,1 Z` 内凹 chevron）。
+            (EdgeEnds::None, EdgeEnds::ArrowOpen)
+        }
         _ => (map_ends(arrow.start), map_ends(arrow.end)),
     }
 }
 
 /// 平行四边形 / 梯形的斜移量（官方 golden 实测固定值 19.5px，不随宽度缩放）。
 const PARALLELOGRAM_SKEW: f64 = 19.5;
+/// subroutine 双侧竖线与内矩形的间距（官方 golden：内矩形左右各外扩 8px）。
+const SUBROUTINE_BAR_GAP: f64 = 8.0;
 
 /// 据 ShapeKind + center + size 生成抽象几何描述（paint 据此选 Element 变体）。
 fn shape_to_geometry(shape: ShapeKind, center: Point, size: Size) -> ShapeGeometry {
@@ -2544,15 +2568,20 @@ fn shape_to_geometry(shape: ShapeKind, center: Point, size: Size) -> ShapeGeomet
         ShapeKind::Rectangle | ShapeKind::Bar | ShapeKind::QuadrantCell => {
             ShapeGeometry::Rect { at: tl, size }
         }
-        ShapeKind::Rounded | ShapeKind::Subroutine => ShapeGeometry::RoundedRect {
+        ShapeKind::Rounded => ShapeGeometry::RoundedRect {
             at: tl,
             size,
             // 官方默认节点圆角 radius=5（theme::NODE_RADIUS）。
-            radius: if shape == ShapeKind::Subroutine {
-                2.0
-            } else {
-                theme::NODE_RADIUS
-            },
+            radius: theme::NODE_RADIUS,
+        },
+        // 官方 subroutine（`[[X]]`）：内矩形（测量宽 - 16，即左右各内缩 8px），
+        // 两条外竖线由节点绘制循环补画（见 emit 处的 Subroutine 分支）。
+        ShapeKind::Subroutine => ShapeGeometry::Rect {
+            at: Point::new(tl.x + SUBROUTINE_BAR_GAP, tl.y),
+            size: Size::new(
+                (size.width - 2.0 * SUBROUTINE_BAR_GAP).max(0.0),
+                size.height,
+            ),
         },
         ShapeKind::Stadium => ShapeGeometry::Stadium { at: tl, size },
         ShapeKind::Diamond => ShapeGeometry::Polygon {

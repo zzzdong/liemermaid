@@ -147,7 +147,8 @@ fn each_shape_kind_produces_distinct_geometry_variant() {
         (ShapeKind::Rectangle, |g| matches!(g, Rect { .. })),
         (ShapeKind::Rounded, |g| matches!(g, RoundedRect { .. })),
         (ShapeKind::Stadium, |g| matches!(g, Stadium { .. })),
-        (ShapeKind::Subroutine, |g| matches!(g, RoundedRect { .. })),
+        // subroutine：官方为内矩形（左右各内缩 8px，外侧竖线另画）。
+        (ShapeKind::Subroutine, |g| matches!(g, Rect { .. })),
         (ShapeKind::Diamond, |g| matches!(g, Polygon { .. })),
         (ShapeKind::Hexagon, |g| matches!(g, Polygon { .. })),
         (ShapeKind::Circle, |g| matches!(g, Ellipse { .. })),

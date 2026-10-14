@@ -97,6 +97,9 @@ pub enum EdgeEnds {
     MultiCross,
     /// 空心三角（class 继承 `A <|-- B`）。
     Triangle,
+    /// 开口箭头（class 依赖 `-->` / 实现 `..>`）：官方 marker
+    /// `M 18,7 L9,13 L14,7 L9,1 Z`——内凹 chevron，视觉为开口箭头。
+    ArrowOpen,
     /// 实心三角（class 关联 `-->` / 依赖 `..>`）。
     TriangleFilled,
     /// 实心菱形（class 组合 `*--`）。
