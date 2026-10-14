@@ -270,35 +270,27 @@ fn layered_centers(ug: &ir::Unigraph, sizes: &HashMap<NodeId, Size>) -> HashMap<
 
 /// Linear 家族（timeline 等）的坐标分配：所有节点沿主轴单行排布并居中。
 /// LR（默认）：水平一行，y=0（时间轴）；TD：垂直一列，x=0。
+///
+/// 列距取官方 timeline 实测 200（块宽 190 + 列间隙 10），与文本宽度解耦——
+/// 官方每列块宽固定，列心等距分布。
 fn linear_centers(ug: &ir::Unigraph, sizes: &HashMap<NodeId, Size>) -> HashMap<NodeId, Point> {
     let horizontal = matches!(ug.direction, Direction::LR | Direction::RL);
-    let mut total = 0.0f64;
-    for n in &ug.nodes {
-        let size = sizes
-            .get(&n.id)
-            .cloned()
-            .unwrap_or(Size::new(theme::NODE_MIN_W, theme::NODE_MIN_H));
-        let main = if horizontal { size.width } else { size.height };
-        total += main + NODE_GAP;
-    }
-    total = total.max(NODE_GAP) - NODE_GAP;
+    let n = ug.nodes.len().max(1);
+    let pitch = theme::timeline::COL_PITCH;
+    let total = pitch * (n as f64 - 1.0);
     let mut cursor = -total / 2.0;
     let mut centers: HashMap<NodeId, Point> = HashMap::new();
-    for n in &ug.nodes {
-        let size = sizes
-            .get(&n.id)
-            .cloned()
-            .unwrap_or(Size::new(theme::NODE_MIN_W, theme::NODE_MIN_H));
-        let main = if horizontal { size.width } else { size.height };
-        let coord = cursor + main / 2.0;
+    for node in &ug.nodes {
+        let coord = cursor;
         let (x, y) = if horizontal {
             (coord, 0.0)
         } else {
             (0.0, coord)
         };
-        centers.insert(n.id.clone(), Point::new(x, y));
-        cursor += main + NODE_GAP;
+        centers.insert(node.id.clone(), Point::new(x, y));
+        cursor += pitch;
     }
+    let _ = sizes;
     centers
 }
 

@@ -279,6 +279,57 @@ fn timeline_without_title_renders() {
     assert!(text.contains("X"), "应渲染事件 X");
 }
 
+/// timeline 结构对齐官方 golden `timeline__basic`（实测）：
+/// - period 块（`events[0]`，如 1900）在主轴**上方**，event 块在轴下方；
+/// - 轴上**无圆点**（官方无 circle）；
+/// - 每列一条 2px 黑虚线（dash 5,5）连接 period 与 event；
+/// - 块为顶角圆、底角直角的彩色多边形。
+#[test]
+fn timeline_matches_official_structure() {
+    let svg = render_to_svg(
+        "timeline\ntitle H\nsection A\n1900 : Born\nsection B\n1950 : Retire",
+        800,
+        600,
+    );
+    // 轴上无圆点：官方 golden 无 circle/ellipse。
+    assert!(
+        !svg.contains("<ellipse") && !svg.contains("<circle"),
+        "官方 timeline 轴上无圆点: {svg}"
+    );
+    // 连接虚线：2px、dash 5,5、黑色。
+    assert!(
+        svg.contains(r##"stroke-width="2.00""##)
+            && svg.contains(r##"stroke-dasharray="5.00,5.00""##),
+        "应有 2px dash 5,5 的连接虚线"
+    );
+    // 主轴 4px 黑色。
+    assert!(
+        svg.contains(r##"stroke-width="4.00""##),
+        "主轴应为 4px（官方 stroke-width=4）"
+    );
+    // period 1900 的 y 应在主轴（y=0 附近，transform 平移后取相对坐标）上方，
+    // event Born 在下方：用文本 y 坐标比较（1900 的 y < Born 的 y）。
+    let y_of = |needle: &str| -> f64 {
+        let tag = format!(">{needle}</text>");
+        let idx = svg.find(&tag).expect(needle);
+        // 向前找该 text 元素的起始标签，再在其属性区内找 y 属性
+        // （不能全局 rfind "y=\""——`font-family="..."` 里也含 `y="`）。
+        let head = &svg[..idx];
+        let start = head.rfind("<text ").expect("text start");
+        let attrs = &head[start..];
+        let ypos = attrs.find(" y=\"").expect("y attr");
+        let rest = &attrs[ypos + 4..];
+        let end = rest.find('"').unwrap();
+        rest[..end].parse().unwrap()
+    };
+    let y_period = y_of("1900");
+    let y_event = y_of("Born");
+    assert!(
+        y_period < y_event,
+        "period 1900 (y={y_period}) 应在 event Born (y={y_event}) 上方"
+    );
+}
+
 // ============================================================
 // Sequence 图表测试（新管线 Sequence 家族）
 // ============================================================

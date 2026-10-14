@@ -2097,11 +2097,18 @@ fn split_block_label(label: &str) -> (String, Option<String>) {
     }
 }
 
-/// 绘制 timeline 图表（Linear 家族）：标题 + 时间轴 + 时间点 + section 块 + 事件块 + 连线。
+/// 绘制 timeline 图表（Linear 家族）：标题 + 时间轴 + section 块 + period 块 +
+/// 事件块 + 连接虚线。
 ///
 /// 坐标约定（由 engine 的 `linear_centers` 产生）：LR（默认）时各 section 节点中心
 /// 在同一水平线（时间轴）上、x 递增；TD 时在同一垂直线（时间轴）上、y 递增。
-/// section 块在轴上方 / 左侧，事件块在轴下方 / 右侧。
+///
+/// 结构对齐官方 golden `timeline__basic`（实测）：
+/// - 每列自上而下：section 块（轴上方 SECTION_DY）→ period 块（`events[0]`，
+///   轴上方 PERIOD_DY）→ 主轴 → event 块（`events[1..]`，轴下方 EVENT_DY 起堆叠）；
+/// - 主轴 4px 黑实线 + 末端箭头，**轴上无圆点**；
+/// - 每列一条 2px 黑虚线（dash 5,5）从 period 块底穿过主轴延伸到末个 event 块下方；
+/// - 标题 `4ex` 粗体，左对齐于主轴起点上方。
 fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
     let sections: Vec<&GGNode> = gg
         .nodes
@@ -2115,16 +2122,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
 
     let axis_stroke = Stroke {
         color: theme::timeline::LINE,
-        width: theme::timeline::LINE_WIDTH,
-        line_cap: LineCap::Butt,
-        line_join: LineJoin::Miter,
-        dash_array: Vec::new(),
-        dash_offset: 0.0,
-        miter_limit: 4.0,
-    };
-    let dot_stroke = Stroke {
-        color: theme::timeline::LINE,
-        width: 1.0,
+        width: theme::timeline::AXIS_WIDTH,
         line_cap: LineCap::Butt,
         line_join: LineJoin::Miter,
         dash_array: Vec::new(),
@@ -2153,42 +2151,46 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
         max_a = max_a.max(c);
     }
     let span_mid = (min_a + max_a) / 2.0;
+    let _ = span_mid;
 
-    // 标题（时间轴上方居中）。
+    // 标题（官方 `<text x="轴起点" y="20" font-size="4ex" font-weight="bold">`）：
+    // 左对齐于主轴起点，基线在 section 块顶上方 30px。
     if let Some(title) = &gg.title
         && !title.is_empty()
     {
         let mut ts = theme::text_style(
             theme::timeline::TITLE,
-            22.0,
-            TextAlign::Center,
-            TextBaseline::Top,
+            theme::timeline::TITLE_SIZE,
+            TextAlign::Left,
+            TextBaseline::Alphabetic,
         );
-        // 标题位于 section 标题块（轴上方最远处）之上。
-        let title_off = theme::timeline::SECTION_DY + theme::timeline::BLOCK_H / 2.0 + 40.0;
+        // section 块顶 = 轴 - SECTION_DY - BLOCK_H/2；官方标题基线在块顶上方 30px，
+        // 4ex（64px）字号的 ink 顶约在基线上 48px 处 → ink 顶 = 块顶 - 78。
+        let sec_top_off = theme::timeline::SECTION_DY + theme::timeline::BLOCK_H / 2.0 + 78.0;
+        let axis_start_off = theme::timeline::BLOCK_W / 2.0 + theme::timeline::AXIS_HEAD;
         let pos = if horizontal {
-            Point::new(span_mid, axis_c - title_off)
+            Point::new(min_a - axis_start_off, axis_c - sec_top_off)
         } else {
-            Point::new(axis_c - title_off, span_mid)
+            Point::new(axis_c - sec_top_off, min_a - axis_start_off)
         };
         let spans = vec![RichSpan::new(title.clone(), ts.clone())];
         let layout = layout_text(&spans, None);
-        let position = place_text(&layout, &mut ts, pos, HAnchor::Center, VAnchor::InkTop);
+        let position = place_text(&layout, &mut ts, pos, HAnchor::Left, VAnchor::InkTop);
         items.push(SceneItem::Label {
             text: spans,
             position,
             style: ts,
-            anchor: ir::scenegraph::Anchor::Center,
+            anchor: ir::scenegraph::Anchor::Left,
             z: vir::Z_SERIES,
         });
     }
 
-    // 主轴线（带末端箭头）。
+    // 主轴线（带末端箭头；官方轴上无圆点）。
     let arr = theme::timeline::ARROW_SIZE;
     if horizontal {
         let y = axis_c;
-        let x0 = min_a - theme::timeline::BLOCK_W / 2.0 - 20.0;
-        let x1 = max_a + theme::timeline::BLOCK_W / 2.0 + 20.0;
+        let x0 = min_a - theme::timeline::BLOCK_W / 2.0 - theme::timeline::AXIS_HEAD;
+        let x1 = max_a + theme::timeline::BLOCK_W / 2.0 + theme::timeline::AXIS_TAIL;
         let tip = x1 - arr * 1.5;
         items.push(SceneItem::Edge {
             path: ir::geograph::line_route(&[Point::new(x0, y), Point::new(tip, y)]),
@@ -2216,8 +2218,8 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
         });
     } else {
         let x = axis_c;
-        let y0 = min_a - theme::timeline::BLOCK_W / 2.0 - 20.0;
-        let y1 = max_a + theme::timeline::BLOCK_W / 2.0 + 20.0;
+        let y0 = min_a - theme::timeline::BLOCK_W / 2.0 - theme::timeline::AXIS_HEAD;
+        let y1 = max_a + theme::timeline::BLOCK_W / 2.0 + theme::timeline::AXIS_TAIL;
         let tip = y1 - arr * 1.5;
         items.push(SceneItem::Edge {
             path: ir::geograph::line_route(&[Point::new(x, y0), Point::new(x, tip)]),
@@ -2245,9 +2247,10 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
         });
     }
 
-    // 每个 section 列：时间点 + section 块（轴上方）+ 事件块（轴下方）+ 连线。
+    // 每个 section 列：section 块 + period 块（轴上方）+ event 块（轴下方）+ 连接虚线。
     for (idx, s) in sections.iter().enumerate() {
-        let color = theme::timeline::BLOCK_COLORS[idx % theme::timeline::BLOCK_COLORS.len()];
+        let color = theme::timeline::block_color(idx);
+        let text_color = theme::timeline::block_text_color(idx);
         let (cx, cy) = if horizontal {
             (s.center.x, axis_c)
         } else {
@@ -2257,80 +2260,179 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             continue;
         };
         let label_text = s.label.as_ref().map(|l| l.text.clone()).unwrap_or_default();
-        let dot = Point::new(cx, cy);
 
-        // 时间点（实心圆）。
-        items.push(SceneItem::Shape {
-            geometry: ShapeGeometry::Ellipse {
-                center: dot,
-                rx: theme::timeline::DOT_R,
-                ry: theme::timeline::DOT_R,
-            },
-            fill: Some(Fill::Solid(theme::timeline::DOT)),
-            stroke: Some(dot_stroke.clone()),
-            name: None,
-            z: vir::Z_SUBGRAPH,
-        });
-
-        // section 标题块（年份），在轴上方。
+        // section 块（轴上方）。
         let sec_center = if horizontal {
             Point::new(cx, cy - theme::timeline::SECTION_DY)
         } else {
             Point::new(cx - theme::timeline::SECTION_DY, cy)
         };
-        emit_timeline_block(items, sec_center, color, &label_text, 14.0);
-        emit_timeline_connector(items, dot, sec_center);
+        emit_timeline_block(
+            items,
+            sec_center,
+            color,
+            text_color,
+            idx,
+            &label_text,
+            theme::timeline::BLOCK_H,
+        );
 
-        // 事件块全部位于轴下方，从 EVENT_DY 开始垂直堆叠。
-        for (j, ev) in events.iter().enumerate() {
+        // period 块（events[0]，轴上方近轴处）。
+        let mut last_block_bottom = if horizontal {
+            sec_center.y
+        } else {
+            sec_center.x
+        };
+        if let Some(period) = events.first() {
+            let per_center = if horizontal {
+                Point::new(cx, cy - theme::timeline::PERIOD_DY)
+            } else {
+                Point::new(cx - theme::timeline::PERIOD_DY, cy)
+            };
+            emit_timeline_block(
+                items,
+                per_center,
+                color,
+                text_color,
+                idx,
+                period,
+                theme::timeline::BLOCK_H,
+            );
+            last_block_bottom = if horizontal {
+                per_center.y
+            } else {
+                per_center.x
+            };
+        }
+
+        // event 块（events[1..]，轴下方垂直堆叠）。
+        let mut last_event_bottom: Option<f64> = None;
+        for (j, ev) in events.iter().skip(1).enumerate() {
             let off = theme::timeline::EVENT_DY
-                + j as f64 * (theme::timeline::BLOCK_H + theme::timeline::EVENT_GAP);
+                + j as f64 * (theme::timeline::EVENT_H + theme::timeline::EVENT_GAP);
             let ev_center = if horizontal {
                 Point::new(cx, cy + off)
             } else {
                 Point::new(cx + off, cy)
             };
-            emit_timeline_block(items, ev_center, color, ev, 13.0);
-            emit_timeline_connector(items, dot, ev_center);
+            emit_timeline_block(
+                items,
+                ev_center,
+                color,
+                text_color,
+                idx,
+                ev,
+                theme::timeline::EVENT_H,
+            );
+            last_event_bottom = Some(if horizontal { ev_center.y } else { ev_center.x });
+        }
+
+        // 连接虚线：period 块底 → 末个 event 块底 + TAIL（穿过主轴），带箭头。
+        if let Some(ev_bottom) = last_event_bottom {
+            let (from, to) = if horizontal {
+                (
+                    Point::new(cx, last_block_bottom + theme::timeline::BLOCK_H / 2.0),
+                    Point::new(
+                        cx,
+                        ev_bottom
+                            + theme::timeline::EVENT_H / 2.0
+                            + theme::timeline::CONNECTOR_TAIL,
+                    ),
+                )
+            } else {
+                (
+                    Point::new(last_block_bottom + theme::timeline::BLOCK_H / 2.0, cy),
+                    Point::new(
+                        ev_bottom
+                            + theme::timeline::EVENT_H / 2.0
+                            + theme::timeline::CONNECTOR_TAIL,
+                        cy,
+                    ),
+                )
+            };
+            let stroke = Stroke {
+                color: theme::timeline::LINE,
+                width: theme::timeline::CONNECTOR_W,
+                line_cap: LineCap::Butt,
+                line_join: LineJoin::Miter,
+                dash_array: vec![5.0, 5.0],
+                dash_offset: 0.0,
+                miter_limit: 4.0,
+            };
+            items.push(SceneItem::Edge {
+                path: ir::geograph::line_route(&[from, to]),
+                stroke,
+                // 官方连接线箭头在**末端**（marker-end，位于 event 块下方）。
+                ends: (EdgeEnds::None, EdgeEnds::Arrow),
+                z: vir::Z_GRID,
+            });
         }
     }
 }
 
-/// 画一个 timeline 任务块（section / event）：圆角彩色矩形 + 居中文本。
+/// 画一个 timeline 任务块（section / period / event）：**顶角圆**、底角直角的彩色
+/// 矩形 + 底部 3px 互补色线 + 居中文本。
+///
+/// 官方块路径 `M0 65.8 v-55.8 q0,-5,5,-5 h180 q5,0,5,5 v65.8 H0 Z` 仅上角倒圆；
+/// paint 层会把 Path 拍平为多边形，故此处直接用采样圆弧构造多边形。
 fn emit_timeline_block(
     items: &mut Vec<SceneItem>,
     center: Point,
     color: Color,
+    text_color: Color,
+    idx: usize,
     text: &str,
-    font_size: f64,
+    height: f64,
 ) {
-    let at = Point::new(
-        center.x - theme::timeline::BLOCK_W / 2.0,
-        center.y - theme::timeline::BLOCK_H / 2.0,
-    );
-    let stroke = Stroke {
-        color: theme::timeline::BLOCK_STROKE,
-        width: theme::timeline::BLOCK_STROKE_W,
-        line_cap: LineCap::Butt,
-        line_join: LineJoin::Miter,
-        dash_array: Vec::new(),
-        dash_offset: 0.0,
-        miter_limit: 4.0,
-    };
+    let w = theme::timeline::BLOCK_W;
+    let at = Point::new(center.x - w / 2.0, center.y - height / 2.0);
+    // 顶角圆（r=5）的采样多边形：左下 → 左上 → 顶左弧 → 顶右弧 → 右下 → 回闭。
+    // 弧心分别在 (at.x+r, at.y+r) 与 (at.x+w-r, at.y+r)：
+    // 左弧角度 180°→270°（从左侧壁转到顶壁），右弧 270°→360°。
+    let r = theme::timeline::BLOCK_RX.min(height / 2.0).min(w / 2.0);
+    let steps = 4;
+    let mut pts = vec![Point::new(at.x, at.y + height)];
+    for i in 0..=steps {
+        let t = std::f64::consts::PI * (1.0 + i as f64 / steps as f64); // 180° → 270°
+        pts.push(Point::new(at.x + r + r * t.cos(), at.y + r + r * t.sin()));
+    }
+    for i in 0..=steps {
+        let t = std::f64::consts::PI * (1.5 + i as f64 / steps as f64); // 270° → 360°
+        pts.push(Point::new(
+            at.x + w - r + r * t.cos(),
+            at.y + r + r * t.sin(),
+        ));
+    }
+    pts.push(Point::new(at.x + w, at.y + height));
+    pts.push(Point::new(at.x, at.y + height));
     items.push(SceneItem::Shape {
-        geometry: ShapeGeometry::RoundedRect {
-            at,
-            size: Size::new(theme::timeline::BLOCK_W, theme::timeline::BLOCK_H),
-            radius: theme::timeline::BLOCK_RX,
-        },
+        geometry: ShapeGeometry::Polygon { points: pts },
         fill: Some(Fill::Solid(color)),
-        stroke: Some(stroke),
+        stroke: None,
         name: None,
         z: vir::Z_SERIES,
     });
+    // 块底线（官方 `.section-N line{stroke-width:3}`，互补色提亮）。
+    items.push(SceneItem::Edge {
+        path: ir::geograph::line_route(&[
+            Point::new(at.x, at.y + height),
+            Point::new(at.x + w, at.y + height),
+        ]),
+        stroke: Stroke {
+            color: theme::timeline::block_line_color(idx),
+            width: theme::timeline::BLOCK_LINE_W,
+            line_cap: LineCap::Butt,
+            line_join: LineJoin::Miter,
+            dash_array: Vec::new(),
+            dash_offset: 0.0,
+            miter_limit: 4.0,
+        },
+        ends: (EdgeEnds::None, EdgeEnds::None),
+        z: vir::Z_SERIES,
+    });
     let mut ts = theme::text_style(
-        theme::timeline::BLOCK_TEXT,
-        font_size,
+        text_color,
+        theme::timeline::BLOCK_TEXT_SIZE,
         TextAlign::Center,
         TextBaseline::Middle,
     );
@@ -2349,40 +2451,6 @@ fn emit_timeline_block(
         style: ts,
         anchor: ir::scenegraph::Anchor::Center,
         z: vir::Z_SERIES,
-    });
-}
-
-/// 时间轴上的点 → 任务块的连接线（虚线，无箭头）。
-fn emit_timeline_connector(items: &mut Vec<SceneItem>, dot: Point, block: Point) {
-    // 同列垂直连（LR）或同行水平连（TD），由 dot 与 block 的坐标关系推断。
-    let vert = (dot.x - block.x).abs() < 1e-6;
-    let (from, to) = if vert {
-        let dir = if block.y < dot.y { -1.0 } else { 1.0 };
-        (
-            Point::new(dot.x, dot.y + dir * theme::timeline::DOT_R),
-            Point::new(block.x, block.y - dir * theme::timeline::BLOCK_H / 2.0),
-        )
-    } else {
-        let dir = if block.x < dot.x { -1.0 } else { 1.0 };
-        (
-            Point::new(dot.x + dir * theme::timeline::DOT_R, dot.y),
-            Point::new(block.x - dir * theme::timeline::BLOCK_W / 2.0, block.y),
-        )
-    };
-    let stroke = Stroke {
-        color: theme::timeline::LINE,
-        width: theme::timeline::CONNECTOR_W,
-        line_cap: LineCap::Butt,
-        line_join: LineJoin::Miter,
-        dash_array: vec![6.0, 4.0],
-        dash_offset: 0.0,
-        miter_limit: 4.0,
-    };
-    items.push(SceneItem::Edge {
-        path: ir::geograph::line_route(&[from, to]),
-        stroke,
-        ends: (EdgeEnds::None, EdgeEnds::None),
-        z: vir::Z_GRID,
     });
 }
 

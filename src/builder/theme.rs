@@ -150,54 +150,106 @@ pub mod er {
     pub const EDGE: Color = super::EDGE_COLOR;
 }
 
-// ==================== Timeline（对齐 mermaid 默认主题）====================
-// 官方时间线配色：轴线/节点 lineColor=#333，任务块调色板循环，文字 #333。
+// ==================== Timeline（对齐官方 timeline golden 实测）====================
+// 官方 golden `timeline__basic` 实测：
+// - 列距 200（块宽 190 + 列间隙 10）；section / task（period）块 190×65.8，
+//   仅**顶角**圆（r=5），底边另有 3px 互补色线；event 块 190×50（更矮）；
+// - 主轴 4px 黑色实线 + 末端箭头，**轴上无圆点**；
+// - 每列一条 2px 黑虚线（dash 5,5）从 task 块底穿过主轴延伸到 event 块下方；
+// - 标题 `font-size:4ex;font-weight:bold` 左对齐于轴起点上方；
+// - 配色 = 官方 cScale 调色板（section i → 第 i 项），白字仅紫罗兰系（0/3）。
 pub mod timeline {
     use super::Color;
-    pub const LINE: Color = Color::new(51, 51, 51, 255); // #333333 时间线+轴线
-    pub const DOT: Color = Color::new(51, 51, 51, 255); // #333333 时间线圆点
-    pub const BLOCK_STROKE: Color = Color::new(51, 51, 51, 255); // #333333 任务块描边
-    pub const BLOCK_TEXT: Color = Color::new(51, 51, 51, 255); // #333333 任务块文字
-    pub const TEXT: Color = super::TEXT_COLOR;
-    pub const TITLE: Color = Color::new(51, 51, 51, 255); // #333333
 
-    // 任务块填充调色板（官方 timeline 循环配色，蓝/黄/绿协调系）
-    pub const BLOCK_COLORS: [Color; 9] = [
-        Color::new(147, 112, 219, 255), // #9370DB 紫
-        Color::new(255, 243, 176, 255), // #FFF3B0 黄
-        Color::new(144, 238, 144, 255), // #90EE90 绿
-        Color::new(173, 216, 230, 255), // #ADD8E6 浅蓝
-        Color::new(255, 218, 185, 255), // #FFDAB9 桃色
-        Color::new(221, 160, 221, 255), // #DDA0DD 梅红
-        Color::new(240, 255, 240, 255), // #F0FFF0 蜜瓜绿
-        Color::new(255, 228, 196, 255), // #FFE4C4 鹿皮色
-        Color::new(230, 230, 250, 255), // #E6E6FA 薰衣草
+    /// 主轴 / 连接虚线颜色（官方黑色）。
+    pub const LINE: Color = Color::new(0, 0, 0, 255);
+    pub const AXIS_WIDTH: f64 = 4.0;
+    pub const CONNECTOR_W: f64 = 2.0;
+    pub const ARROW_SIZE: f64 = 10.0;
+    /// 主轴左端 / 右端超出首 / 末列中心的距离。
+    pub const AXIS_HEAD: f64 = 50.0;
+    pub const AXIS_TAIL: f64 = 250.0;
+    /// 连接虚线末端越过最后一个 event 块底的距离。
+    pub const CONNECTOR_TAIL: f64 = 60.0;
+    /// 块底线宽度（官方 `.section-N line{stroke-width:3}`）。
+    pub const BLOCK_LINE_W: f64 = 3.0;
+    /// 标题（官方 `4ex` 粗体，黑色）。
+    pub const TITLE: Color = Color::new(0, 0, 0, 255);
+    pub const TITLE_SIZE: f64 = 64.0;
+    /// 块文本字号（官方默认 16px）。
+    pub const BLOCK_TEXT_SIZE: f64 = 16.0;
+
+    // 官方 cScale 调色板（section i → 第 i 项，HSL 转 RGB）。
+    pub const BLOCK_COLORS: [Color; 12] = [
+        Color::new(134, 134, 255, 255), // hsl(240,100%,76.3%) #8686FF
+        Color::new(255, 255, 120, 255), // hsl(60,100%,73.5%)  #FFFF78
+        Color::new(215, 255, 134, 255), // hsl(80,100%,76.3%)  #D7FF86
+        Color::new(194, 134, 255, 255), // hsl(270,100%,76.3%) #C286FF
+        Color::new(255, 134, 255, 255), // hsl(300,100%,76.3%) #FF86FF
+        Color::new(255, 134, 194, 255), // hsl(330,100%,76.3%) #FF86C2
+        Color::new(255, 134, 134, 255), // hsl(0,100%,76.3%)   #FF8686
+        Color::new(255, 194, 134, 255), // hsl(30,100%,76.3%)  #FFC286
+        Color::new(194, 255, 134, 255), // hsl(90,100%,76.3%)  #C2FF86
+        Color::new(134, 255, 194, 255), // hsl(150,100%,76.3%) #86FFC2
+        Color::new(134, 255, 255, 255), // hsl(180,100%,76.3%) #86FFFF
+        Color::new(134, 194, 255, 255), // hsl(210,100%,76.3%) #86C2FF
     ];
+    /// 官方块底线颜色（section 色相的**互补色**提亮，`.section-N line`）。
+    pub const BLOCK_LINE_COLORS: [Color; 12] = [
+        Color::new(255, 255, 185, 255), // hsl(60,100%,86.3%)  #FFFFB9
+        Color::new(171, 171, 255, 255), // hsl(240,100%,83.5%) #ABABFF
+        Color::new(208, 185, 255, 255), // hsl(260,100%,86.3%) #D0B9FF
+        Color::new(220, 255, 185, 255), // hsl(90,100%,86.3%)  #DCFFB9
+        Color::new(185, 255, 185, 255), // hsl(120,100%,86.3%) #B9FFB9
+        Color::new(185, 255, 220, 255), // hsl(150,100%,86.3%) #B9FFDC
+        Color::new(185, 255, 255, 255), // hsl(180,100%,86.3%) #B9FFFF
+        Color::new(185, 220, 255, 255), // hsl(210,100%,86.3%) #B9DCFF
+        Color::new(220, 185, 255, 255), // hsl(270,100%,86.3%) #DCB9FF
+        Color::new(255, 185, 220, 255), // hsl(330,100%,86.3%) #FFB9DC
+        Color::new(255, 185, 185, 255), // hsl(0,100%,86.3%)   #FFB9B9
+        Color::new(255, 220, 185, 255), // hsl(30,100%,86.3%)  #FFDCB9
+    ];
+    /// 白字的调色板下标（官方 `.section--1/.section-2 text{fill:#ffffff}`）。
+    pub const BLOCK_TEXT_WHITE: [usize; 2] = [0, 3];
+    pub const TEXT_WHITE: Color = Color::new(255, 255, 255, 255);
+    pub const TEXT_BLACK: Color = Color::new(0, 0, 0, 255);
 
-    // 布局尺寸（测量与绘制共用单一来源）。
-    // 官方 timeline 布局：时间轴水平，每列上方是 section 标题块，
-    // 轴下方是该 section 的事件块（垂直堆叠）。
-    pub const BLOCK_W: f64 = 100.0;
-    pub const BLOCK_H: f64 = 38.0;
-    pub const BLOCK_RX: f64 = 6.0;
-    pub const DOT_R: f64 = 6.0;
-    pub const TITLE_Y: f64 = 25.0; // 标题 Y 位置（保留兼容）
-    pub const LINE_Y: f64 = 130.0; // 时间线 Y 位置（保留兼容）
-    // 标题块中心到时间轴的距离（轴上方）。
-    pub const SECTION_DY: f64 = 68.0;
-    // 首个事件块中心到时间轴的距离（轴下方）。
-    pub const EVENT_DY: f64 = 55.0;
-    // 同列多个 event 块之间的间距。
-    pub const EVENT_GAP: f64 = 10.0;
-    // 已废弃：旧版把 events[0] 当“时间点块”放在轴上方近轴处，新版所有事件均在轴下方。
-    #[allow(dead_code)]
-    pub const TASK_DY: f64 = 85.0;
-    pub const LINE_WIDTH: f64 = 2.5;
-    pub const BLOCK_STROKE_W: f64 = 1.5;
-    pub const CONNECTOR_W: f64 = 1.5;
-    pub const ARROW_SIZE: f64 = 8.0;
-    pub const LEFT_MARGIN: f64 = 60.0;
-    pub const RIGHT_MARGIN: f64 = 60.0;
+    /// 第 idx 列的块填充色。
+    pub fn block_color(idx: usize) -> Color {
+        BLOCK_COLORS[idx % BLOCK_COLORS.len()]
+    }
+    /// 第 idx 列的块文本色（紫罗兰系白字，其余黑字）。
+    pub fn block_text_color(idx: usize) -> Color {
+        let i = idx % BLOCK_COLORS.len();
+        if BLOCK_TEXT_WHITE.contains(&i) {
+            TEXT_WHITE
+        } else {
+            TEXT_BLACK
+        }
+    }
+    /// 第 idx 列的块底线颜色。
+    pub fn block_line_color(idx: usize) -> Color {
+        BLOCK_LINE_COLORS[idx % BLOCK_LINE_COLORS.len()]
+    }
+
+    // 布局尺寸（官方 golden 实测）。
+    // 结构：section 块（轴上方 200）→ period/task 块（轴上方 83）→ 主轴 →
+    // event 块（轴下方 109 起垂直堆叠）；列心相距 200（块宽 190 + 间隙 10）。
+    pub const BLOCK_W: f64 = 190.0;
+    pub const BLOCK_H: f64 = 65.8;
+    pub const EVENT_H: f64 = 50.0;
+    /// 块顶角圆角半径（底角为直角）。
+    pub const BLOCK_RX: f64 = 5.0;
+    /// 列心间距（官方块宽 190 + 列间隙 10）。
+    pub const COL_PITCH: f64 = 200.0;
+    /// section 块中心相对主轴的偏移（轴上方）。
+    pub const SECTION_DY: f64 = 200.0;
+    /// period（task）块中心相对主轴的偏移（轴上方）。
+    pub const PERIOD_DY: f64 = 83.0;
+    /// 首个 event 块中心相对主轴的偏移（轴下方）。
+    pub const EVENT_DY: f64 = 109.0;
+    /// 同列多个 event 块之间的间距。
+    pub const EVENT_GAP: f64 = 50.0;
 }
 
 // ==================== Git Graph (多分支) ====================
