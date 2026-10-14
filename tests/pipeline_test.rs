@@ -321,15 +321,16 @@ fn sequence_renders_activation_bars() {
         800,
         600,
     );
-    // 官方激活条：`<rect fill="#EDF2AE" stroke="#666" width="10" .../>`。
+    // 官方激活条计算样式（浏览器实测 golden）：`.activation0{fill:#f4f4f4;stroke:#666}`
+    // ——内联 `fill="#EDF2AE"` 被 CSS 覆盖，真实呈现为 #f4f4f4。
     assert!(
-        svg.contains(r##"fill="#edf2ae""##),
-        "应渲染激活条（官方 activationBkgColor #EDF2AE）"
+        svg.contains(r##"fill="#f4f4f4""##),
+        "应渲染激活条（官方 activation 计算样式 #f4f4f4）"
     );
     // 激活条宽 10、有边框。
     let act = svg
         .lines()
-        .find(|l| l.contains(r##"fill="#edf2ae""##))
+        .find(|l| l.contains(r##"fill="#f4f4f4""##))
         .expect("存在激活条矩形");
     assert!(
         act.contains(r##"width="10.00""##),

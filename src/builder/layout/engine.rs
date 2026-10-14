@@ -385,24 +385,35 @@ fn sequence_geometry(
             label: String,
             depth: usize,
             top: f64,
+            /// 框内最后一条内容行（消息 / 备注）的 y；嵌套块闭合时外层据此取框底。
+            last_content: Option<f64>,
         }
         let mut stack: Vec<Frame> = Vec::new();
         // 激活条：actor → 已开始但未结束的起点 y 栈（支持嵌套激活）。
         let mut open_act: HashMap<&str, Vec<f64>> = HashMap::new();
         // 已闭合的激活跨度 (actor, y0, y1)。
         let mut act_spans: Vec<(String, f64, f64)> = Vec::new();
-        // 上一行的起始 y（`Activation` 行不占行高，起点取所属消息行的 y）。
-        let mut prev_y = cur_y;
+        // 上一行的内容 y（`Activation` 行不占行高，起点取所属消息行的 y）。
+        // 初值取参与者盒底：官方 golden 中分组框顶边距盒底仅 10px
+        // （loop 框顶 75 = 盒底 65 + 10），若初值取 `box_bottom + SEQ_ROW_GAP`
+        // 则首行是 BlockStart 时框顶会整体下移一个行距。
+        let mut prev_y = box_bottom;
         for row in &rows {
             match row {
                 SequenceRow::Message(eid) => {
                     row_y.insert(eid.as_str(), cur_y);
                     prev_y = cur_y;
+                    for f in &mut stack {
+                        f.last_content = Some(cur_y);
+                    }
                     cur_y += SEQ_MSG_SPACING;
                 }
                 SequenceRow::Note(nid) => {
                     row_y.insert(nid.as_str(), cur_y);
                     prev_y = cur_y;
+                    for f in &mut stack {
+                        f.last_content = Some(cur_y);
+                    }
                     cur_y += SEQ_NOTE_H + SEQ_NOTE_GAP;
                 }
                 SequenceRow::Activation { actor, on } => {
@@ -415,14 +426,20 @@ fn sequence_geometry(
                     }
                 }
                 SequenceRow::BlockStart(id, label) => {
+                    // 官方 golden：分组框顶边距上一内容（参与者盒底 / 上一条消息）仅 10px
+                    // （loop 框顶 75 = 盒底 65 + 10），而非一个完整行距。
+                    let top = prev_y + SEQ_BLOCK_PAD;
                     stack.push(Frame {
                         id: id.clone(),
                         label: label.clone(),
                         depth: stack.len(),
-                        top: cur_y,
+                        top,
+                        last_content: None,
                     });
-                    prev_y = cur_y;
-                    cur_y += SEQ_BLOCK_LABEL_H;
+                    prev_y = top;
+                    // 框内首条消息距框顶 = 标签高 + 一个行距（官方实测为 81，此处
+                    // 取结构性等价的 24 + 46 = 70）。
+                    cur_y = top + SEQ_BLOCK_LABEL_H + SEQ_MSG_SPACING;
                 }
                 SequenceRow::BlockDivider(bid, label) => {
                     // 分隔虚线画在行顶，分支标题在其下方居中（materialize 绘制）。
@@ -432,8 +449,13 @@ fn sequence_geometry(
                 }
                 SequenceRow::BlockEnd(_) => {
                     if let Some(f) = stack.pop() {
-                        cur_y += SEQ_BLOCK_PAD;
-                        block_geo.push((f.id, f.label, f.depth, f.top, cur_y));
+                        // 官方 golden：框底距框内最后一条消息 10px（loop 框底 210 =
+                        // done 200 + 10），块后第一条消息距框底一个行距（finalize
+                        // 254 = 210 + 44）——即「框底 ≠ 下一行 y」，旧实现让下一行
+                        // 正好落在框底边上，视觉上被分组框罩住。
+                        let bottom = f.last_content.unwrap_or(f.top) + SEQ_BLOCK_PAD;
+                        block_geo.push((f.id, f.label, f.depth, f.top, bottom));
+                        cur_y = bottom + SEQ_MSG_SPACING;
                     }
                     prev_y = cur_y;
                 }

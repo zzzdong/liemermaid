@@ -1884,10 +1884,10 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             n.center.y + half_h,
         );
         items.push(SceneItem::Shape {
-            geometry: ShapeGeometry::RoundedRect {
+            // 官方备注框为直角矩形（`<rect ... class="note"/>` 无 rx）。
+            geometry: ShapeGeometry::Rect {
                 at: Point::new(rect.min_x(), rect.min_y()),
                 size: n.size,
-                radius: theme::sequence::ACTOR_RADIUS,
             },
             fill: Some(Fill::Solid(theme::sequence::NOTE_FILL)),
             stroke: Some(Stroke {
@@ -1903,7 +1903,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             z: vir::Z_BACKGROUND,
         });
         let mut ts = theme::text_style(
-            theme::sequence::TEXT,
+            theme::sequence::NOTE_TEXT,
             theme::FONT_SIZE,
             TextAlign::Center,
             TextBaseline::Middle,
@@ -1932,12 +1932,13 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             continue;
         }
         let r = c.bounds;
+        // 官方 golden 计算样式：`.loopLine{stroke-width:2px;stroke-dasharray:2,2;stroke:#9370DB}`。
         let stroke = Stroke {
             color: theme::sequence::BLOCK_STROKE,
-            width: 1.0,
+            width: 2.0,
             line_cap: LineCap::Butt,
             line_join: LineJoin::Miter,
-            dash_array: vec![6.0, 4.0],
+            dash_array: vec![2.0, 2.0],
             dash_offset: 0.0,
             miter_limit: 4.0,
         };
@@ -2442,6 +2443,9 @@ fn edge_ends(kind: EdgeKind, arrow: ArrowSpec) -> (EdgeEnds, EdgeEnds) {
     }
 }
 
+/// 平行四边形 / 梯形的斜移量（官方 golden 实测固定值 19.5px，不随宽度缩放）。
+const PARALLELOGRAM_SKEW: f64 = 19.5;
+
 /// 据 ShapeKind + center + size 生成抽象几何描述（paint 据此选 Element 变体）。
 fn shape_to_geometry(shape: ShapeKind, center: Point, size: Size) -> ShapeGeometry {
     let half_w = size.width / 2.0;
@@ -2502,29 +2506,35 @@ fn shape_to_geometry(shape: ShapeKind, center: Point, size: Size) -> ShapeGeomet
             }
         }
         ShapeKind::Parallelogram => {
-            let skew = half_w * 0.25;
+            // 官方 golden：平行四边形斜移量固定 19.5px（`H[/Parallelogram/]` 的
+            // polygon points="-19.5,0 113.72,0 133.22,-39 0,-39"），且包围盒仅向
+            // 单侧扩展 skew（测量宽 = 文本 + 2×17.25，绘制时整体宽 = 测量宽 + 19.5）。
+            let skew = PARALLELOGRAM_SKEW;
             ShapeGeometry::Polygon {
                 points: vec![
-                    Point::new(tl.x + skew, tl.y),
-                    Point::new(tl.x + size.width + skew, tl.y),
+                    Point::new(tl.x - skew, tl.y),
+                    Point::new(tl.x + size.width - skew, tl.y),
+                    Point::new(tl.x + size.width, tl.y + size.height),
+                    Point::new(tl.x, tl.y + size.height),
+                ],
+            }
+        }
+        ShapeKind::Trapezoid => {
+            // 官方 golden：梯形下边单侧斜移 19.5px（`points="0,0 105.06,0 85.56,-39 -19.5,-39"`）。
+            let skew = PARALLELOGRAM_SKEW;
+            ShapeGeometry::Polygon {
+                points: vec![
+                    Point::new(tl.x, tl.y),
+                    Point::new(tl.x + size.width, tl.y),
                     Point::new(tl.x + size.width - skew, tl.y + size.height),
                     Point::new(tl.x - skew, tl.y + size.height),
                 ],
             }
         }
-        ShapeKind::Trapezoid => {
-            let x = half_w * 0.25;
-            ShapeGeometry::Polygon {
-                points: vec![
-                    Point::new(center.x - half_w + x, center.y - half_h),
-                    Point::new(center.x + half_w - x, center.y - half_h),
-                    Point::new(center.x + half_w, center.y + half_h),
-                    Point::new(center.x - half_w, center.y + half_h),
-                ],
-            }
-        }
         ShapeKind::Cylinder => {
-            let ry = half_h * 0.2;
+            // 官方 golden：`ry = 10.01`（总高 69.03 时占比 ≈ 0.29×半高），即上下
+            // 椭圆弧各占总高约 14.5%；旧实现 half_h*0.2 弧顶偏平。
+            let ry = half_h * 0.29;
             let top = center.y - half_h + ry;
             let bottom = center.y + half_h - ry;
             let mut pts = Vec::new();

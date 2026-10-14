@@ -108,24 +108,32 @@ pub mod sequence {
     // 官方 `.actor>tspan{fill:black}`（参与者盒内名字用纯黑）。
     pub const ACTOR_TEXT: Color = Color::new(0, 0, 0, 255); // #000
     pub const EDGE: Color = super::EDGE_COLOR;
-    // 生命线与参与者描边同色，紫色虚线。
+    // 官方 golden 计算样式（浏览器实测，CSS 覆盖内联属性后的真实呈现）：
+    // `.actor-line{stroke:#9370DB}` + `#my-svg line{stroke-width:2px}`，无 dasharray
+    // ——即**实线** 2px 紫色（内联 `stroke="#999" stroke-width="0.5px"` 被 CSS 覆盖）。
     pub const LIFELINE: Color = Color::new(147, 112, 219, 255); // #9370DB
-    pub const LIFELINE_WIDTH: f64 = 0.5;
-    /// 生命线虚线样式。
-    pub const LIFELINE_DASH: [f64; 2] = [4.0, 4.0];
-    /// 官方 golden：消息线 `stroke-width="2"`。
-    pub const MESSAGE_WIDTH: f64 = 2.0;
-    /// 官方虚线消息 `style="stroke-dasharray: 3, 3;"`。
+    pub const LIFELINE_WIDTH: f64 = 2.0;
+    /// 生命线为实线（官方无 stroke-dasharray）。
+    pub const LIFELINE_DASH: [f64; 0] = [];
+    /// 官方 golden 计算样式：`.messageLine0{stroke-width:1.5;stroke:#333}`
+    /// （内联 `stroke-width="2"` 被 CSS 覆盖为 1.5px）。
+    pub const MESSAGE_WIDTH: f64 = 1.5;
+    /// 官方虚线消息 `style="stroke-dasharray: 3, 3;"`（内联 style 优先于 CSS 的 2,2）。
     pub const MESSAGE_DASH: [f64; 2] = [3.0, 3.0];
-    // 官方默认主题 activationBkgColor：浅黄绿填充 + 灰色描边。
-    pub const ACTIVATION_FILL: Color = Color::new(237, 242, 174, 255); // #EDF2AE
+    // 官方默认主题 activation 计算样式：`.activation0{fill:#f4f4f4;stroke:#666}`
+    // （内联 `fill="#EDF2AE"` 被 CSS 覆盖）。
+    pub const ACTIVATION_FILL: Color = Color::new(244, 244, 244, 255); // #f4f4f4
     pub const ACTIVATION_STROKE: Color = Color::new(102, 102, 102, 255); // #666
     pub const ACTIVATION_WIDTH: f64 = 10.0;
-    pub const NOTE_FILL: Color = Color::new(237, 242, 174, 255); // #EDF2AE 官方 noteBkgColor
-    pub const NOTE_STROKE: Color = Color::new(102, 102, 102, 255); // #666
+    // 官方备注框计算样式：`.note{stroke:#aaaa33;fill:#fff5ad}`（内联 #EDF2AE/#666 被覆盖）。
+    pub const NOTE_FILL: Color = Color::new(255, 245, 173, 255); // #fff5ad
+    pub const NOTE_STROKE: Color = Color::new(170, 170, 51, 255); // #aaaa33
+    /// 官方 `.noteText{fill:black}`。
+    pub const NOTE_TEXT: Color = Color::new(0, 0, 0, 255); // #000
+    /// 官方 `.labelText,.loopText{fill:black}`（分组块标签为黑色，非 #333）。
+    pub const BLOCK_TEXT: Color = Color::new(0, 0, 0, 255); // #000
     pub const BLOCK_FILL: Color = Color::new(236, 236, 255, 255); // #ECECFF
     pub const BLOCK_STROKE: Color = Color::new(147, 112, 219, 255); // #9370DB
-    pub const BLOCK_TEXT: Color = Color::new(51, 51, 51, 255); // #333333
 }
 
 // ==================== ER（对齐 mermaid 默认主题）====================

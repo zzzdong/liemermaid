@@ -285,14 +285,18 @@ fn measure_structured_label(label: &LabelOrMeasured, detail: &NodeDetail) -> Lab
 fn shape_padding(shape: ir::shape::ShapeKind) -> (f64, f64, bool) {
     use ir::shape::ShapeKind as S;
     match shape {
-        // rect / rounded：W = text_w + 60，H = text_h + 30。
-        S::Rectangle | S::Rounded | S::QuadrantCell => (NODE_PAD_X, NODE_PAD_Y, false),
+        // rect：W = text_w + 60，H = text_h + 30。
+        // rounded：官方 golden 实测 `B(Rounded)` → rect 94.95 = 文本 64.95 + **30**
+        //（即 pad_x = 15，与 rect 的 30 不同；高度仍为 text_h + 30）。
+        S::Rectangle | S::QuadrantCell => (NODE_PAD_X, NODE_PAD_Y, false),
+        S::Rounded => (15.0, NODE_PAD_Y, false),
         // 圆 / 双圆：直径 = max(text_w, text_h) + 15。
         S::Circle | S::DoubleCircle | S::StartDot | S::EndDot => (7.5, 7.5, true),
         // 菱形：正方形包围盒，边长 = max(text_w, text_h) + 54。
         S::Diamond => (27.0, 27.0, true),
-        // 圆柱（Database）：正文区同 rect，另加上下椭圆弧（见调用处 /0.8）。
-        S::Cylinder => (NODE_PAD_X, NODE_PAD_Y, false),
+        // 圆柱（Database）：官方 `E[(Database)]` → 宽 83.5 = 文本 68.5 + **15**
+        //（pad_x = 7.5），总高 69.03 = 文本 24 + 45（见下方高度特例 /0.8）。
+        S::Cylinder => (7.5, NODE_PAD_Y, false),
         // 以下各形状官方高度统一为 text_h + 15、宽度各不同（实测 golden）。
         S::Stadium => (12.5, 7.5, false),
         S::Subroutine => (15.5, 7.5, false),
