@@ -8,8 +8,12 @@
 //! `__start__`（StartDot）/ `__end__`（EndDot），`<<fork>>`/`<<join>>` 映射为 `Bar`。
 //!
 //! 复合状态（`State::Composite`）**展开为子图容器**：inner 的子状态作为普通节点，
-//! 复合状态本身作为 [`UGSubgraph`] 容器（标题 + 成员），inner 的 `[*] --> X` /
-//! `Y --> [*]` 映射为复合状态的入口/出口节点，供外层转移边重写。
+//! 复合状态本身作为 [`UGSubgraph`] 容器（标题 + 成员）。inner 的 `[*] --> X` /
+//! `Y --> [*]` 映射为复合状态**内部的起止圆点节点**（官方 golden：
+//! `state__composite` 中 `Outer` 框内确有 `state-start` 圆点与终止圆点，且
+//! `[*] --> Inner1` / `Inner2 --> [*]` 是框内真实边），外层引用复合状态的边
+//! 重写到这两个点，使整条链保持单列（与官方「外层边到框界、框内边从圆点出发」
+//! 的视觉等价）。
 
 use std::collections::{HashMap, HashSet};
 
@@ -25,6 +29,10 @@ use crate::{
     },
 };
 use lievisual::geometry::Size;
+
+/// 复合状态 id → (入口节点, 出口节点, 成员序)。入口/出口为 None 时（复合状态
+/// 内没有 `[*] --> X` / `Y --> [*]`）退回首/末成员，避免外层边被丢弃。
+type CompositeLinks = (Option<String>, Option<String>, Vec<String>);
 
 /// 状态图默认从上到下布局（无方向声明）。
 const DEFAULT_DIRECTION: crate::ast::Direction = crate::ast::Direction::TB;
@@ -157,9 +165,8 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
     }
     collect_labels(sd, &mut labels);
 
-    // 复合状态 id → (入口节点, 出口节点)。
-    let mut composite_entry_exit: HashMap<String, (Option<String>, Option<String>)> =
-        HashMap::new();
+    // 复合状态 id → (入口节点, 出口节点, 成员序)。
+    let mut composite_entry_exit: HashMap<String, CompositeLinks> = HashMap::new();
 
     // 递归收集一个 StateDiagram。返回 (入口节点, 出口节点)。
     // 参数较多是因为递归需要一路透传累加器（节点/边/子图/已见集合/计数器），
@@ -172,13 +179,49 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
         subgraphs: &mut Vec<UGSubgraph>,
         seen: &mut HashSet<String>,
         labels: &HashMap<String, Option<String>>,
-        composite_entry_exit: &mut HashMap<String, (Option<String>, Option<String>)>,
+        composite_entry_exit: &mut HashMap<String, CompositeLinks>,
         edge_counter: &mut usize,
         is_inner: bool,
         degraded: &HashSet<String>,
+        // 当前所在复合状态的 id（顶层为 None）；用于生成框内 `[*]` 圆点的唯一 id。
+        container_id: Option<&str>,
     ) -> (Option<String>, Option<String>) {
         let mut entry: Option<String> = None;
         let mut exit: Option<String> = None;
+
+        // 复合状态框内的起止圆点 id（带容器前缀保证唯一，嵌套复合状态不冲突）。
+        let start_dot_id = || format!("__start__{}", container_id.unwrap_or("__root__"));
+        let end_dot_id = || format!("__end__{}", container_id.unwrap_or("__root__"));
+
+        // 建一条 state 转移边（端口/线型与官方 transition 一致）。
+        let push_edge = |edges: &mut Vec<UGEdge>,
+                         edge_counter: &mut usize,
+                         from: String,
+                         to: String,
+                         label: Option<String>| {
+            edges.push(UGEdge {
+                id: format!("t{}", *edge_counter),
+                source: from,
+                target: to,
+                source_port: PortHint::Bottom,
+                target_port: PortHint::Top,
+                kind: EdgeKind::StateTransition,
+                label_text: label,
+                label: None,
+                priority: EdgePriority::Primary,
+                // 官方 state 转移线是曲线（transition path 含 C 贝塞尔）。
+                routing_hint: ir::common::RoutingHint::Spline,
+                arrow: ArrowSpec {
+                    start: ArrowKind::None,
+                    end: ArrowKind::Arrow,
+                },
+                line_kind: ir::common::LineKind::Solid,
+                repulsion: 1.0,
+                cardinality: (None, None),
+                cardinality_text: (None, None),
+            });
+            *edge_counter += 1;
+        };
 
         // 1. 显式 states。
         for s in &sd.states {
@@ -207,16 +250,18 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
                         edge_counter,
                         true,
                         degraded,
+                        Some(id.as_str()),
                     );
                     let member_ids: Vec<String> =
                         nodes[start_idx..].iter().map(|n| n.id.clone()).collect();
                     subgraphs.push(UGSubgraph {
                         id: id.clone(),
                         title: Some(id.clone()),
-                        member_ids,
+                        member_ids: member_ids.clone(),
                         kind: ir::common::ContainerKind::StateComposite,
                     });
-                    composite_entry_exit.insert(id.clone(), (e.clone(), x.clone()));
+                    composite_entry_exit.insert(id.clone(), (e.clone(), x.clone(), member_ids));
+                    // 嵌套复合状态：入口/出口向上传播（外层无自有 `[*]` 时以内层为准）。
                     entry = e;
                     exit = x;
                 }
@@ -266,31 +311,69 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
             let from_is_star = t.from == "[*]";
             let to_is_star = t.to == "[*]";
 
-            // 复合状态内部的 [*] 是入口/出口标记，不生成边。
-            if is_inner && from_is_star {
-                entry = Some(t.to.clone());
-                let (shape, hint) = node_meta(&t.to, false, false, false);
-                push_node(
-                    nodes,
-                    seen,
-                    t.to.clone(),
-                    labels.get(&t.to).cloned().flatten(),
-                    shape,
-                    hint,
-                );
-                continue;
-            }
-            if is_inner && to_is_star {
-                exit = Some(t.from.clone());
-                let (shape, hint) = node_meta(&t.from, false, false, false);
-                push_node(
-                    nodes,
-                    seen,
-                    t.from.clone(),
-                    labels.get(&t.from).cloned().flatten(),
-                    shape,
-                    hint,
-                );
+            // 复合状态内部的 [*] 是框内起止圆点（官方 golden 实测），生成圆点节点
+            // 与框内边；入口/出口记录供外层边重写。
+            if is_inner && (from_is_star || to_is_star) {
+                let dot_from = from_is_star.then(|| {
+                    let dot = start_dot_id();
+                    push_node(
+                        nodes,
+                        seen,
+                        dot.clone(),
+                        None,
+                        ShapeKind::StartDot,
+                        SizeHint::Fixed(START_SIZE),
+                    );
+                    dot
+                });
+                let dot_to = to_is_star.then(|| {
+                    let dot = end_dot_id();
+                    push_node(
+                        nodes,
+                        seen,
+                        dot.clone(),
+                        None,
+                        ShapeKind::EndDot,
+                        SizeHint::Fixed(END_SIZE),
+                    );
+                    dot
+                });
+                let from = dot_from.unwrap_or_else(|| t.from.clone());
+                let to = dot_to.unwrap_or_else(|| t.to.clone());
+                let entry_dot = from_is_star.then(|| from.clone());
+                let exit_dot = to_is_star.then(|| to.clone());
+                if from != to {
+                    // 保证非圆点端节点存在（可能是尚未声明的状态）。
+                    if !from_is_star {
+                        let (shape, hint) = node_meta(&from, false, false, false);
+                        push_node(
+                            nodes,
+                            seen,
+                            from.clone(),
+                            labels.get(&from).cloned().flatten(),
+                            shape,
+                            hint,
+                        );
+                    }
+                    if !to_is_star {
+                        let (shape, hint) = node_meta(&to, false, false, false);
+                        push_node(
+                            nodes,
+                            seen,
+                            to.clone(),
+                            labels.get(&to).cloned().flatten(),
+                            shape,
+                            hint,
+                        );
+                    }
+                    push_edge(edges, edge_counter, from, to, t.label.clone());
+                }
+                if let Some(d) = entry_dot {
+                    entry = Some(d);
+                }
+                if let Some(d) = exit_dot {
+                    exit = Some(d);
+                }
                 continue;
             }
 
@@ -308,10 +391,16 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
 
             // 引用复合状态的边，重写到其入口/出口节点：
             // source 是复合状态 → 从出口节点离开；target 是复合状态 → 进入入口节点。
-            if let Some((_, Some(x))) = composite_entry_exit.get(&from) {
+            // 复合状态内没有 `[*]` 转移时（entry/exit 为 None）退回首/末成员，
+            // 避免外层边因端点不是节点而被静默丢弃。
+            if let Some((_, x, members)) = composite_entry_exit.get(&from)
+                && let Some(x) = x.as_ref().or_else(|| members.last())
+            {
                 from = x.clone();
             }
-            if let Some((Some(e), _)) = composite_entry_exit.get(&to) {
+            if let Some((e, _, members)) = composite_entry_exit.get(&to)
+                && let Some(e) = e.as_ref().or_else(|| members.first())
+            {
                 to = e.clone();
             }
 
@@ -334,28 +423,7 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
                 hint_t,
             );
 
-            edges.push(UGEdge {
-                id: format!("t{}", *edge_counter),
-                source: from,
-                target: to,
-                source_port: PortHint::Bottom,
-                target_port: PortHint::Top,
-                kind: EdgeKind::StateTransition,
-                label_text: t.label.clone(),
-                label: None,
-                priority: EdgePriority::Primary,
-                // 官方 state 转移线是曲线（transition path 含 C 贝塞尔）。
-                routing_hint: ir::common::RoutingHint::Spline,
-                arrow: ArrowSpec {
-                    start: ArrowKind::None,
-                    end: ArrowKind::Arrow,
-                },
-                line_kind: ir::common::LineKind::Solid,
-                repulsion: 1.0,
-                cardinality: (None, None),
-                cardinality_text: (None, None),
-            });
-            *edge_counter += 1;
+            push_edge(edges, edge_counter, from, to, t.label.clone());
         }
 
         (entry, exit)
@@ -373,6 +441,7 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
         &mut edge_counter,
         false,
         &degraded,
+        None,
     );
 
     // 保证所有被边引用的节点都存在。

@@ -154,17 +154,68 @@ fn layered_centers(ug: &ir::Unigraph, sizes: &HashMap<NodeId, Size>) -> HashMap<
         .enumerate()
         .flat_map(|(li, layer)| layer.iter().map(move |id| (id, li)))
         .collect();
+    // 节点 → 最内层容器（复合状态 / 子图）。用于层间间距的容器边界补偿：
+    // 官方 golden 实测，跨容器边界的层间距 = 基础间距 + 容器留白
+    // （`flowchart__subgraph`：Start→Process 75 = 50+25，Decision→Output
+    // 100 = 50+25+25；`state__composite`：起点→框内圆点 87.5 ≈ 50+35），
+    // 同容器内部 flowchart 为 50、state 复合状态为 75（50+25）。
+    let container_of: HashMap<&NodeId, &ir::unigraph::UGSubgraph> = {
+        let mut map: HashMap<&NodeId, &ir::unigraph::UGSubgraph> = HashMap::new();
+        for sg in &ug.subgraphs {
+            for m in &sg.member_ids {
+                // 嵌套容器取成员集更小者（最内层）。
+                let better = map
+                    .get(m)
+                    .map(|old: &&ir::unigraph::UGSubgraph| {
+                        sg.member_ids.len() < old.member_ids.len()
+                    })
+                    .unwrap_or(true);
+                if better {
+                    map.insert(m, sg);
+                }
+            }
+        }
+        map
+    };
+    // 容器纵向留白 / 同容器内部额外间距（与 compute_containers 的 pad_y 保持一致）。
+    fn container_pad_y(kind: ir::common::ContainerKind) -> f64 {
+        match kind {
+            ir::common::ContainerKind::StateComposite => 35.0,
+            _ => 25.0,
+        }
+    }
+    fn container_inner_extra(kind: ir::common::ContainerKind) -> f64 {
+        match kind {
+            ir::common::ContainerKind::StateComposite => 25.0,
+            _ => 0.0,
+        }
+    }
+    let boundary_extra =
+        |a: Option<&ir::unigraph::UGSubgraph>, b: Option<&ir::unigraph::UGSubgraph>| -> f64 {
+            match (a, b) {
+                (None, None) => 0.0,
+                (Some(x), None) | (None, Some(x)) => container_pad_y(x.kind),
+                (Some(x), Some(y)) if x.id == y.id => container_inner_extra(x.kind),
+                (Some(x), Some(y)) => container_pad_y(x.kind) + container_pad_y(y.kind),
+            }
+        };
     let mut gap_extra = vec![0.0f64; n_layers.saturating_sub(1)];
     for e in &ug.edges {
         let (Some(&si), Some(&ti)) = (layer_of.get(&e.source), layer_of.get(&e.target)) else {
             continue;
         };
+        if si.abs_diff(ti) != 1 {
+            continue;
+        }
+        let lo = si.min(ti);
         // 只看相邻层的边（跨层边由路由处理，标签取中点，仍受最近层间距影响）。
         let has_label = e.label_text.as_deref().is_some_and(|s| !s.is_empty());
-        if has_label && si.abs_diff(ti) == 1 {
-            let lo = si.min(ti);
+        if has_label {
             gap_extra[lo] = gap_extra[lo].max(EDGE_LABEL_GAP);
         }
+        let ca = container_of.get(&e.source).copied();
+        let cb = container_of.get(&e.target).copied();
+        gap_extra[lo] = gap_extra[lo].max(boundary_extra(ca, cb));
     }
 
     // 主轴起点（居中）：总主轴长度
@@ -910,10 +961,14 @@ fn separate_nodes_from_containers(
 }
 
 /// 据子图成员节点坐标计算容器包围盒（含留白与标题区）。
+///
+/// padding 按容器类型区分（实测官方 golden）：
+/// - flowchart subgraph：横向 35 / 纵向 25（`flowchart__subgraph` 的 One/Two 簇），
+///   标题行位于顶部留白内（官方 label 在簇顶、居中）；
+/// - state 复合状态：四周 35（`state__composite` 的 Outer 簇：内容 43..104 ×
+///   109.5..445.5，簇 8..139.4 × 72..480），标题行同样在顶部留白内。
 fn compute_containers(ug: &ir::Unigraph, nodes: &[GGNode]) -> Vec<GGContainer> {
     let lookup: HashMap<&str, &GGNode> = nodes.iter().map(|n| (n.id.as_str(), n)).collect();
-    const PAD: f64 = 12.0;
-    const TITLE_H: f64 = 24.0;
     ug.subgraphs
         .iter()
         .filter_map(|sg| {
@@ -936,16 +991,21 @@ fn compute_containers(ug: &ir::Unigraph, nodes: &[GGNode]) -> Vec<GGContainer> {
                 max_x = max_x.max(m.center.x + m.size.width / 2.0);
                 max_y = max_y.max(m.center.y + m.size.height / 2.0);
             }
+            // state 复合状态四周留白 35；flowchart subgraph 横 35 / 纵 25。
+            let (pad_x, pad_y) = match sg.kind {
+                ir::common::ContainerKind::StateComposite => (35.0, 35.0),
+                _ => (35.0, 25.0),
+            };
             Some(GGContainer {
                 id: sg.id.clone(),
                 kind: sg.kind,
                 title: sg.title.clone(),
                 // kurbo Rect::new 接受两个角点 (x0,y0,x1,y1)，宽高由角点推导。
                 bounds: lievisual::geometry::Rect::new(
-                    min_x - PAD,
-                    min_y - PAD - TITLE_H,
-                    max_x + PAD,
-                    max_y + PAD,
+                    min_x - pad_x,
+                    min_y - pad_y,
+                    max_x + pad_x,
+                    max_y + pad_y,
                 ),
                 member_ids: sg.member_ids.clone(),
             })

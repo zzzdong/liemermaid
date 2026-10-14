@@ -133,3 +133,62 @@ fn state_end_to_end_renders_without_panic() {
     // start(1) + Idle/Running/Done(各1) + end 双环(2) + 4 边标签占位(无标签则无) = 6
     assert!(shape_count >= 5, "至少 5 个形状，got {shape_count}");
 }
+
+/// 复合状态（`state X { ... }`）对齐官方 golden `state__composite`：
+/// - 框内 `[*]` 生成为真实起止圆点节点（`__start__X` / `__end__X`）；
+/// - 框内边（圆点→Inner1、Inner1→Inner2、Inner2→圆点）全部保留，
+///   加上外层 3 条边共 6 条转移（官方 golden 即 6 条）；
+/// - 容器为 StateComposite，含标题。
+#[test]
+fn state_composite_inner_stars_become_dots_and_edges() {
+    let src = "stateDiagram-v2\n\
+        [*] --> Outer\n\
+        state Outer {\n\
+            [*] --> Inner1\n\
+            Inner1 --> Inner2\n\
+            Inner2 --> [*]\n\
+        }\n\
+        Outer --> Final\n\
+        Final --> [*]";
+    let diagram = parse(src);
+    let ug = extract::run(&diagram).expect("extract failed");
+
+    // 框内起止圆点存在。
+    let start_dot = ug.nodes.iter().find(|n| n.id == "__start__Outer");
+    let end_dot = ug.nodes.iter().find(|n| n.id == "__end__Outer");
+    assert!(start_dot.is_some(), "复合状态内应有起始圆点 __start__Outer");
+    assert!(end_dot.is_some(), "复合状态内应有终止圆点 __end__Outer");
+    assert_eq!(start_dot.unwrap().shape, ShapeKind::StartDot);
+    assert_eq!(end_dot.unwrap().shape, ShapeKind::EndDot);
+
+    // 6 条转移边（官方 golden state__composite 为 6 条）。
+    let transitions: Vec<String> = ug
+        .edges
+        .iter()
+        .filter(|e| e.kind == EdgeKind::StateTransition)
+        .map(|e| format!("{}->{}", e.source, e.target))
+        .collect();
+    assert_eq!(transitions.len(), 6, "应有 6 条转移边: {transitions:?}");
+    let has = |s: &str, t: &str| transitions.iter().any(|e| e == &format!("{s}->{t}"));
+    assert!(has("__start__", "__start__Outer"), "外层 [*] → 框内圆点");
+    assert!(has("__start__Outer", "Inner1"), "框内圆点 → Inner1");
+    assert!(has("Inner1", "Inner2"), "Inner1 → Inner2");
+    assert!(has("Inner2", "__end__Outer"), "Inner2 → 框内圆点");
+    assert!(has("__end__Outer", "Final"), "框内圆点 → Final");
+    assert!(has("Final", "__end__"), "Final → [*]");
+
+    // 容器：StateComposite + 标题 + 4 个成员（两圆点 + Inner1/Inner2）。
+    let sg = ug
+        .subgraphs
+        .iter()
+        .find(|s| s.id == "Outer")
+        .expect("Outer 容器");
+    assert_eq!(sg.member_ids.len(), 4, "容器成员应含两圆点与两个内部状态");
+    assert_eq!(sg.title.as_deref(), Some("Outer"));
+
+    // 端到端渲染不 panic。
+    let ug = measure::measure_all(ug);
+    let (gg, style) = engine::run(&ug).expect("layout failed");
+    let sg = materialize::run(&gg, &style);
+    assert!(!paint::run(&sg).nodes.is_empty(), "复合状态渲染应产出图元");
+}

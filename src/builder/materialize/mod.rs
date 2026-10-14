@@ -208,24 +208,25 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
     }
 
     // —— 子图容器：背景 + 边框 + 标题（z 低于节点，保证节点覆盖其上）——
-    // flowchart subgraph：.cluster rect{fill:#ffffde;stroke:#aaaa33}
-    // state 复合状态：.stateGroup .composit{fill:white} + stroke:#9370DB，标题在顶部中央。
+    // flowchart subgraph：`.cluster rect{fill:#ffffde;stroke:#aaaa33}`，标题在簇顶**居中**
+    // （官方 golden `flowchart__subgraph`：label foreignObject 左缘 = 簇中心 - 文本宽/2）。
+    // state 复合状态：官方双矩形 —— 外框 `.statediagram-cluster rect{fill:#ECECFF;
+    // stroke:#9370DB}` + `rect.outer{rx:5}`，其下 26px 为标题行，内容区是
+    // `.inner{fill:white;rx:0}` 白矩形（顶 26 / 底 4 内缩），标题居中于顶部。
     for c in &gg.containers {
         let r = c.bounds;
         let is_composite = c.kind == ir::common::ContainerKind::StateComposite;
-        let (fill_color, stroke_color, title_align, title_pos) = if is_composite {
+        let (fill_color, stroke_color, title_pos) = if is_composite {
             (
-                lievisual::geometry::Color::WHITE,
+                theme::flowchart::SUBGRAPH_FILL,
                 theme::state::STROKE,
-                TextAlign::Center,
-                Point::new(r.min_x() + r.width() / 2.0, r.min_y() + 12.0),
+                Point::new(r.min_x() + r.width() / 2.0, r.min_y() + 13.0),
             )
         } else {
             (
                 theme::flowchart::SUBGRAPH_FILL,
                 theme::flowchart::SUBGRAPH_STROKE,
-                TextAlign::Left,
-                Point::new(r.min_x() + 8.0, r.min_y() + 12.0),
+                Point::new(r.min_x() + r.width() / 2.0, r.min_y() + 12.0),
             )
         };
         let container_stroke = Stroke {
@@ -238,32 +239,52 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
             miter_limit: 4.0,
         };
         items.push(SceneItem::Shape {
-            geometry: ShapeGeometry::Rect {
+            geometry: ShapeGeometry::RoundedRect {
                 at: Point::new(r.min_x(), r.min_y()),
                 size: Size::new(r.width(), r.height()),
+                // 官方 `.statediagram-cluster rect.outer{rx:5px}`；flowchart 簇为直角。
+                radius: if is_composite { 5.0 } else { 0.0 },
             },
             fill: Some(Fill::Solid(fill_color)),
             stroke: Some(container_stroke.clone()),
             name: None,
             z: -1,
         });
+        if is_composite {
+            // 官方 inner 白矩形：标题行（26px）之下、底边上缩 4px 的内容区。
+            let inner_top = r.min_y() + 26.0;
+            let inner_h = (r.max_y() - 4.0 - inner_top).max(0.0);
+            if inner_h > 0.0 {
+                items.push(SceneItem::Shape {
+                    geometry: ShapeGeometry::Rect {
+                        at: Point::new(r.min_x(), inner_top),
+                        size: Size::new(r.width(), inner_h),
+                    },
+                    fill: Some(Fill::Solid(lievisual::geometry::Color::WHITE)),
+                    stroke: None,
+                    name: None,
+                    z: -1,
+                });
+            }
+        }
         if let Some(title) = &c.title
             && !title.is_empty()
         {
             let mut title_style = theme::text_style(
                 theme::TEXT_COLOR,
                 theme::FONT_SIZE,
-                title_align,
+                TextAlign::Center,
                 TextBaseline::Middle,
             );
             let spans = vec![RichSpan::new(title.clone(), title_style.clone())];
             let layout = layout_text(&spans, None);
-            let h = if title_align == TextAlign::Center {
-                HAnchor::Center
-            } else {
-                HAnchor::Left
-            };
-            let position = place_text(&layout, &mut title_style, title_pos, h, VAnchor::InkMiddle);
+            let position = place_text(
+                &layout,
+                &mut title_style,
+                title_pos,
+                HAnchor::Center,
+                VAnchor::InkMiddle,
+            );
             items.push(SceneItem::Label {
                 text: spans,
                 position,
