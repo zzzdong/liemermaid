@@ -478,7 +478,24 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
             emit_cardinality_text(&mut items, e.route.end(), Point::new(-d.x, -d.y), t, 2);
         }
 
-        // 边标签：白底 + 居中文本（锚点来自 route 中点）。
+        // 边标签背景：按官方各图类型 `.labelBkg` 规则取色（golden 实测）——
+        // flowchart `rgba(232,232,232,0.5)`、ER `rgba(248.67,255,236,0.5)`、
+        // class `#ECECFF` 不透明、**state 无 labelBkg 规则 → 透明不画底**。
+        let label_bg = match e.kind {
+            EdgeKind::StateTransition => None,
+            EdgeKind::Flow => Some(theme::flowchart::EDGE_LABEL_BG),
+            EdgeKind::Generic => Some(theme::er::EDGE_LABEL_BG),
+            EdgeKind::ClassExtends
+            | EdgeKind::ClassComposition
+            | EdgeKind::ClassAggregation
+            | EdgeKind::ClassAssociation
+            | EdgeKind::ClassDependency
+            | EdgeKind::ClassRealization
+            | EdgeKind::ClassLink
+            | EdgeKind::ClassDashed => Some(theme::class::EDGE_LABEL_BG),
+            _ => Some(theme::flowchart::EDGE_LABEL_BG),
+        };
+        // 边标签：半透明彩底 + 居中文本（锚点来自 route 中点）。
         if let (Some(text), Some(anchor)) = (&e.label_text, &e.label_anchor)
             && !text.is_empty()
         {
@@ -497,20 +514,21 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
                 HAnchor::Center,
                 VAnchor::InkMiddle,
             );
-            // 背景框纵向紧贴**墨迹**（而非含行距的排版盒），否则 24px 行高
-            // 会让底色块比 12px 的字高出一大截、且文字不居中。
-            let bg = text_bg_rect(&layout, position, 4.0, 2.0);
-            items.push(SceneItem::Shape {
-                geometry: ShapeGeometry::Rect {
-                    at: Point::new(bg.min_x(), bg.min_y()),
-                    size: Size::new(bg.width(), bg.height()),
-                },
-                // 官方 mermaid 边标签底色：白色不透明，遮断连线。
-                fill: Some(Fill::Solid(Color::new(255, 255, 255, 255))),
-                stroke: None,
-                name: Some("edge-label".to_string()),
-                z: vir::Z_SUBGRAPH,
-            });
+            if let Some(bg_color) = label_bg {
+                // 背景框纵向紧贴**墨迹**（而非含行距的排版盒），否则 24px 行高
+                // 会让底色块比 12px 的字高出一大截、且文字不居中。
+                let bg = text_bg_rect(&layout, position, 4.0, 2.0);
+                items.push(SceneItem::Shape {
+                    geometry: ShapeGeometry::Rect {
+                        at: Point::new(bg.min_x(), bg.min_y()),
+                        size: Size::new(bg.width(), bg.height()),
+                    },
+                    fill: Some(Fill::Solid(bg_color)),
+                    stroke: None,
+                    name: Some("edge-label".to_string()),
+                    z: vir::Z_SUBGRAPH,
+                });
+            }
             items.push(SceneItem::Label {
                 text: spans,
                 position,

@@ -198,6 +198,48 @@ fn flowchart_with_node_text() {
     assert!(text.contains("End"), "Should render node text 'End'");
 }
 
+/// 边标签背景按官方各图类型 `.labelBkg` 规则（golden 实测）：
+/// - flowchart：`rgba(232,232,232,0.5)` 半透明浅灰
+/// - ER：`rgba(248.67,255,236,0.5)` 半透明淡黄绿
+/// - class：`#ECECFF` 不透明
+/// - state：**无 labelBkg 规则 → 不画背景**（旧实现统一纯白，三处皆偏）
+#[test]
+fn edge_label_background_matches_official_per_type() {
+    // flowchart：半透明 #e8e8e8。
+    let fc = render_to_svg("flowchart TD\nD{?} -->|one| A\nD -->|two| B", 800, 600);
+    // alpha 128/255 在 SVG 中输出为 fill-opacity="0.502"（≈0.5）。
+    assert!(
+        fc.contains(r##"fill="#e8e8e8""##) && fc.contains(r##"fill-opacity="0.5"##),
+        "flowchart 边标签应为 #e8e8e8 @0.5: {fc}"
+    );
+    // ER：半透明 #f8ffec。
+    let er = render_to_svg("erDiagram\nCUSTOMER ||--o{ ORDER : places", 800, 600);
+    assert!(
+        er.contains(r##"fill="#f8ffec""##),
+        "ER 边标签应为 #f8ffec @0.5: {er}"
+    );
+    // class：不透明 #ECECFF。
+    let cl = render_to_svg("classDiagram\nclass A\nclass B\nA --> B : uses", 800, 600);
+    assert!(
+        cl.contains(r##"fill="#ececff""##),
+        "class 边标签应为不透明 #ECECFF: {cl}"
+    );
+    // state：无背景矩形（官方 state golden 无 .labelBkg 规则）。
+    let st = render_to_svg(
+        "stateDiagram-v2\n[*] --> Idle : go\nIdle --> Done : done",
+        800,
+        600,
+    );
+    assert!(
+        !st.contains("edge-label"),
+        "state 边标签不应有背景框（官方透明）: {st}"
+    );
+    // 标签文本本身仍要渲染。
+    for (svg, needle) in [(&fc, "one"), (&er, "places"), (&cl, "uses"), (&st, "go")] {
+        assert!(strip_xml(svg).contains(needle), "应渲染标签文本 {needle}");
+    }
+}
+
 /// 画布语义对齐官方 mermaid：`viewBox` 贴合内容、视口交给 CSS（`width` / `height`
 /// 不写死），`config` 的 800×600 是**上限**而非固定画布（内容更小则不撑满）。
 #[test]

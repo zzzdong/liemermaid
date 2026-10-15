@@ -62,6 +62,9 @@ pub mod flowchart {
     pub const SUBGRAPH_STROKE: Color = Color::new(170, 170, 51, 255); // #AAAA33 官方 cluster 边框
     pub const SUBGRAPH_FILL: Color = Color::new(255, 255, 222, 255); // #FFFFDE 官方 cluster 填充（淡黄）
     pub const SUBGRAPH_TITLE: Color = Color::new(51, 51, 51, 255); // #333333
+    /// 官方边标签背景：`.labelBkg{background-color:rgba(232,232,232,0.5)}`
+    /// ——半透明浅灰（#e8e8e8 @ 0.5），不是纯白。
+    pub const EDGE_LABEL_BG: Color = Color::new(232, 232, 232, 128);
 }
 
 // ==================== State（对齐 mermaid 默认主题）====================
@@ -90,6 +93,8 @@ pub mod class {
     pub const EDGE: Color = super::EDGE_COLOR;
     pub const SEPARATOR: Color = Color::new(147, 112, 219, 255); // #9370DB
     pub const DIAMOND_FILL: Color = Color::new(147, 112, 219, 255); // #9370DB
+    /// 官方 class 边标签背景：`.labelBkg{background:#ECECFF}`（**不透明**，与节点填充同色）。
+    pub const EDGE_LABEL_BG: Color = Color::new(236, 236, 255, 255);
     /// 官方类图文本字号：继承根 `#my-svg{font-size:16px}`（foreignObject 行高 24 = 16×1.5）。
     pub const MEMBER_FONT_SIZE: f64 = 16.0;
 }
@@ -148,6 +153,9 @@ pub mod er {
     pub const STROKE: Color = Color::new(147, 112, 219, 255); // #9370DB
     pub const TEXT: Color = super::TEXT_COLOR;
     pub const EDGE: Color = super::EDGE_COLOR;
+    /// 官方 ER 边标签背景：`.labelBkg{background-color:rgba(248.67,255,236,0.5)}`
+    /// ——半透明淡黄绿（≈ #f8ffec @ 0.5）。
+    pub const EDGE_LABEL_BG: Color = Color::new(248, 255, 236, 128);
 }
 
 // ==================== Timeline（对齐官方 timeline golden 实测）====================
