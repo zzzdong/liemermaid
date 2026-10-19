@@ -258,6 +258,7 @@ pub fn extract_state(sd: &StateDiagram) -> Unigraph {
                         id: id.clone(),
                         title: Some(id.clone()),
                         member_ids: member_ids.clone(),
+                        direction: None,
                         kind: ir::common::ContainerKind::StateComposite,
                     });
                     composite_entry_exit.insert(id.clone(), (e.clone(), x.clone(), member_ids));

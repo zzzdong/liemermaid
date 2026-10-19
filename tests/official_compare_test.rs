@@ -59,6 +59,9 @@ fn official_semantic_compare() {
     let cases = load_catalog();
     let mut failures: BTreeMap<String, String> = BTreeMap::new();
     let mut struct_failures: Vec<String> = Vec::new();
+    // 硬门槛：官方 golden 里出现的每一段文本，liemermaid 输出都必须有。
+    // 这是“标签被静默丢弃 / 成员丢失 / 语句被跳过”的直接回归信号。
+    let mut missing_text_cases: Vec<String> = Vec::new();
     let mut checked = 0usize;
     for c in &cases {
         if !c.compare {
@@ -97,6 +100,10 @@ fn official_semantic_compare() {
         if !sd.is_empty() {
             detail.push_str("SEMANTICS (text/node-label/semantic types):\n");
             detail.push_str(&sd.describe());
+        }
+        // 文本缺失是硬错误（与语义类型计数的引擎差异不同）。
+        if !sd.missing_texts.is_empty() {
+            missing_text_cases.push(format!("{key}: {:?}", sd.missing_texts));
         }
 
         // 层 2：结构层比对（元素数量 / 文本 / 颜色 / 相对布局）。
@@ -153,6 +160,13 @@ fn official_semantic_compare() {
         "{} cases have structural regressions (core geometry missing entirely): {:?}",
         struct_failures.len(),
         struct_failures
+    );
+    // 文本硬门槛：官方渲染出的文本必须全部出现（防止标签/成员被静默丢弃）。
+    assert!(
+        missing_text_cases.is_empty(),
+        "{} cases lost text present in official output:\n{}",
+        missing_text_cases.len(),
+        missing_text_cases.join("\n")
     );
     let _ = failures;
 }

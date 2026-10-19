@@ -38,14 +38,42 @@ pub mod ast;
 pub mod builder;
 pub mod error;
 pub mod parser;
-pub mod scene_ext;
-pub mod vir;
 pub use ast::Diagram;
 /// 默认解析器入口（基于 winnow 手写组合式解析器，覆盖全部 8 种图表）。
 pub use parser::WinnowParser as MermaidParser;
 
 use builder::build_diagram_with_config;
 pub use builder::types::OutputConfig;
+use lievisual::render::{Renderer, SvgRenderer, SvgSizing};
+
+/// 场景 → SVG 字符串（本 crate 唯一的 SVG 输出路径）。
+fn scene_to_svg(scene: &lievisual::Scene) -> String {
+    let bg_css = if scene.background.a == 0 {
+        "transparent".to_string()
+    } else {
+        scene.background.to_hex()
+    };
+    // 响应式视口：`SvgSizing::Intrinsic` 省略根节点的 width / height，只保留
+    // viewBox，再用 `max-width` 封顶，使容器比图更宽时不被放大。
+    let mut renderer = SvgRenderer::new(scene.width, scene.height)
+        .with_background(scene.background)
+        .with_sizing(SvgSizing::Intrinsic)
+        .with_style(format!(
+            "max-width: {:.3}px; background-color: {bg_css};",
+            scene.width
+        ));
+    renderer.render_scene(scene);
+    renderer.into_string()
+}
+
+/// 场景 → PNG 字节（vello_cpu 栅格化；尺寸校验由 [`render_scene_png_checked`] 负责）。
+fn scene_to_png(scene: &lievisual::Scene) -> Vec<u8> {
+    use lievisual::render::VelloPixmapRenderer;
+    let w = (scene.width.round() as i64).max(1) as u32;
+    let h = (scene.height.round() as i64).max(1) as u32;
+    let mut renderer = VelloPixmapRenderer::new(w, h).with_background(scene.background);
+    renderer.render_png(scene)
+}
 
 // 字体注册 API 转发自 lievisual，供 WASM 演示站在浏览器中注册自定义字体（如 CJK / 等宽字体），
 // 与 liecharts 的做法一致：宿主用 `liemermaid::register_font` 即可，无需直接依赖 lievisual。
@@ -83,7 +111,25 @@ pub fn render(mermaid_text: &str, width: u32, height: u32) -> error::DiagramResu
     };
 
     let scene = build_diagram_with_config(&diagram, &config)?;
-    Ok(scene_ext::render_scene_svg(&scene))
+    Ok(scene_to_svg(&scene))
+}
+
+/// PNG 位图允许的最大像素数（约 8192×8192，RGBA 约 268 MB）。
+///
+/// `render_png(text, w, h)` 把 w/h 当目标尺寸放大内容；若直接接受
+/// `40000×40000`，vello_cpu 会尝试分配数 GB 内存并 OOM。这里在栅格化前拦截。
+const MAX_PNG_PIXELS: f64 = 8192.0 * 8192.0;
+
+/// 栅格化前校验画布像素数，避免宿主/CLI 传入离谱尺寸导致 OOM。
+fn render_scene_png_checked(scene: &lievisual::Scene) -> error::DiagramResult<Vec<u8>> {
+    let pixels = scene.width.max(0.0) * scene.height.max(0.0);
+    if !pixels.is_finite() || pixels > MAX_PNG_PIXELS {
+        return Err(error::DiagramError::RenderError(format!(
+            "PNG canvas too large: {:.0}x{:.0} ({} pixels, max {})",
+            scene.width, scene.height, pixels, MAX_PNG_PIXELS
+        )));
+    }
+    Ok(scene_to_png(scene))
 }
 
 /// 渲染 Mermaid 图为 PNG 位图字节（供 liepress 等宿主嵌入 PDF/PNG/SVG/DOCX）。
@@ -93,6 +139,8 @@ pub fn render(mermaid_text: &str, width: u32, height: u32) -> error::DiagramResu
 ///
 /// 与 [`render`]（SVG）不同，PNG 是位图：这里把 `width` / `height` 作为**目标尺寸**
 /// （内容放大到目标，提升分辨率），避免简单图自然尺寸偏小、被宿主放大到页宽后发虚。
+///
+/// 画布像素数超过 8192×8192 时返回错误而非尝试分配内存。
 pub fn render_png(mermaid_text: &str, width: u32, height: u32) -> error::DiagramResult<Vec<u8>> {
     let diagram = MermaidParser::parse_mermaid(mermaid_text)?;
 
@@ -104,7 +152,7 @@ pub fn render_png(mermaid_text: &str, width: u32, height: u32) -> error::Diagram
     };
 
     let scene = build_diagram_with_config(&diagram, &config)?;
-    Ok(scene_ext::render_scene_png(&scene))
+    render_scene_png_checked(&scene)
 }
 
 /// 渲染 Mermaid 图表为 SVG，使用自定义 [`OutputConfig`]（可指定画布尺寸与背景色）。
@@ -119,7 +167,7 @@ pub fn render_with_config(
 ) -> error::DiagramResult<String> {
     let diagram = MermaidParser::parse_mermaid(mermaid_text)?;
     let scene = build_diagram_with_config(&diagram, config)?;
-    Ok(scene_ext::render_scene_svg(&scene))
+    Ok(scene_to_svg(&scene))
 }
 
 /// 渲染 Mermaid 图为 PNG 字节，使用自定义 [`OutputConfig`]（可指定画布尺寸与背景色）。
@@ -129,7 +177,7 @@ pub fn render_png_with_config(
 ) -> error::DiagramResult<Vec<u8>> {
     let diagram = MermaidParser::parse_mermaid(mermaid_text)?;
     let scene = build_diagram_with_config(&diagram, config)?;
-    Ok(scene_ext::render_scene_png(&scene))
+    render_scene_png_checked(&scene)
 }
 
 // ——— 手绘风格（sketch，可选开启）———
@@ -209,7 +257,7 @@ pub fn render_sketch_with_config(
     sketch: &SketchOptions,
 ) -> error::DiagramResult<String> {
     let scene = build_sketch_scene(mermaid_text, config, sketch)?;
-    Ok(scene_ext::render_scene_svg(&scene))
+    Ok(scene_to_svg(&scene))
 }
 
 /// 渲染 Mermaid 图表为**手绘风格** PNG 字节（形态对齐 [`render_png`]：内容放大到目标尺寸）。
@@ -237,5 +285,54 @@ pub fn render_png_sketch_with_config(
     sketch: &SketchOptions,
 ) -> error::DiagramResult<Vec<u8>> {
     let scene = build_sketch_scene(mermaid_text, config, sketch)?;
-    Ok(scene_ext::render_scene_png(&scene))
+    render_scene_png_checked(&scene)
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lievisual::geometry::Color;
+
+    #[test]
+    fn svg_is_nonempty() {
+        let scene = lievisual::Scene::new(100.0, 100.0);
+        assert!(!scene_to_svg(&scene).is_empty());
+    }
+
+    /// 背景照 `scene.background` 绘制；全透明时矩形为零不透明度（与 PNG 不铺底色等价）。
+    #[test]
+    fn svg_background_follows_scene_background() {
+        let scene = lievisual::Scene::new(100.0, 100.0).with_background(Color::WHITE);
+        let svg = scene_to_svg(&scene);
+        assert!(svg.contains("background-color: #ffffff;"), "{svg}");
+        assert!(
+            svg.contains(r##"<rect x="0" y="0" width="100.00" height="100.00" fill="#ffffff""##),
+            "不透明背景应铺满画布: {svg}"
+        );
+
+        let scene = lievisual::Scene::new(100.0, 100.0).with_background(Color::TRANSPARENT);
+        let svg = scene_to_svg(&scene);
+        assert!(svg.contains("background-color: transparent;"), "{svg}");
+        assert!(
+            svg.contains(r##"fill-opacity="0.000""##),
+            "透明背景不应产生可见像素: {svg}"
+        );
+    }
+
+    /// 端到端：`OutputConfig::background` 为透明时，SVG 与 PNG 一样不铺底色。
+    #[test]
+    fn transparent_output_config_renders_no_visible_background() {
+        let config = OutputConfig {
+            background: Color::TRANSPARENT,
+            ..Default::default()
+        };
+        let svg = render_with_config("flowchart TD\nA --> B", &config).expect("render");
+        // 响应式视口：根节点不写死 width / height，几何只在 viewBox 里。
+        assert!(!svg.contains("<svg width=\""), "{svg}");
+        assert!(svg.contains("viewBox="), "{svg}");
+        assert!(svg.contains("background-color: transparent;"), "{svg}");
+        assert!(
+            svg.contains(r##"fill-opacity="0.000""##),
+            "透明底不应有可见像素: {svg}"
+        );
+    }
 }

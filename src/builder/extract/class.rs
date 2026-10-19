@@ -59,14 +59,46 @@ fn format_member(m: &crate::ast::ClassMember) -> String {
 
 /// 提取 class 图为统一拓扑图（family = Grid）。
 pub fn extract_class(cd: &ClassDiagram) -> Unigraph {
+    // 同名类合并：parser 会把 `class A { ... }` 与类外成员声明 `A : +int age`
+    // 产出为两条 `Class` 记录；这里按首次出现顺序合并成员 / 注解 / 泛型。
+    struct Merged {
+        name: String,
+        generic: Option<String>,
+        annotation: Option<String>,
+        members: Vec<crate::ast::ClassMember>,
+    }
+    let mut merged: Vec<Merged> = Vec::new();
+    let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for cls in &cd.classes {
+        let pos = match index.get(&cls.name) {
+            Some(&p) => p,
+            None => {
+                let p = merged.len();
+                index.insert(cls.name.clone(), p);
+                merged.push(Merged {
+                    name: cls.name.clone(),
+                    generic: None,
+                    annotation: None,
+                    members: Vec::new(),
+                });
+                p
+            }
+        };
+        let m = &mut merged[pos];
+        m.members.extend(cls.members.iter().cloned());
+        if cls.generic.is_some() {
+            m.generic = cls.generic.clone();
+        }
+        if cls.annotation.is_some() {
+            m.annotation = cls.annotation.clone();
+        }
+    }
+
     let mut nodes: Vec<UGNode> = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-    // 1. 显式声明的类（源码序，去重）。
-    for cls in &cd.classes {
-        if seen.contains(&cls.name) {
-            continue;
-        }
+    // 1. 显式声明的类（源码序，已合并）。
+    for cls in &merged {
         seen.insert(cls.name.clone());
         let display_name = match &cls.generic {
             Some(g) => format!("{}<{}>", cls.name, g),
@@ -245,6 +277,40 @@ mod tests {
         };
         assert_eq!(attrs, &["#int age".to_string()]);
         assert!(methods.is_empty());
+    }
+
+    /// 同名类合并：`class A { ... }` 与 `A : +int age` 的成员都进入同一个类框。
+    #[test]
+    fn duplicate_class_declarations_are_merged() {
+        let cd = ClassDiagram {
+            classes: vec![
+                cls(
+                    "Animal",
+                    vec![ClassMember {
+                        visibility: Some(Visibility::Public),
+                        name: "name".into(),
+                        type_: Some("String".into()),
+                        is_method: false,
+                    }],
+                ),
+                cls(
+                    "Animal",
+                    vec![ClassMember {
+                        visibility: Some(Visibility::Public),
+                        name: "age".into(),
+                        type_: Some("int".into()),
+                        is_method: false,
+                    }],
+                ),
+            ],
+            relations: vec![],
+        };
+        let ug = extract_class(&cd);
+        assert_eq!(ug.nodes.len(), 1, "同名类只应产生一个节点");
+        let NodeDetail::Class { attrs, .. } = &ug.nodes[0].detail else {
+            panic!("expected Class detail");
+        };
+        assert_eq!(attrs, &["+String name".to_string(), "+int age".to_string()]);
     }
 
     #[test]

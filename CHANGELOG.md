@@ -2,6 +2,64 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.3.0] - 2026-10-19
+
+### Fixed
+
+- **parser: 标签支持空格与标点**（`src/parser/common.rs`）。此前 `unquoted_text`
+  遇到空白或 `.` / `/` / `-` / `<` / `>` / `=` / `;` / `|` 即停止，导致
+  `A[Hello World]`、`A[HTTP/2]`、`A[Start-Here]`、`A -->|Get money| B` 等语句
+  解析失败后被主循环静默跳过，常见表现为**空白画布**。现在节点标签、`|label|`
+  与裸标签（`-- text -->`）都按闭合定界符读取，引号内的定界符不会提前终止。
+- **parser: 消费 `:::class` 与 `@{...}` 后缀**。此前 `A[Hello]:::important --> B`
+  会因 `:::` 留在输入中导致整行被丢弃。
+- **flowchart: 重复声明采用最后一次定义**。`extract_flowchart` 原先用
+  `or_insert` 保留首见定义（`A[First]` 后 `A[Second]` 仍渲染 First），与官方语义
+  及 `docs/syntax-flowchart.md` 相反。
+- **classDiagram: 支持类外成员声明** `Animal : +int age` / `Animal : +isMammal()`。
+  此前这些行被 `skip_line` 静默丢弃；同名类声明现在会合并成员。
+- **flowchart: 保留嵌套 subgraph 层级**。此前内层子图节点/边被并入外层，内层容器
+  不再绘制；现在 AST 保留 `Subgraph.subgraphs`，内外层容器框都会输出。
+- **flowchart: 子图 `direction` 生效**。`subgraph X` 内的 `direction LR/TD/BT/RL`
+  现在会在全局布局后对容器成员做局部重排（嵌套子图各自保留方向，外层把内层当作
+  整体块移动）。
+- **parser: UTF-8 BOM 与空输入**。BOM 不再导致 `unsupported diagram type`；空输入
+  改为报告 `NoDiagram`。
+- **PNG 画布上限**：像素数超过 8192×8192 时返回错误，避免超大 `width`/`height`
+  触发数 GB 内存分配。
+- **pie 数值校验**：负值与“总和为 0”返回错误，不再产生 `-100%` / `200%` 扇区。
+
+### Changed
+
+- **破坏性变更**：`ast::Subgraph` 新增 `direction` 与 `subgraphs` 字段（serde 反序列化
+  使用 `#[serde(default)]` 兼容旧 JSON），用于保留子图方向与嵌套层级。
+- **破坏性变更（死代码清理）**：
+  - 删除 `vir` 模块，`Z_BACKGROUND` / `Z_SUBGRAPH` / `Z_GRID` / `Z_SERIES` /
+    `Z_LABEL` / `Z_TITLE` 并入 `builder::theme`；其余历史 `VisualElement`
+    构造器、`smooth_curve`、`draw_arrow_*`、渐变构造器与 lievisual 类型重导出一并移除。
+  - 删除 `scene_ext` 模块，`render_scene_svg` / `render_scene_png` 内联为
+    `lib.rs` 私有 `scene_to_svg` / `scene_to_png`（对外 API 只保留 `render*` 系列）。
+  - 移除 `ShapeGeometry::Path` / `PathOp`、`ShapeKind::QuadrantCell`、
+    `ArrowType::Labeled`、`builder::types::center_in_rect`、
+    `parser::common::{text, unquoted_text}`（均无调用方）。
+- `identifier` 改为线性扫描，去掉每个标识符对剩余全文的 `Vec<(usize, char)>` 收集
+  （大规模图解析从 O(n²) 降为 O(n)）。
+- 新增 CI（`.github/workflows/ci.yml`）：fmt / clippy / test / doc。
+- 文档整理：过时设计稿移入 `docs/archive/`，新增 `docs/README.md` 索引与
+  `docs/architecture.md` 现状说明。
+- examples 按「图表类型 + 功能」重组，新增 `examples/README.md`；删除审查辅助脚本
+  `review_png.rs` / `verify_fit.rs` 与旧扁平示例。
+- 删除根目录冗余的 `package.json` / `package-lock.json` 与 `site/Cargo.lock`。
+
+### Tests
+
+- `official_compare_test` 新增**文本硬门槛**：官方 golden 中的每段文本都必须出现在
+  liemermaid 输出中（空白折叠后比较），可直接捕获标签/成员/语句丢失。
+- `layout_quality_test` 现在解析 SVG `<path d>`，此前只收集 `<line>`/`<polyline>`，
+  导致“边不得穿越节点”检查恒为空集而永远通过。
+- 新增标签空格/标点、重复声明、class 成员、嵌套子图、BOM、超大 PNG、pie 负值等
+  回归测试。
+
 ## [0.2.0-beta.1] - 2026-08-31
 
 首个 0.2 版本。主版本号提升对应一次**非向后兼容**的序列块数据模型调整
@@ -33,8 +91,6 @@
 - 升级依赖 `lievisual` 至 `=0.2.0-beta.2`（API 兼容，golden 基线测试全部通过）。
 - **破坏性变更**：`ast::SequenceBlock.items` 替换为 `branches`（分支段列表），
   `serde` 反序列化使用 `#[serde(default)]` 兼容旧 JSON。
-
-### Fixed
 
 - **site: 补齐缺失的 `index.html`**（GitHub Pages 部署工作流会拷贝该文件，此前缺失
   导致部署必失败）。新增品牌页头、8 种图表下拉、Docs/GitHub 导航；`.gitignore`

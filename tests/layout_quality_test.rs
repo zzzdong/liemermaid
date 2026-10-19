@@ -118,7 +118,7 @@ fn cohen_sutherland_clip(
 
 /// 从 `<svg ... viewBox="0 0 W H">` 解析逻辑画布尺寸。
 ///
-/// 根节点的 `width` 已被改写为 `100%`（官方形态，见 `scene_ext`），只有 `viewBox`
+/// 根节点不写死 `width`（官方形态，见 `lib.rs::scene_to_svg`），只有 `viewBox`
 /// 才等于真实逻辑尺寸 —— 整画布背景 `<rect>` 用的也是它。
 fn parse_canvas_size(svg: &str) -> Option<(f64, f64)> {
     let root = svg.lines().find(|l| l.contains("<svg"))?;
@@ -196,6 +196,14 @@ fn parse_svg(svg: &str) -> (Vec<Rect>, Vec<(f64, f64, f64, f64)>) {
                 segs.push((pts[i - 1].0, pts[i - 1].1, pts[i].0, pts[i].1));
             }
         }
+        // 边现在由 lievisual 以 `<path d="M… C…">` 输出；旧实现只收集
+        // `<line>` / `<polyline>`，导致“边不得穿越节点”检查的线段集合恒为空
+        // （永远通过）。这里解析 path 的 M/L/C/Q/H/V/A 为线段（曲线取弦）。
+        if line.contains("<path ")
+            && let Some(d) = extract_attr(line, " d=\"")
+        {
+            segs.extend(parse_path_segments(d));
+        }
     }
 
     // 去重：类图中同个节点有 2 个重叠 rect（背景+边框），只保留一个
@@ -233,12 +241,131 @@ fn extract_polyline_points(s: &str) -> Option<&str> {
     Some(&s[start..start + end])
 }
 
+/// 取任意 `attr="value"` 的值。
+fn extract_attr<'a>(s: &'a str, attr: &str) -> Option<&'a str> {
+    let idx = s.find(attr)?;
+    let rest = &s[idx + attr.len()..];
+    let end = rest.find('"')?;
+    Some(&rest[..end])
+}
+
+/// 把 SVG path 的 `d` 解析成线段集合。
+///
+/// lievisual 的边输出 `M` / `L` / `C`（绝对坐标）；曲线以首尾弦近似，
+/// 对“线段是否穿过矩形”的判定足够（凸形状下弦进入矩形即说明曲线进入）。
+fn parse_path_segments(d: &str) -> Vec<(f64, f64, f64, f64)> {
+    let mut segs = Vec::new();
+    let mut nums: Vec<f64> = Vec::new();
+    let mut cur = (0.0f64, 0.0f64);
+    let mut start = (0.0f64, 0.0f64);
+    let mut cmd = 'M';
+    let mut token = String::new();
+
+    let flush = |token: &mut String, nums: &mut Vec<f64>| {
+        if !token.is_empty() {
+            if let Ok(v) = token.parse::<f64>() {
+                nums.push(v);
+            }
+            token.clear();
+        }
+    };
+
+    for c in d.chars().chain(std::iter::once(' ')) {
+        if c.is_ascii_alphabetic() {
+            flush(&mut token, &mut nums);
+            apply_path_cmd(cmd, &nums, &mut cur, &mut start, &mut segs);
+            nums.clear();
+            cmd = c;
+        } else if c.is_ascii_digit() || matches!(c, '-' | '+' | '.') {
+            token.push(c);
+        } else {
+            flush(&mut token, &mut nums);
+        }
+    }
+    // 末尾的最后一个命令没有“下一个命令字母”来触发，需要在此收尾。
+    flush(&mut token, &mut nums);
+    apply_path_cmd(cmd, &nums, &mut cur, &mut start, &mut segs);
+    segs
+}
+
+fn apply_path_cmd(
+    cmd: char,
+    nums: &[f64],
+    cur: &mut (f64, f64),
+    start: &mut (f64, f64),
+    segs: &mut Vec<(f64, f64, f64, f64)>,
+) {
+    let line_to = |p: (f64, f64), cur: &mut (f64, f64), segs: &mut Vec<_>| {
+        segs.push((cur.0, cur.1, p.0, p.1));
+        *cur = p;
+    };
+    let mut i = 0;
+    match cmd {
+        'M' => {
+            while i + 1 < nums.len() {
+                let p = (nums[i], nums[i + 1]);
+                if i == 0 {
+                    *start = p;
+                    *cur = p;
+                } else {
+                    line_to(p, cur, segs);
+                }
+                i += 2;
+            }
+        }
+        'L' => {
+            while i + 1 < nums.len() {
+                line_to((nums[i], nums[i + 1]), cur, segs);
+                i += 2;
+            }
+        }
+        'C' => {
+            while i + 5 < nums.len() {
+                line_to((nums[i + 4], nums[i + 5]), cur, segs);
+                i += 6;
+            }
+        }
+        'Q' => {
+            while i + 3 < nums.len() {
+                line_to((nums[i + 2], nums[i + 3]), cur, segs);
+                i += 4;
+            }
+        }
+        'H' => {
+            for x in nums {
+                line_to((*x, cur.1), cur, segs);
+            }
+        }
+        'V' => {
+            for y in nums {
+                line_to((cur.0, *y), cur, segs);
+            }
+        }
+        'A' => {
+            // rx ry rot large-arc sweep x y
+            while i + 6 < nums.len() {
+                line_to((nums[i + 5], nums[i + 6]), cur, segs);
+                i += 7;
+            }
+        }
+        'Z' | 'z' if *cur != *start => {
+            line_to(*start, cur, segs);
+        }
+        _ => {}
+    }
+}
+
 // ============================================================
 // 布局质量检测函数
 // ============================================================
 
 /// 检测 1: 边不得穿越任何节点
 fn check_no_edge_crosses_node(rects: &[Rect], segs: &[(f64, f64, f64, f64)], svg_name: &str) {
+    // 自检：这些用例都含边，必须真的解析出线段，否则检查会“真空通过”。
+    assert!(
+        !segs.is_empty(),
+        "{svg_name}: 未从 SVG 解析出任何边线段，边-节点碰撞检查失效"
+    );
     let mut violations = Vec::new();
     for (x1, y1, x2, y2) in segs {
         for (i, r) in rects.iter().enumerate() {

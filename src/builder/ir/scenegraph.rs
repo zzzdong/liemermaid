@@ -67,10 +67,11 @@ pub enum Anchor {
     Bottom,
 }
 
-/// 视觉意图：LayoutEngine 在 layout 结束时从 UG 抽取的轻量结构，
-/// 供 materialize 查 Theme 解析具体颜色 / 线型。**不含几何坐标**。
+/// 视觉意图：LayoutEngine 在 layout 结束时从 UG 抽取的轻量结构。**不含几何坐标**。
 ///
-/// 这样 UG 可在 layout 后即可 drop，materialize / paint 不持有 UG 引用。
+/// 注意：当前 `materialize` 仍直接按 `theme` 常量解析颜色 / 线型，本结构是
+/// **为后续可配置主题预留的接口**（参数保留以免后续改动公开 API）。UG 可在
+/// layout 后 drop，materialize / paint 不持有 UG 引用。
 #[derive(Debug, Clone, Default)]
 pub struct StyleIntent {
     pub node_styles: Vec<(NodeId, StyleRef)>,

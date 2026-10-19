@@ -6,7 +6,7 @@
 //! 产出 `(Geograph, StyleIntent)`：几何与视觉意图在 layout 结束时分离，
 //! 使 UG 可在此后 drop，materialize / paint 不持有 UG 引用。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use lievisual::geometry::Point;
 
@@ -266,6 +266,256 @@ fn layered_centers(ug: &ir::Unigraph, sizes: &HashMap<NodeId, Size>) -> HashMap<
         }
     }
     centers
+}
+
+// ==================== 子图方向（`subgraph X / direction LR`）====================
+
+/// 局部重排的布局单元：一个直接节点，或一个子图块（内部布局保持不变，整体平移）。
+struct SubgraphUnit {
+    key: NodeId,
+    size: Size,
+    center: Point,
+    /// 该单元包含的节点（块为其全部后代节点）。
+    nodes: Vec<NodeId>,
+    is_block: bool,
+}
+
+/// `a` 的成员集合是否包含于 `b`（允许相等）。
+fn member_subset(a: &ir::unigraph::UGSubgraph, b: &ir::unigraph::UGSubgraph) -> bool {
+    let set: HashSet<&str> = b.member_ids.iter().map(String::as_str).collect();
+    a.member_ids.iter().all(|n| set.contains(n.as_str()))
+}
+
+/// 直接子容器：成员集合最大的那些真子集（排除被其他子容器包含的孙容器）。
+fn direct_child_containers(ug: &ir::Unigraph, idx: usize) -> Vec<usize> {
+    let mut cands: Vec<usize> = (0..ug.subgraphs.len())
+        .filter(|&j| {
+            j != idx
+                && !ug.subgraphs[j].member_ids.is_empty()
+                && member_subset(&ug.subgraphs[j], &ug.subgraphs[idx])
+        })
+        .collect();
+    // 成员多的优先；只保留“不被已保留容器包含”的极大集合。
+    cands.sort_by_key(|&j| std::cmp::Reverse(ug.subgraphs[j].member_ids.len()));
+    let mut kept: Vec<usize> = Vec::new();
+    for j in cands {
+        if !kept
+            .iter()
+            .any(|&k| member_subset(&ug.subgraphs[j], &ug.subgraphs[k]))
+        {
+            kept.push(j);
+        }
+    }
+    kept
+}
+
+/// 单元集合的包围盒 `(min, max)`。
+fn units_bbox(units: &[SubgraphUnit]) -> Option<(Point, Point)> {
+    let mut min = Point::new(f64::INFINITY, f64::INFINITY);
+    let mut max = Point::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for u in units {
+        min.x = min.x.min(u.center.x - u.size.width / 2.0);
+        min.y = min.y.min(u.center.y - u.size.height / 2.0);
+        max.x = max.x.max(u.center.x + u.size.width / 2.0);
+        max.y = max.y.max(u.center.y + u.size.height / 2.0);
+    }
+    (min.x.is_finite() && max.x.is_finite()).then_some((min, max))
+}
+
+/// 合成节点（仅用于对单元图复用 `layered_centers`，尺寸由 `unit_sizes` 提供）。
+fn synthetic_ug_node(id: &str) -> ir::unigraph::UGNode {
+    ir::unigraph::UGNode {
+        id: id.to_string(),
+        kind: ir::common::NodeKind::Atom,
+        role: ir::common::NodeRole::Atom,
+        shape: ShapeKind::Rectangle,
+        label: ir::common::LabelOrMeasured::Spec(ir::common::LabelSpec {
+            text: String::new(),
+            spans: Vec::new(),
+        }),
+        ports: ir::common::PortSet::default(),
+        size_hint: ir::common::SizeHint::ByText,
+        style_ref: ir::common::StyleRef::NodeDefault,
+        constraint: ir::common::NodeConstraint::Free,
+        detail: ir::common::NodeDetail::None,
+    }
+}
+
+/// 合成边（仅参与分层，不参与绘制）。
+fn synthetic_ug_edge(id: &str, source: &str, target: &str) -> ir::unigraph::UGEdge {
+    ir::unigraph::UGEdge {
+        id: id.to_string(),
+        source: source.to_string(),
+        target: target.to_string(),
+        source_port: ir::common::PortHint::Auto,
+        target_port: ir::common::PortHint::Auto,
+        kind: ir::unigraph::EdgeKind::Flow,
+        label_text: None,
+        label: None,
+        priority: ir::common::EdgePriority::Primary,
+        routing_hint: ir::common::RoutingHint::Spline,
+        arrow: ir::common::ArrowSpec::default(),
+        line_kind: ir::common::LineKind::Solid,
+        repulsion: 1.0,
+        cardinality: (None, None),
+        cardinality_text: (None, None),
+    }
+}
+
+/// 对显式声明 `direction` 的子图做局部重排。
+///
+/// 全局分层不知道容器边界，子图成员会被摊到各层；这里在全局坐标之上，
+/// 按“直接节点 + 直接子容器块”构造单元图，用请求方向重新分层并**整体平移**：
+/// - 内层容器先处理（按成员数升序），外层再把内层当作一个块移动，嵌套方向都保留；
+/// - 重排后的单元整体平移回原子图的包围盒左上角，避免整图漂移。
+fn apply_subgraph_directions(
+    ug: &ir::Unigraph,
+    sizes: &HashMap<NodeId, Size>,
+    centers: &mut HashMap<NodeId, Point>,
+) {
+    if ug.subgraphs.iter().all(|sg| sg.direction.is_none()) {
+        return;
+    }
+    let mut order: Vec<usize> = (0..ug.subgraphs.len()).collect();
+    order.sort_by_key(|&i| ug.subgraphs[i].member_ids.len());
+    for idx in order {
+        if let Some(dir) = ug.subgraphs[idx].direction {
+            relayout_subgraph(ug, idx, dir, sizes, centers);
+        }
+    }
+}
+
+fn relayout_subgraph(
+    ug: &ir::Unigraph,
+    idx: usize,
+    direction: Direction,
+    sizes: &HashMap<NodeId, Size>,
+    centers: &mut HashMap<NodeId, Point>,
+) {
+    let sg = &ug.subgraphs[idx];
+    let children = direct_child_containers(ug, idx);
+
+    // —— 构造单元：直接子容器（块）+ 直接节点 ——
+    let mut units: Vec<SubgraphUnit> = Vec::new();
+    let mut node_unit: HashMap<NodeId, usize> = HashMap::new();
+    for &child in &children {
+        let c = &ug.subgraphs[child];
+        let mut min = Point::new(f64::INFINITY, f64::INFINITY);
+        let mut max = Point::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
+        let mut nodes = Vec::new();
+        for id in &c.member_ids {
+            let (Some(size), Some(center)) = (sizes.get(id), centers.get(id)) else {
+                continue;
+            };
+            min.x = min.x.min(center.x - size.width / 2.0);
+            min.y = min.y.min(center.y - size.height / 2.0);
+            max.x = max.x.max(center.x + size.width / 2.0);
+            max.y = max.y.max(center.y + size.height / 2.0);
+            nodes.push(id.clone());
+        }
+        if nodes.is_empty() {
+            continue;
+        }
+        let ui = units.len();
+        // 前缀使用标识符不可能包含的字符，避免与真实节点 id 冲突。
+        units.push(SubgraphUnit {
+            key: format!("\u{1}sub{}", child),
+            size: Size::new(max.x - min.x, max.y - min.y),
+            center: Point::new((min.x + max.x) / 2.0, (min.y + max.y) / 2.0),
+            nodes: nodes.clone(),
+            is_block: true,
+        });
+        for id in nodes {
+            node_unit.insert(id, ui);
+        }
+    }
+    for id in &sg.member_ids {
+        if node_unit.contains_key(id) {
+            continue;
+        }
+        let (Some(size), Some(center)) = (sizes.get(id), centers.get(id)) else {
+            continue;
+        };
+        let ui = units.len();
+        units.push(SubgraphUnit {
+            key: id.clone(),
+            size: *size,
+            center: *center,
+            nodes: vec![id.clone()],
+            is_block: false,
+        });
+        node_unit.insert(id.clone(), ui);
+    }
+    if units.len() < 2 {
+        return;
+    }
+
+    // —— 单元图：复用分层 + 坐标分配 ——
+    let mut mini = ir::Unigraph {
+        family: ir::unigraph::GraphFamily::Directed,
+        direction,
+        ..Default::default()
+    };
+    mini.nodes = units.iter().map(|u| synthetic_ug_node(&u.key)).collect();
+    for e in &ug.edges {
+        let (Some(&su), Some(&tu)) = (node_unit.get(&e.source), node_unit.get(&e.target)) else {
+            continue;
+        };
+        if su == tu {
+            continue;
+        }
+        let id = format!("ue{}", mini.edges.len());
+        mini.edges
+            .push(synthetic_ug_edge(&id, &units[su].key, &units[tu].key));
+    }
+    // 无内部连接时用链式边强制沿请求方向排开（否则全部落在第 0 层，
+    // LR 会退化成竖向堆叠）。
+    if mini.edges.is_empty() {
+        for w in units.windows(2) {
+            let id = format!("ue{}", mini.edges.len());
+            mini.edges
+                .push(synthetic_ug_edge(&id, &w[0].key, &w[1].key));
+        }
+    }
+    let unit_sizes: HashMap<NodeId, Size> = units.iter().map(|u| (u.key.clone(), u.size)).collect();
+    let new_centers = layered_centers(&mini, &unit_sizes);
+    if new_centers.len() != units.len() {
+        return;
+    }
+
+    // —— 整体平移回原包围盒左上角，避免子图漂移 ——
+    let (Some((old_min, _)), Some((new_min, _))) = (units_bbox(&units), {
+        let moved: Vec<SubgraphUnit> = units
+            .iter()
+            .map(|u| SubgraphUnit {
+                key: u.key.clone(),
+                size: u.size,
+                center: new_centers[&u.key],
+                nodes: Vec::new(),
+                is_block: false,
+            })
+            .collect();
+        units_bbox(&moved)
+    }) else {
+        return;
+    };
+    let offset = Point::new(old_min.x - new_min.x, old_min.y - new_min.y);
+
+    for u in &units {
+        let base = new_centers[&u.key];
+        let target = Point::new(base.x + offset.x, base.y + offset.y);
+        if u.is_block {
+            let delta = Point::new(target.x - u.center.x, target.y - u.center.y);
+            for id in &u.nodes {
+                if let Some(c) = centers.get_mut(id) {
+                    c.x += delta.x;
+                    c.y += delta.y;
+                }
+            }
+        } else if let Some(id) = u.nodes.first() {
+            centers.insert(id.clone(), target);
+        }
+    }
 }
 
 /// Linear 家族（timeline 等）的坐标分配：所有节点沿主轴单行排布并居中。
@@ -771,7 +1021,7 @@ pub fn run(ug: &ir::Unigraph) -> Result<(Geograph, StyleIntent), String> {
     } else {
         activations = Vec::new();
         sequence_dividers = Vec::new();
-        let centers = if ug.family == ir::unigraph::GraphFamily::Linear {
+        let mut centers = if ug.family == ir::unigraph::GraphFamily::Linear {
             linear_centers(ug, &sizes)
         } else if ug.family == ir::unigraph::GraphFamily::Radial {
             // Radial（pie 等）：所有节点叠于原点，扇区角度由 materialize 据数据计算。
@@ -782,6 +1032,8 @@ pub fn run(ug: &ir::Unigraph) -> Result<(Geograph, StyleIntent), String> {
         } else {
             layered_centers(ug, &sizes)
         };
+        // 子图显式 direction：在全局坐标之上按容器内部方向局部重排。
+        apply_subgraph_directions(ug, &sizes, &mut centers);
 
         // —— 构建 GGNode（含端口）——
         let mut nodes = Vec::new();
@@ -1080,5 +1332,82 @@ mod tests {
             "TD 各列应在同一垂直线"
         );
         assert!(b.center.y > a.center.y, "TD 列应沿 y 递增");
+    }
+
+    fn run_flowchart(src: &str) -> Geograph {
+        let diagram = crate::MermaidParser::parse_mermaid(src).expect("parse");
+        let ug = extract::run(&diagram).expect("extract");
+        let ug = measure::measure_all(ug);
+        let (gg, _) = run(&ug).expect("layout");
+        gg
+    }
+
+    fn node<'a>(gg: &'a Geograph, id: &str) -> &'a GGNode {
+        gg.nodes.iter().find(|n| n.id == id).expect("node")
+    }
+
+    /// 子图 `direction LR` 覆盖全局 TB：成员应横向排列（同一 y、x 递增）。
+    #[test]
+    fn subgraph_direction_overrides_global_direction() {
+        let gg = run_flowchart(
+            "flowchart TB\nsubgraph S\ndirection LR\nA[AA] --> B[BB] --> C[CC]\nend\nD[DD] --> A\n",
+        );
+        let (a, b, c) = (node(&gg, "A"), node(&gg, "B"), node(&gg, "C"));
+        assert!(
+            (a.center.y - b.center.y).abs() < 1.0 && (b.center.y - c.center.y).abs() < 1.0,
+            "LR 子图内节点应同 y：A={:?} B={:?} C={:?}",
+            a.center,
+            b.center,
+            c.center
+        );
+        assert!(
+            a.center.x < b.center.x && b.center.x < c.center.x,
+            "LR 子图内节点应沿 x 递增"
+        );
+    }
+
+    /// 嵌套子图各自方向：内层 TD 在外层 LR 重排后仍保持竖向。
+    #[test]
+    fn nested_subgraph_directions_are_preserved() {
+        let gg = run_flowchart(
+            "flowchart TB\nsubgraph outer\ndirection LR\nsubgraph inner\ndirection TD\nX[XX] --> Y[YY]\nend\nA[AA] --> B[BB]\nB --> X\nend\nC --> A\n",
+        );
+        let (x, y) = (node(&gg, "X"), node(&gg, "Y"));
+        assert!(
+            (x.center.x - y.center.x).abs() < 1.0,
+            "内层 TD 应保持竖向：X={:?} Y={:?}",
+            x.center,
+            y.center
+        );
+        assert!(y.center.y > x.center.y);
+    }
+
+    /// RL / BT 方向：层序反转，成员应沿请求方向反向排列。
+    #[test]
+    fn subgraph_direction_rl_and_bt() {
+        let gg = run_flowchart(
+            "flowchart TB\nsubgraph S\ndirection RL\nA[AA] --> B[BB]\nend\nC --> A\n",
+        );
+        let (a, b) = (node(&gg, "A"), node(&gg, "B"));
+        assert!((a.center.y - b.center.y).abs() < 1.0, "RL 子图应同 y");
+        assert!(b.center.x < a.center.x, "RL 应从右到左排列");
+
+        let gg = run_flowchart(
+            "flowchart TB\nsubgraph S\ndirection BT\nA[AA] --> B[BB]\nend\nC --> A\n",
+        );
+        let (a, b) = (node(&gg, "A"), node(&gg, "B"));
+        assert!((a.center.x - b.center.x).abs() < 1.0, "BT 子图应同 x");
+        assert!(b.center.y < a.center.y, "BT 应从下到上排列");
+    }
+
+    /// 全局 LR + 子图 TD：子图内应竖向排列。
+    #[test]
+    fn subgraph_direction_td_overrides_global_lr() {
+        let gg = run_flowchart(
+            "flowchart LR\nsubgraph S\ndirection TD\nA[AA] --> B[BB]\nend\nC[CC] --> A\n",
+        );
+        let (a, b) = (node(&gg, "A"), node(&gg, "B"));
+        assert!((a.center.x - b.center.x).abs() < 1.0, "TD 子图内节点应同 x");
+        assert!(b.center.y > a.center.y, "TD 子图内节点应沿 y 递增");
     }
 }

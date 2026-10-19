@@ -11,6 +11,16 @@ A --> B
 B --> C
 "#;
 
+/// 超大画布必须在栅格化前报错（否则 vello_cpu 会尝试分配数 GB 内存）。
+#[test]
+fn oversized_canvas_is_rejected() {
+    let err = render_png(FLOWCHART, 100_000, 100_000).expect_err("应拒绝超大画布");
+    assert!(
+        format!("{err}").contains("too large"),
+        "错误信息应说明画布过大: {err}"
+    );
+}
+
 #[test]
 fn render_png_produces_valid_png_bytes() {
     let bytes = render_png(FLOWCHART, 800, 600).expect("render_png should succeed");

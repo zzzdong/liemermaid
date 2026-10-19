@@ -19,11 +19,21 @@ use crate::{
 /// 提取 pie 为统一拓扑图（Radial 家族）。
 pub fn extract_pie(pie: &PieDiagram) -> DiagramResult<Unigraph> {
     let mut nodes: Vec<UGNode> = Vec::new();
+    let mut total = 0.0f64;
     for (i, d) in pie.data.iter().enumerate() {
         let value: f64 = d
             .value
             .parse()
             .map_err(|_| DiagramError::LayoutError(format!("invalid pie value: {}", d.value)))?;
+        // 扇区角度 = value / total：负值得出反向扇区与 `-100%` 标签，
+        // 全零总和则产生 NaN。这里按官方语义要求非负且总和为正。
+        if !value.is_finite() || value < 0.0 {
+            return Err(DiagramError::LayoutError(format!(
+                "pie value must be a non-negative number: {} ({})",
+                d.value, d.label
+            )));
+        }
+        total += value;
         nodes.push(UGNode {
             id: format!("slice{}", i),
             kind: NodeKind::Atom,
@@ -43,6 +53,12 @@ pub fn extract_pie(pie: &PieDiagram) -> DiagramResult<Unigraph> {
             },
         });
     }
+    if !pie.data.is_empty() && total <= 0.0 {
+        return Err(DiagramError::LayoutError(
+            "pie values must sum to a positive number".to_string(),
+        ));
+    }
+
     Ok(Unigraph {
         family: GraphFamily::Radial,
         direction: crate::ast::Direction::TB,
@@ -91,5 +107,14 @@ mod tests {
     fn extract_invalid_value_errors() {
         let pie = parse("pie\n\"A\": abc");
         assert!(extract_pie(&pie).is_err());
+    }
+
+    #[test]
+    fn negative_and_zero_total_values_error() {
+        let negative = parse("pie\n\"A\": -10\n\"B\": 20");
+        assert!(extract_pie(&negative).is_err(), "负值应被拒绝");
+
+        let all_zero = parse("pie\n\"A\": 0\n\"B\": 0");
+        assert!(extract_pie(&all_zero).is_err(), "总和为 0 应被拒绝");
     }
 }

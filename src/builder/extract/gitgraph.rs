@@ -206,6 +206,7 @@ pub fn extract_gitgraph(graph: &GitGraphDiagram) -> Unigraph {
             id: format!("branch{}", i),
             title: Some(name.clone()),
             member_ids: branch_members.get(name).cloned().unwrap_or_default(),
+            direction: None,
             kind: ContainerKind::GitBranch,
         })
         .collect();

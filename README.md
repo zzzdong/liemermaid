@@ -10,7 +10,7 @@ with two backends: SVG and PNG (via `vello_cpu`). No JavaScript runtime required
 
 ```toml
 [dependencies]
-liemermaid = "0.1"
+liemermaid = "0.3"
 ```
 
 ```rust
@@ -27,6 +27,28 @@ let png: Vec<u8> = render_png("pie\n    \"A\": 30\n    \"B\": 50", 600, 400)?;
 bounds — oversized content is scaled down proportionally and never cropped;
 content that fits is never scaled up. Use `render_with_config` /
 `render_png_with_config` for custom background colors.
+
+## Documentation
+
+- [Architecture](docs/architecture.md) — parser → extract → measure → layout →
+  materialize → paint pipeline and IR layers.
+- [Mermaid syntax references](docs/README.md) — one document per diagram type.
+- Historical design drafts live in [docs/archive](docs/archive/).
+
+## Examples
+
+Examples are organized by diagram type and by feature; see
+[examples/README.md](examples/README.md).
+
+```sh
+cargo run --example flowchart_basic
+cargo run --example flowchart_subgraph
+cargo run --example sequence_blocks
+cargo run --example output_formats
+cargo run --example output_sketch
+```
+
+Outputs are written to `examples/out/`.
 
 ## CLI
 
@@ -56,10 +78,17 @@ mermaid-cli golden output (see `tests/golden/`).
 
 - Output is structurally close to official Mermaid but not yet pixel-perfect
   (official uses dagre plus a full theme system).
-- `sequenceDiagram` `alt`/`par` blocks render only the first branch.
 - flowchart `style` / `classDef` / `linkStyle` / `click` statements and
-  classDiagram `note for X "..."` are safely skipped (no errors).
+  classDiagram `note for X "..."` are safely skipped (no errors). Node style
+  suffixes (`A:::class`) and the extended shape syntax (`A@{ shape: rect }`) are
+  accepted, but do not change rendering yet.
+- `subgraph` nesting and per-subgraph `direction` are supported: each container
+  is laid out locally after the global pass, so its members may not align with
+  the outer graph's layers.
+- HTML labels / Markdown formatting inside labels are rendered as plain text.
 - CJK text renders correctly, but long CJK strings do not auto-wrap yet.
+- PNG output is capped at 8192×8192 pixels; larger canvases return an error
+  instead of attempting a multi-GB allocation.
 
 ## License
 

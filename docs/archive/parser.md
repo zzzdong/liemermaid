@@ -1,5 +1,9 @@
 # 基于 Pest 的 Mermaid 语法解析器：完整架构设计与实现指南
 
+> **历史设计文档（已过时）**：本文档记录的是项目早期的 Pest 方案。当前实现为
+> `src/parser/` 下基于 [winnow](https://crates.io/crates/winnow) 的手写组合式解析器，
+> 入口是 `WinnowParser::parse_mermaid`；请以源码与 `docs/syntax-*.md` 为准。
+
 本文档提供从零开始构建 **Mermaid 语法解析器** 的完整方案，使用 Rust 的 `pest` 库。我们将设计一个可扩展的解析器框架，支持 Mermaid 的核心图表类型（流程图、时序图、类图、状态图、ER 图），并给出详细的实现指导和最佳实践。
 
 ---

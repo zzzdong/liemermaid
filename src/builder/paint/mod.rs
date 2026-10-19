@@ -162,24 +162,6 @@ fn geometry_to_element(geometry: &ShapeGeometry, style: FillStrokeStyle) -> Elem
         ShapeGeometry::Ellipse { center, rx, ry } => {
             Element::ellipse(*center, Vec2::new(*rx, *ry), 0.0, style)
         }
-        ShapeGeometry::Path { ops } => {
-            // lievisual 0.1.2 无原生 Path 变体，几何层 PathOp 已展开为足够采样点，
-            // 此处收集所有 MoveTo/LineTo/ArcTo 端点为折线多边形渲染。
-            let mut pts: Vec<Point> = Vec::new();
-            for op in ops {
-                match op {
-                    crate::builder::ir::shape::PathOp::MoveTo(p)
-                    | crate::builder::ir::shape::PathOp::LineTo(p)
-                    | crate::builder::ir::shape::PathOp::ArcTo(p, _) => pts.push(*p),
-                    crate::builder::ir::shape::PathOp::CurveTo(_, _, p) => pts.push(*p),
-                }
-            }
-            if pts.len() >= 3 {
-                Element::polygon(pts, style)
-            } else {
-                Element::rect(Rect::new(0.0, 0.0, 1.0, 1.0), style)
-            }
-        }
         ShapeGeometry::Pie {
             center,
             radius,

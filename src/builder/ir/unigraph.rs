@@ -91,6 +91,11 @@ pub struct UGSubgraph {
     pub id: String,
     pub title: Option<String>,
     pub member_ids: Vec<NodeId>,
+    /// 子图内显式声明的方向（`subgraph X\ndirection LR`）。
+    ///
+    /// layout 会在全局布局完成后，对该子图成员（含嵌套子图块）做一次局部重排，
+    /// 使容器内部按此方向排列；`None` 表示沿用整图方向。
+    pub direction: Option<Direction>,
     /// 容器种类（flowchart subgraph / state 复合状态等，决定 materialize 样式）。
     pub kind: ContainerKind,
 }

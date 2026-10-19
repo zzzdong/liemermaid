@@ -6,12 +6,12 @@
 
 use crate::ast::{ArrowType, Edge, Flowchart, Node, NodeShape, Subgraph};
 use crate::parser::common::{
-    PResult, attempt, direction, has_input, identifier, inline_ws, inline_ws_and_comments,
-    peek_end, rest_of_line, skip_ws_and_comments, text, ws1,
+    PResult, attempt, bare_label, direction, has_input, identifier, inline_ws,
+    inline_ws_and_comments, peek_end, rest_of_line, shape_label, skip_ws_and_comments, ws1,
 };
 use winnow::{
     Parser,
-    combinator::{alt, delimited, fail, opt, peek, preceded},
+    combinator::{alt, fail, opt, peek, preceded},
     token::{any, take_while},
 };
 
@@ -20,50 +20,66 @@ use winnow::{
 /// 解析节点形状定界符与文本，返回 `(shape, text)`。
 ///
 /// 定界符按“最长优先”排列，避免 `((` 被 `(` 抢先匹配。
+///
+/// 文本使用 [`shape_label`]（读到闭合定界符为止），因此 `A[Hello World]`、
+/// `A[HTTP/2]`、`A[Start-Here]` 这类含空格 / 标点的标签都能正确解析。
 fn node_shape_with_text<'i>(
     input: &mut &'i str,
 ) -> PResult<'i, (Option<NodeShape>, Option<String>)> {
-    let first = alt((
-        delimited(
-            "(((",
-            take_while(1.., |c: char| c != ')' && c != '\n' && c != '\r'),
-            ")))",
-        )
-        .map(|t: &str| (Some(NodeShape::DoubleCircle), Some(t.trim().to_string()))),
-        delimited(
-            "\x28\x28",
-            take_while(1.., |c: char| c != ')' && c != '\n' && c != '\r'),
-            "\x29\x29",
-        )
-        .map(|t: &str| (Some(NodeShape::Circle), Some(t.trim().to_string()))),
-        delimited("\x5b\x28", text, "\x29\x5d")
-            .map(|t| (Some(NodeShape::Cylinder), Some(t)))
-            .map(|(s, t)| (s, t)),
-        delimited("([", text, "])").map(|t| (Some(NodeShape::Stadium), Some(t))),
-        delimited("[[", text, "]]").map(|t| (Some(NodeShape::Subroutine), Some(t))),
-        delimited("{{", text, "}}").map(|t| (Some(NodeShape::Hexagon), Some(t))),
-        delimited("(", text, ")").map(|t| (Some(NodeShape::Rounded), Some(t))),
-        delimited("[", text, "]").map(|t| (Some(NodeShape::Rectangle), Some(t))),
-        delimited("{", text, "}").map(|t| (Some(NodeShape::Diamond), Some(t))),
+    // 长定界符组：winnow 的 `alt` 元组最多 10 个分支，故分两组。
+    let long_delims = alt((
+        shape_label("(((", ")))").map(|t| (Some(NodeShape::DoubleCircle), Some(t))),
+        shape_label("((", "))").map(|t| (Some(NodeShape::Circle), Some(t))),
+        shape_label("[(", ")]").map(|t| (Some(NodeShape::Cylinder), Some(t))),
+        shape_label("([", "])").map(|t| (Some(NodeShape::Stadium), Some(t))),
+        shape_label("[[", "]]").map(|t| (Some(NodeShape::Subroutine), Some(t))),
+        shape_label("{{", "}}").map(|t| (Some(NodeShape::Hexagon), Some(t))),
+        shape_label("[/", "/]").map(|t| (Some(NodeShape::Parallelogram), Some(t))),
+        shape_label("[\\", "\\]").map(|t| (Some(NodeShape::ParallelogramAlt), Some(t))),
+        shape_label("[/", "\\]").map(|t| (Some(NodeShape::Trapezoid), Some(t))),
     ));
-    let second = alt((
-        delimited(">", text, "]").map(|t| (Some(NodeShape::Asymmetric), Some(t))),
-        delimited("[/", text, "/]").map(|t| (Some(NodeShape::Parallelogram), Some(t))),
-        delimited("[\\", text, "\\]").map(|t| (Some(NodeShape::ParallelogramAlt), Some(t))),
-        delimited("[/", text, "\\]").map(|t| (Some(NodeShape::Trapezoid), Some(t))),
-        delimited("[\\", text, "/]").map(|t| (Some(NodeShape::TrapezoidAlt), Some(t))),
+    // winnow 的 `alt` 最多 9 个分支，剩余定界符放第二组。
+    let short_delims = alt((
+        shape_label("[\\", "/]").map(|t| (Some(NodeShape::TrapezoidAlt), Some(t))),
+        shape_label("(", ")").map(|t| (Some(NodeShape::Rounded), Some(t))),
+        shape_label("[", "]").map(|t| (Some(NodeShape::Rectangle), Some(t))),
+        shape_label("{", "}").map(|t| (Some(NodeShape::Diamond), Some(t))),
+        shape_label(">", "]").map(|t| (Some(NodeShape::Asymmetric), Some(t))),
     ));
-    alt((first, second)).parse_next(input)
+    alt((long_delims, short_delims)).parse_next(input)
+}
+
+/// 节点后缀：`:::class` / `:::a,b` 或扩展形状语法 `@{ shape: rect, label: "x" }`。
+///
+/// 这些后缀不影响本项目的布局（暂不支持自定义样式 / 扩展形状），但必须被**消费**，
+/// 否则 `A[Hello]:::important --> B` 会因 `:::` 留在输入里导致整行被丢弃。
+fn node_suffix<'i>(input: &mut &'i str) -> PResult<'i, ()> {
+    loop {
+        if input.starts_with(":::") {
+            let _ = ":::".parse_next(input)?;
+            let _ = take_while(0.., |c: char| {
+                c.is_alphanumeric() || matches!(c, '_' | '-' | '.')
+            })
+            .parse_next(input)?;
+            continue;
+        }
+        if input.starts_with("@{") {
+            // 扩展属性可能含引号包裹的 `}`，`shape_label` 会跳过引号内的终止符。
+            let _ = shape_label("@{", "}").parse_next(input)?;
+            continue;
+        }
+        break;
+    }
+    Ok(())
 }
 
 fn node_definition<'i>(input: &mut &'i str) -> PResult<'i, Node> {
-    // 用 peek 守卫：只有在 `id [shape]` 后面不是箭头（即这是节点声明而非边）时才成立，
-    // 避免把 `A --> B` 中的 `A` 误当成节点（winnow 在 parser 失败时不会回滚已消耗的 input）。
     // 用 peek 守卫：只有 `id [shape]` 才是节点声明（纯 `id` 行由边端点补节点）。
     // peek 在失败时回滚已消耗的 input，避免把 `A --> B` 中的 `A` 误当节点。
     let _ = peek((identifier, node_shape_with_text)).parse_next(input)?;
     let id = identifier.parse_next(input)?;
     let (shape, txt) = node_shape_with_text.parse_next(input)?;
+    let _ = node_suffix(input);
     Ok(Node {
         id,
         shape,
@@ -77,6 +93,8 @@ fn node_definition<'i>(input: &mut &'i str) -> PResult<'i, Node> {
 fn bare_node<'i>(input: &mut &'i str) -> PResult<'i, Node> {
     let start = *input;
     let id = identifier.parse_next(input)?;
+    // 消费 `:::class` / `@{...}` 后缀，否则 `A:::important` 会被当成未识别语句丢弃。
+    let _ = node_suffix(input);
     let rest = *input;
     let is_end = rest.is_empty()
         || rest.starts_with('\n')
@@ -126,23 +144,22 @@ fn link_arrow<'i>(input: &mut &'i str) -> PResult<'i, (ArrowType, Option<String>
         // A --|label|--> B（标签在箭头中间）
         (
             alt(("--", "-.", "==", "~~~")),
-            delimited("|", text, "|"),
+            shape_label("|", "|"),
             arrow_type,
         )
             .map(|(_, label, arrow)| (arrow, Some(label))),
-        // A --label--> B（裸标签在箭头中间）；`text` 到空白即停，故标签两侧的
-        // 行内空白都要跳过（`-- yes -->` 里 `--`/`yes` 与 `yes`/`-->` 之间都是空格，
-        // 否则 `unquoted_text` 遇前导空格匹配 0 字符而失败、整条边被丢弃）。
+        // A --label--> B（裸标签在箭头中间）。标签允许空格与标点，
+        // 以箭头起始序列为终止符（见 `bare_label`）。
         (
             alt(("--", "-.", "==")),
             inline_ws,
-            text,
+            bare_label,
             inline_ws,
             arrow_type,
         )
             .map(|(_, _, label, _, arrow)| (arrow, Some(label))),
         // A -->|label| B（标签在箭头后）
-        (arrow_type, opt(delimited("|", text, "|"))).map(|(arrow, label)| (arrow, label)),
+        (arrow_type, opt(shape_label("|", "|"))).map(|(arrow, label)| (arrow, label)),
         // 无标签
         arrow_type.map(|arrow| (arrow, None)),
     ))
@@ -160,6 +177,8 @@ fn edge_endpoint<'i>(input: &mut &'i str) -> PResult<'i, (String, Option<Node>)>
         shape,
         text,
     });
+    // 无论端点是否带形状，都可能跟 `:::class` / `@{...}` 后缀。
+    let _ = node_suffix(input);
     Ok((id, node))
 }
 
@@ -241,12 +260,13 @@ fn subgraph<'i>(input: &mut &'i str) -> PResult<'i, Subgraph> {
     let title = opt(rest_of_line).parse_next(input)?;
     skip_ws_and_comments(input)?;
 
-    // 子图内部方向（可选）
-    let _ = opt(preceded(("direction", ws1), direction)).parse_next(input)?;
+    // 子图内部方向（可选）：保留到 AST，不再解析后丢弃。
+    let sub_direction = opt(preceded(("direction", ws1), direction)).parse_next(input)?;
     skip_ws_and_comments(input)?;
 
     let mut nodes = Vec::new();
     let mut edges = Vec::new();
+    let mut subgraphs = Vec::new();
 
     while has_input(input) {
         skip_ws_and_comments(input)?;
@@ -254,10 +274,9 @@ fn subgraph<'i>(input: &mut &'i str) -> PResult<'i, Subgraph> {
             break;
         }
 
-        // 嵌套子图
+        // 嵌套子图：保留层级结构（旧实现把内层节点/边并入外层，容器嵌套信息丢失）。
         if let Some(sub) = attempt(subgraph, input) {
-            nodes.extend(sub.nodes);
-            edges.extend(sub.edges);
+            subgraphs.push(sub);
             continue;
         }
         // 边（含链式与 `&` 多端点）。必须**先于**节点声明尝试：
@@ -277,13 +296,20 @@ fn subgraph<'i>(input: &mut &'i str) -> PResult<'i, Subgraph> {
             nodes.push(node);
             continue;
         }
-        // 跳过未知内容（直到分号或换行）
-        let _ = take_while(1.., |c: char| c != ';' && c != '\n').parse_next(input)?;
+        // 跳过未知内容（直到分号或换行）。用 0.. + 强制前进兜底，
+        // 避免空行 / EOF 处 `take_while(1..)` 失败导致整个子图解析回滚。
+        let before = input.len();
+        let _ = take_while(0.., |c: char| c != ';' && c != '\n' && c != '\r').parse_next(input)?;
+        let _ = opt(("\r\n", "\n")).parse_next(input)?;
+        if input.len() == before {
+            let _ = any.parse_next(input)?;
+        }
     }
 
     let _ = "end".parse_next(input)?;
 
     // 将内部边的端点补为节点（若没有显式节点定义），与顶层流程图一致。
+    // 仅处理本层直接边；嵌套子图的成员由各自 `subgraph()` 补齐。
     let mut node_ids: std::collections::HashSet<String> =
         nodes.iter().map(|n| n.id.clone()).collect();
     for e in &edges {
@@ -300,8 +326,10 @@ fn subgraph<'i>(input: &mut &'i str) -> PResult<'i, Subgraph> {
 
     Ok(Subgraph {
         title,
+        direction: sub_direction,
         nodes,
         edges,
+        subgraphs,
     })
 }
 
@@ -523,10 +551,19 @@ mod tests {
         let fc = parse("flowchart TD\nsubgraph outer\nsubgraph inner\nA --> B\nend\nend\nC --> A");
         assert_eq!(fc.subgraphs.len(), 1);
         assert_eq!(fc.subgraphs[0].title.as_deref(), Some("outer"));
-        // 内层节点/边被提升
-        assert_eq!(fc.subgraphs[0].nodes.len(), 2);
-        assert_eq!(fc.subgraphs[0].edges.len(), 1);
+        // 嵌套层级保留：外层不吞并内层节点/边。
+        assert_eq!(fc.subgraphs[0].subgraphs.len(), 1);
+        assert_eq!(fc.subgraphs[0].subgraphs[0].title.as_deref(), Some("inner"));
+        assert_eq!(fc.subgraphs[0].nodes.len(), 0);
+        assert_eq!(fc.subgraphs[0].subgraphs[0].nodes.len(), 2);
+        assert_eq!(fc.subgraphs[0].subgraphs[0].edges.len(), 1);
         assert_eq!(fc.edges.len(), 1);
+    }
+
+    #[test]
+    fn subgraph_direction_is_preserved() {
+        let fc = parse("flowchart TD\nsubgraph One\ndirection LR\nA --> B\nend");
+        assert_eq!(fc.subgraphs[0].direction, Some(Direction::LR));
     }
 
     #[test]
@@ -534,5 +571,65 @@ mod tests {
         let fc = parse("flowchart TD\nA[\"Start\"]\nB[End]\nA --> B");
         assert_eq!(fc.nodes[0].text.as_deref(), Some("Start"));
         assert_eq!(fc.edges.len(), 1);
+    }
+
+    /// 常见标签含空格 / 标点：此前 `unquoted_text` 遇空白即停，整行被静默丢弃。
+    #[test]
+    fn labels_may_contain_spaces_and_punctuation() {
+        let fc = parse(
+            "flowchart TD\nA[Hello World] --> B[HTTP/2]\nB[Start-Here] --> C[foo.bar]\nC -->|Get money| D[End]",
+        );
+        assert_eq!(fc.edges.len(), 3, "3 条边都应解析");
+        let texts: Vec<_> = fc
+            .nodes
+            .iter()
+            .map(|n| n.text.clone().unwrap_or_default())
+            .collect();
+        assert!(texts.contains(&"Hello World".to_string()));
+        assert!(texts.contains(&"HTTP/2".to_string()));
+        assert!(texts.contains(&"Start-Here".to_string()));
+        assert!(texts.contains(&"foo.bar".to_string()));
+        assert_eq!(fc.edges[2].label.as_deref(), Some("Get money"));
+    }
+
+    /// 裸标签（`-- text -->`）同样允许空格，且以箭头起始为终止符。
+    #[test]
+    fn bare_labels_may_contain_spaces() {
+        let fc = parse("flowchart TD\nA -- yes please --> B\nB -- e-mail --> C");
+        assert_eq!(fc.edges.len(), 2);
+        assert_eq!(fc.edges[0].label.as_deref(), Some("yes please"));
+        assert_eq!(fc.edges[1].label.as_deref(), Some("e-mail"));
+    }
+
+    /// 撇号是普通字符，不能被误认为“包裹引号”的起始。
+    #[test]
+    fn labels_may_contain_apostrophes() {
+        let fc = parse("flowchart TD\nA[Don't stop] --> B[It's fine]\nB -- Don't go --> C");
+        assert_eq!(fc.nodes[0].text.as_deref(), Some("Don't stop"));
+        assert_eq!(fc.nodes[1].text.as_deref(), Some("It's fine"));
+        assert_eq!(fc.edges[1].label.as_deref(), Some("Don't go"));
+    }
+
+    /// 引号内的闭合定界符不应提前终止标签。
+    #[test]
+    fn quoted_label_may_contain_closing_delimiter() {
+        let fc = parse("flowchart TD\nA[\"a]b\"] --> B[\"c}d\"]");
+        assert_eq!(fc.nodes[0].text.as_deref(), Some("a]b"));
+        assert_eq!(fc.nodes[1].text.as_deref(), Some("c}d"));
+        assert_eq!(fc.edges.len(), 1);
+    }
+
+    /// `:::class` / `@{...}` 后缀必须被消费，否则整行被丢弃。
+    #[test]
+    fn style_and_extended_shape_suffixes_are_consumed() {
+        let fc = parse(
+            "flowchart TD\nA[Hello]:::important --> B[World]\nB:::other --> C@{ shape: rect, label: \"C\" }",
+        );
+        assert_eq!(fc.edges.len(), 2, "带后缀的边不得丢失");
+        assert_eq!(fc.nodes[0].text.as_deref(), Some("Hello"));
+        let ids: Vec<_> = fc.nodes.iter().map(|n| n.id.as_str()).collect();
+        assert!(ids.contains(&"A"));
+        assert!(ids.contains(&"B"));
+        assert!(ids.contains(&"C"));
     }
 }

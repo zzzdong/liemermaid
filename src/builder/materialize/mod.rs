@@ -1,7 +1,10 @@
 //! Stage 3: Materialize —— 视觉决策点（唯一消费主题常量的地方）。
 //!
-//! 消费 `Geograph` + `StyleIntent`，把"几何 + 样式意图"解析成具体颜色 / 线型，
+//! 消费 `Geograph`（+ 预留的 `StyleIntent`），把"几何 + 样式"解析成具体颜色 / 线型，
 //! 产出视觉自足的 [`SceneGraph`]。之后 `paint` 不再有任何 theme 依赖、不再有任何图类型判断。
+//!
+//! 说明：`StyleIntent` 目前仅保留接口，具体颜色 / 线型仍按 `theme` 常量解析，
+//! 详见 [`StyleIntent`] 的文档。
 //!
 //! 支持 flowchart + state：节点按 [`ShapeKind`]（含 StartDot 实心圆 / EndDot 双环 /
 //! Bar 横条），边按 [`EdgeKind`] 选 flowchart / state 主题，边标签绘制白底文本。
@@ -23,7 +26,6 @@ use crate::builder::ir::{
     unigraph::EdgeKind,
 };
 use crate::builder::theme;
-use crate::vir;
 
 const NODE_STROKE_WIDTH: f64 = 1.0;
 
@@ -290,7 +292,7 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
                 position,
                 style: title_style,
                 anchor: ir::scenegraph::Anchor::Left,
-                z: vir::Z_BACKGROUND,
+                z: theme::Z_BACKGROUND,
             });
         }
     }
@@ -339,7 +341,7 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
                     fill: None,
                     stroke: Some(outer),
                     name: None,
-                    z: vir::Z_BACKGROUND,
+                    z: theme::Z_BACKGROUND,
                 });
                 // 内圈实心小圆。
                 let inner_r = (n.size.width / 2.0) * 0.6;
@@ -352,7 +354,7 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
                     fill: Some(Fill::Solid(theme::state::STROKE)),
                     stroke: None,
                     name: None,
-                    z: vir::Z_BACKGROUND,
+                    z: theme::Z_BACKGROUND,
                 });
             }
             _ => {
@@ -362,7 +364,7 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
                     fill: Some(fill),
                     stroke: Some(stroke.clone()),
                     name: None,
-                    z: vir::Z_BACKGROUND,
+                    z: theme::Z_BACKGROUND,
                 });
                 // 官方 subroutine（`[[X]]`）= 内矩形 + 左右各一条外竖线
                 // （golden polygon 同时勾廓内外两个矩形，外侧各外扩 8px）。
@@ -378,7 +380,7 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
                             ]),
                             stroke: stroke.clone(),
                             ends: (EdgeEnds::None, EdgeEnds::None),
-                            z: vir::Z_BACKGROUND,
+                            z: theme::Z_BACKGROUND,
                         });
                     }
                 }
@@ -410,7 +412,7 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
                 position,
                 style,
                 anchor: ir::scenegraph::Anchor::Center,
-                z: vir::Z_SERIES,
+                z: theme::Z_SERIES,
             });
         }
     }
@@ -442,7 +444,7 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
             path: e.route.clone(),
             stroke: stroke.clone(),
             ends,
-            z: vir::Z_SUBGRAPH,
+            z: theme::Z_SUBGRAPH,
         });
 
         // ER 基数符号（source / target 端，沿「远离节点」方向排列）。
@@ -526,7 +528,7 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
                     fill: Some(Fill::Solid(bg_color)),
                     stroke: None,
                     name: Some("edge-label".to_string()),
-                    z: vir::Z_SUBGRAPH,
+                    z: theme::Z_SUBGRAPH,
                 });
             }
             items.push(SceneItem::Label {
@@ -534,7 +536,7 @@ pub fn run(gg: &Geograph, _style: &StyleIntent) -> SceneGraph {
                 position,
                 style: ts,
                 anchor: ir::scenegraph::Anchor::Center,
-                z: vir::Z_SERIES,
+                z: theme::Z_SERIES,
             });
         }
     }
@@ -731,7 +733,7 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
         fill: Some(Fill::Solid(theme::class::FILL)),
         stroke: Some(stroke.clone()),
         name: None,
-        z: vir::Z_BACKGROUND,
+        z: theme::Z_BACKGROUND,
     });
     items.push(SceneItem::Shape {
         geometry: ShapeGeometry::Rect {
@@ -741,7 +743,7 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
         fill: Some(Fill::Solid(theme::class::HEADER_FILL)),
         stroke: Some(stroke.clone()),
         name: None,
-        z: vir::Z_SUBGRAPH,
+        z: theme::Z_SUBGRAPH,
     });
 
     // 注解（header 顶部）。
@@ -766,7 +768,7 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
             position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Center,
-            z: vir::Z_SERIES,
+            z: theme::Z_SERIES,
         });
     }
     // 类名（header 居中，官方 10px + 加粗）。
@@ -793,7 +795,7 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
             position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Center,
-            z: vir::Z_SERIES,
+            z: theme::Z_SERIES,
         });
     }
 
@@ -807,7 +809,7 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
             fill: Some(Fill::Solid(theme::class::SEPARATOR)),
             stroke: None,
             name: None,
-            z: vir::Z_SUBGRAPH,
+            z: theme::Z_SUBGRAPH,
         });
     }
 
@@ -834,7 +836,7 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
             position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Left,
-            z: vir::Z_SERIES,
+            z: theme::Z_SERIES,
         });
         line_y += ATTR_LINE_H;
     }
@@ -862,7 +864,7 @@ fn emit_class_box(items: &mut Vec<SceneItem>, n: &GGNode) {
             position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Left,
-            z: vir::Z_SERIES,
+            z: theme::Z_SERIES,
         });
         line_y += ATTR_LINE_H;
     }
@@ -901,7 +903,7 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
         fill: Some(Fill::Solid(theme::er::FILL)),
         stroke: Some(stroke.clone()),
         name: None,
-        z: vir::Z_BACKGROUND,
+        z: theme::Z_BACKGROUND,
     });
     // header 仅作填充块（不带描边），左右/上边描边由外层实体框负责，
     // 底边横线由下方独立分隔线绘制，避免 header 框底边与分隔线重叠导致
@@ -914,7 +916,7 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
         fill: Some(Fill::Solid(theme::er::HEADER_FILL)),
         stroke: None,
         name: None,
-        z: vir::Z_SUBGRAPH,
+        z: theme::Z_SUBGRAPH,
     });
 
     // 实体名（header 居中）。
@@ -939,7 +941,7 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
             position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Center,
-            z: vir::Z_LABEL,
+            z: theme::Z_LABEL,
         });
     }
 
@@ -997,7 +999,7 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
             ]),
             stroke: divider_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: vir::Z_LABEL,
+            z: theme::Z_LABEL,
         });
         if constraint_max > 0.0 {
             let div2_x = constraint_x - ER_ATTR_GAP / 2.0;
@@ -1008,7 +1010,7 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
                 ]),
                 stroke: divider_stroke.clone(),
                 ends: (EdgeEnds::None, EdgeEnds::None),
-                z: vir::Z_LABEL,
+                z: theme::Z_LABEL,
             });
         }
     }
@@ -1021,7 +1023,7 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
         ]),
         stroke: divider_stroke.clone(),
         ends: (EdgeEnds::None, EdgeEnds::None),
-        z: vir::Z_LABEL,
+        z: theme::Z_LABEL,
     });
 
     // attribute 行：斑马纹背景 + 每行底部横线 + 文字
@@ -1044,7 +1046,7 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
             fill: Some(Fill::Solid(row_fill)),
             stroke: None,
             name: None,
-            z: vir::Z_SUBGRAPH,
+            z: theme::Z_SUBGRAPH,
         });
 
         // 每行底部横线（横跨整宽），z=2，位于行背景之上、竖线之下。
@@ -1055,7 +1057,7 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
             ]),
             stroke: divider_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: vir::Z_SERIES,
+            z: theme::Z_SERIES,
         });
 
         // 同行多单元格：用"公共视觉中线"对齐，比各自 ink 居中更统一。
@@ -1100,14 +1102,14 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
             position: Point::new(type_x, baseline_y),
             style: type_ts,
             anchor: ir::scenegraph::Anchor::Left,
-            z: vir::Z_TITLE,
+            z: theme::Z_TITLE,
         });
         items.push(SceneItem::Label {
             text: name_spans,
             position: Point::new(name_x, baseline_y),
             style: name_ts,
             anchor: ir::scenegraph::Anchor::Left,
-            z: vir::Z_TITLE,
+            z: theme::Z_TITLE,
         });
         if let Some(c) = &a.constraint {
             let constraint_ts = attr_ts.clone();
@@ -1117,7 +1119,7 @@ fn emit_entity_box(items: &mut Vec<SceneItem>, n: &GGNode) {
                 position: Point::new(constraint_x, baseline_y),
                 style: constraint_ts,
                 anchor: ir::scenegraph::Anchor::Left,
-                z: vir::Z_TITLE,
+                z: theme::Z_TITLE,
             });
         }
 
@@ -1206,7 +1208,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 fill: Some(Fill::Solid(theme::gitgraph::HIGHLIGHT_OUTER)),
                 stroke: None,
                 name: None,
-                z: vir::Z_SUBGRAPH,
+                z: theme::Z_SUBGRAPH,
             });
             items.push(SceneItem::Shape {
                 geometry: ShapeGeometry::Rect {
@@ -1216,7 +1218,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 fill: Some(Fill::Solid(theme::gitgraph::MERGE_INNER)),
                 stroke: None,
                 name: None,
-                z: vir::Z_SUBGRAPH,
+                z: theme::Z_SUBGRAPH,
             });
         } else if *is_merge {
             // merge：分支色外圆 + 白芯（对齐官方 commit + commit-merge 双圆）。
@@ -1229,7 +1231,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 fill: Some(Fill::Solid(color)),
                 stroke: None,
                 name: None,
-                z: vir::Z_SUBGRAPH,
+                z: theme::Z_SUBGRAPH,
             });
             items.push(SceneItem::Shape {
                 geometry: ShapeGeometry::Ellipse {
@@ -1240,7 +1242,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 fill: Some(Fill::Solid(theme::gitgraph::MERGE_INNER)),
                 stroke: None,
                 name: None,
-                z: vir::Z_SUBGRAPH,
+                z: theme::Z_SUBGRAPH,
             });
         } else {
             items.push(SceneItem::Shape {
@@ -1252,7 +1254,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 fill: Some(Fill::Solid(color)),
                 stroke: None,
                 name: None,
-                z: vir::Z_SUBGRAPH,
+                z: theme::Z_SUBGRAPH,
             });
         }
         // commit id 标签：显式 id 优先；merge 无显式 id 不显示（官方 merge 无 id 时无 commit-label）；
@@ -1290,14 +1292,14 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 fill: Some(Fill::Solid(theme::gitgraph::COMMIT_LABEL_BKG)),
                 stroke: None,
                 name: None,
-                z: vir::Z_BACKGROUND,
+                z: theme::Z_BACKGROUND,
             });
             items.push(SceneItem::Label {
                 text: spans,
                 position,
                 style: ts,
                 anchor: ir::scenegraph::Anchor::Center,
-                z: vir::Z_SERIES,
+                z: theme::Z_SERIES,
             });
         }
         // tag 标签：位于 commit 上方，灰色「左尖角矩形」背景（官方 tag 标签的简化），文字居中。
@@ -1338,14 +1340,14 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 fill: Some(Fill::Solid(theme::gitgraph::TAG_BKG)),
                 stroke: Some(git_stroke(theme::gitgraph::TAG_BKG_STROKE, 1.0)),
                 name: None,
-                z: vir::Z_BACKGROUND,
+                z: theme::Z_BACKGROUND,
             });
             items.push(SceneItem::Label {
                 text: spans,
                 position,
                 style: ts,
                 anchor: ir::scenegraph::Anchor::Center,
-                z: vir::Z_SERIES,
+                z: theme::Z_SERIES,
             });
         }
     }
@@ -1380,7 +1382,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 path: ir::geograph::line_route(&[parent.center, child.center]),
                 stroke: git_stroke(branch_color(cb), theme::gitgraph::LINE_WIDTH),
                 ends: (EdgeEnds::None, EdgeEnds::None),
-                z: vir::Z_BACKGROUND,
+                z: theme::Z_BACKGROUND,
             });
         } else {
             // 跨分支：颜色 = fork 用子分支色、merge 用父分支色（对齐官方箭头）。
@@ -1422,7 +1424,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 path,
                 stroke: git_stroke(color, theme::gitgraph::LINE_WIDTH),
                 ends: (EdgeEnds::None, EdgeEnds::None),
-                z: vir::Z_BACKGROUND,
+                z: theme::Z_BACKGROUND,
             });
         }
     }
@@ -1460,7 +1462,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
             ]),
             stroke: branch_dash.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: vir::Z_BACKGROUND,
+            z: theme::Z_BACKGROUND,
         });
         let mut ts_label = theme::text_style(
             Color::rgb(255, 255, 255),
@@ -1499,14 +1501,14 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
             fill: Some(Fill::Solid(color)),
             stroke: Some(git_stroke(color, 1.0)),
             name: None,
-            z: vir::Z_BACKGROUND,
+            z: theme::Z_BACKGROUND,
         });
         items.push(SceneItem::Label {
             text: spans,
             position: label_pos,
             style: ts_label,
             anchor: ir::scenegraph::Anchor::Center,
-            z: vir::Z_SERIES,
+            z: theme::Z_SERIES,
         });
         // 分支尾部延伸线（最后一个提交之后）。
         if let Some(last_id) = members.last()
@@ -1519,7 +1521,7 @@ fn emit_gitgraph(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 ]),
                 stroke: git_stroke(Color::new(180, 180, 180, 255), 1.0),
                 ends: (EdgeEnds::None, EdgeEnds::None),
-                z: vir::Z_BACKGROUND,
+                z: theme::Z_BACKGROUND,
             });
         }
     }
@@ -1571,7 +1573,7 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
             position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Center,
-            z: vir::Z_SERIES,
+            z: theme::Z_SERIES,
         });
     }
 
@@ -1593,7 +1595,7 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
             miter_limit: 4.0,
         }),
         name: None,
-        z: vir::Z_SUBGRAPH,
+        z: theme::Z_SUBGRAPH,
     });
 
     // 扇区分隔线：官方 `.pieCircle{stroke:black;stroke-width:2px}`（黑描边勾出
@@ -1630,7 +1632,7 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
             fill: Some(Fill::Solid(color)),
             stroke: Some(slice_stroke.clone()),
             name: None,
-            z: vir::Z_BACKGROUND,
+            z: theme::Z_BACKGROUND,
         });
 
         // 扇区标签：官方只放**百分比**（`40%`），名称交给右侧图例。
@@ -1653,7 +1655,7 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
             position,
             style: pct_ts,
             anchor: ir::scenegraph::Anchor::Center,
-            z: vir::Z_SERIES,
+            z: theme::Z_SERIES,
         });
 
         start += sweep;
@@ -1690,7 +1692,7 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 miter_limit: 4.0,
             }),
             name: None,
-            z: vir::Z_SUBGRAPH,
+            z: theme::Z_SUBGRAPH,
         });
         let text = if gg.show_data {
             format!("{} [{}]", label, *value as i64)
@@ -1712,7 +1714,7 @@ fn emit_pie(items: &mut Vec<SceneItem>, gg: &Geograph) {
             position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Left,
-            z: vir::Z_SERIES,
+            z: theme::Z_SERIES,
         });
     }
 }
@@ -1784,7 +1786,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 miter_limit: 4.0,
             }),
             name: None,
-            z: vir::Z_BACKGROUND,
+            z: theme::Z_BACKGROUND,
         });
         if let Some(label) = &n.label {
             let mut ts = theme::text_style(
@@ -1807,7 +1809,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 position,
                 style: ts,
                 anchor: ir::scenegraph::Anchor::Center,
-                z: vir::Z_SERIES,
+                z: theme::Z_SERIES,
             });
         }
         // 生命线（单条虚线，从顶部盒底向下延伸到底部盒上沿）。
@@ -1818,7 +1820,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             ]),
             stroke: lifeline_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: vir::Z_BACKGROUND,
+            z: theme::Z_BACKGROUND,
         });
     }
 
@@ -1843,7 +1845,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 miter_limit: 4.0,
             }),
             name: None,
-            z: vir::Z_BACKGROUND,
+            z: theme::Z_BACKGROUND,
         });
         if let Some(label) = &n.label {
             let mut ts = theme::text_style(
@@ -1866,7 +1868,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 position,
                 style: ts,
                 anchor: ir::scenegraph::Anchor::Center,
-                z: vir::Z_SERIES,
+                z: theme::Z_SERIES,
             });
         }
     }
@@ -1894,7 +1896,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 miter_limit: 4.0,
             }),
             name: None,
-            z: vir::Z_BACKGROUND,
+            z: theme::Z_BACKGROUND,
         });
     }
 
@@ -1921,7 +1923,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             path: e.route.clone(),
             stroke: stroke.clone(),
             ends,
-            z: vir::Z_SUBGRAPH,
+            z: theme::Z_SUBGRAPH,
         });
         if let (Some(text), Some(anchor)) = (&e.label_text, &e.label_anchor)
             && !text.is_empty()
@@ -1946,7 +1948,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 position,
                 style: ts,
                 anchor: ir::scenegraph::Anchor::Center,
-                z: vir::Z_SERIES,
+                z: theme::Z_SERIES,
             });
         }
     }
@@ -1981,7 +1983,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 miter_limit: 4.0,
             }),
             name: None,
-            z: vir::Z_BACKGROUND,
+            z: theme::Z_BACKGROUND,
         });
         let mut ts = theme::text_style(
             theme::sequence::NOTE_TEXT,
@@ -2003,7 +2005,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Center,
-            z: vir::Z_SERIES,
+            z: theme::Z_SERIES,
         });
     }
 
@@ -2084,7 +2086,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 position: Point::new(tab_x + tab_w / 2.0, baseline_y),
                 style: head_ts.clone(),
                 anchor: ir::scenegraph::Anchor::Center,
-                z: vir::Z_BACKGROUND,
+                z: theme::Z_BACKGROUND,
             });
             // 方括号描述段：紧随 tab 右侧（官方为独立 loopText 文本）。
             if let Some(tail) = tail {
@@ -2093,7 +2095,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
                     position: Point::new(tab_x + tab_w + 6.0, baseline_y),
                     style: head_ts,
                     anchor: ir::scenegraph::Anchor::Left,
-                    z: vir::Z_BACKGROUND,
+                    z: theme::Z_BACKGROUND,
                 });
             }
         }
@@ -2125,7 +2127,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
             path,
             stroke,
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: vir::Z_BACKGROUND,
+            z: theme::Z_BACKGROUND,
         });
         if !d.label.is_empty() {
             let mut ts = theme::text_style(
@@ -2148,7 +2150,7 @@ fn emit_sequence(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 position,
                 style: ts,
                 anchor: ir::scenegraph::Anchor::Center,
-                z: vir::Z_BACKGROUND,
+                z: theme::Z_BACKGROUND,
             });
         }
     }
@@ -2248,7 +2250,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             position,
             style: ts,
             anchor: ir::scenegraph::Anchor::Left,
-            z: vir::Z_SERIES,
+            z: theme::Z_SERIES,
         });
     }
 
@@ -2263,7 +2265,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             path: ir::geograph::line_route(&[Point::new(x0, y), Point::new(tip, y)]),
             stroke: axis_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: vir::Z_BACKGROUND,
+            z: theme::Z_BACKGROUND,
         });
         items.push(SceneItem::Edge {
             path: ir::geograph::line_route(&[
@@ -2272,7 +2274,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             ]),
             stroke: axis_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: vir::Z_BACKGROUND,
+            z: theme::Z_BACKGROUND,
         });
         items.push(SceneItem::Edge {
             path: ir::geograph::line_route(&[
@@ -2281,7 +2283,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             ]),
             stroke: axis_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: vir::Z_BACKGROUND,
+            z: theme::Z_BACKGROUND,
         });
     } else {
         let x = axis_c;
@@ -2292,7 +2294,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             path: ir::geograph::line_route(&[Point::new(x, y0), Point::new(x, tip)]),
             stroke: axis_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: vir::Z_BACKGROUND,
+            z: theme::Z_BACKGROUND,
         });
         items.push(SceneItem::Edge {
             path: ir::geograph::line_route(&[
@@ -2301,7 +2303,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             ]),
             stroke: axis_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: vir::Z_BACKGROUND,
+            z: theme::Z_BACKGROUND,
         });
         items.push(SceneItem::Edge {
             path: ir::geograph::line_route(&[
@@ -2310,7 +2312,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
             ]),
             stroke: axis_stroke.clone(),
             ends: (EdgeEnds::None, EdgeEnds::None),
-            z: vir::Z_BACKGROUND,
+            z: theme::Z_BACKGROUND,
         });
     }
 
@@ -2431,7 +2433,7 @@ fn emit_timeline(items: &mut Vec<SceneItem>, gg: &Geograph) {
                 stroke,
                 // 官方连接线箭头在**末端**（marker-end，位于 event 块下方）。
                 ends: (EdgeEnds::None, EdgeEnds::Arrow),
-                z: vir::Z_GRID,
+                z: theme::Z_GRID,
             });
         }
     }
@@ -2477,7 +2479,7 @@ fn emit_timeline_block(
         fill: Some(Fill::Solid(color)),
         stroke: None,
         name: None,
-        z: vir::Z_SERIES,
+        z: theme::Z_SERIES,
     });
     // 块底线（官方 `.section-N line{stroke-width:3}`，互补色提亮）。
     items.push(SceneItem::Edge {
@@ -2495,7 +2497,7 @@ fn emit_timeline_block(
             miter_limit: 4.0,
         },
         ends: (EdgeEnds::None, EdgeEnds::None),
-        z: vir::Z_SERIES,
+        z: theme::Z_SERIES,
     });
     let mut ts = theme::text_style(
         text_color,
@@ -2517,7 +2519,7 @@ fn emit_timeline_block(
         position,
         style: ts,
         anchor: ir::scenegraph::Anchor::Center,
-        z: vir::Z_SERIES,
+        z: theme::Z_SERIES,
     });
 }
 
@@ -2614,9 +2616,7 @@ fn shape_to_geometry(shape: ShapeKind, center: Point, size: Size) -> ShapeGeomet
     let half_h = size.height / 2.0;
     let tl = Point::new(center.x - half_w, center.y - half_h);
     match shape {
-        ShapeKind::Rectangle | ShapeKind::Bar | ShapeKind::QuadrantCell => {
-            ShapeGeometry::Rect { at: tl, size }
-        }
+        ShapeKind::Rectangle | ShapeKind::Bar => ShapeGeometry::Rect { at: tl, size },
         ShapeKind::Rounded => ShapeGeometry::RoundedRect {
             at: tl,
             size,

@@ -33,6 +33,16 @@ pub fn class_diagram<'i>(input: &mut &'i str) -> PResult<'i, ClassDiagram> {
             classes.push(c);
             continue;
         }
+        // `Animal : +int age` / `Animal : +isMammal()`——官方主流成员声明语法。
+        if let Some((name, m)) = attempt(member_decl, input) {
+            classes.push(Class {
+                name,
+                generic: None,
+                annotation: None,
+                members: vec![m],
+            });
+            continue;
+        }
         if let Some(r) = attempt(relation, input) {
             relations.push(r);
             continue;
@@ -104,6 +114,19 @@ fn class_decl<'i>(input: &mut &'i str) -> PResult<'i, Class> {
         annotation,
         members,
     })
+}
+
+/// 类外成员声明：`ClassName : +int age` / `ClassName : +isMammal()`。
+///
+/// 官方 mermaid 支持在类声明块之外逐行添加成员；此前本项目只认 `class X { ... }`，
+/// 这些行会被 `skip_line` 静默丢弃。
+fn member_decl<'i>(input: &mut &'i str) -> PResult<'i, (String, ClassMember)> {
+    let name = identifier.parse_next(input)?;
+    inline_ws(input)?;
+    let _ = ':'.parse_next(input)?;
+    inline_ws(input)?;
+    let member = member.parse_next(input)?;
+    Ok((name, member))
 }
 
 /// 去掉括号部分（`eat()` -> `eat`），用于成员名。
@@ -300,6 +323,22 @@ mod tests {
     fn annotated_class() {
         let d = parse("classDiagram\nclass Animal <<Interface>>");
         assert_eq!(d.classes[0].annotation.as_deref(), Some("Interface"));
+    }
+
+    /// 类外成员声明（官方主流写法）：`Animal : +int age`。
+    #[test]
+    fn members_declared_outside_class_block() {
+        let d = parse("classDiagram\nclass Animal\nAnimal : +int age\nAnimal : +isMammal()");
+        let animal = d
+            .classes
+            .iter()
+            .find(|c| c.name == "Animal")
+            .expect("Animal");
+        assert_eq!(d.classes.len(), 3, "parser 保留逐条声明，extract 负责合并");
+        assert_eq!(animal.members.len(), 0, "块内无成员");
+        assert_eq!(d.classes[1].members[0].name, "age");
+        assert_eq!(d.classes[2].members[0].name, "isMammal");
+        assert!(d.classes[2].members[0].is_method);
     }
 
     #[test]

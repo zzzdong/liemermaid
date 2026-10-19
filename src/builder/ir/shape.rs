@@ -32,8 +32,6 @@ pub enum ShapeKind {
     EndDot,
     /// pie 扇区。
     PieSlice,
-    /// quadrant 单元格。
-    QuadrantCell,
 }
 
 /// 形状几何描述（布局求解后写入 GG，paint 直接消费）。
@@ -64,24 +62,12 @@ pub enum ShapeGeometry {
     Polygon {
         points: Vec<Point>,
     },
-    Path {
-        ops: Vec<PathOp>,
-    },
     Pie {
         center: Point,
         radius: f64,
         start_angle: f64,
         end_angle: f64,
     },
-}
-
-/// 简单路径操作（圆柱等复杂形状的几何描述）。
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PathOp {
-    MoveTo(Point),
-    LineTo(Point),
-    ArcTo(Point, f64),
-    CurveTo(Point, Point, Point),
 }
 
 /// 连线两端标记（已解析的枚举），paint 查表生成起止标记原语。

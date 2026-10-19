@@ -44,7 +44,13 @@ impl WinnowParser {
     /// 支持 `flowchart`/`graph`、`sequenceDiagram`、`classDiagram`、
     /// `stateDiagram`/`stateDiagram-v2`、`erDiagram`、`pie`、`timeline`、`gitGraph`。
     pub fn parse_mermaid(input: &str) -> ParseResult<Diagram> {
+        // 编辑器常把 UTF-8 BOM 写进文件；`str::trim` 不会去掉 U+FEFF，
+        // 否则首行关键字匹配失败并被报成 “unsupported diagram type”。
+        let input = input.trim_start_matches('\u{feff}');
         let trimmed = input.trim_start();
+        if trimmed.is_empty() {
+            return Err(ParseError::NoDiagram);
+        }
         let lower = trimmed.to_ascii_lowercase();
         // 关键字后须紧跟空白/行尾，避免误判前缀
         let kw = |p: &str| {

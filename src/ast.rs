@@ -91,15 +91,24 @@ pub enum ArrowType {
     MultiCircle,
     /// 双向叉号箭头（`x--x`）
     MultiCross,
-    Labeled(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Subgraph {
     pub title: Option<String>,
+    /// 子图内 `direction` 声明（如 `subgraph One\ndirection LR`）。
+    ///
+    /// 保留在 AST 中供后续布局使用；当前布局仍按整图方向排布。
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub direction: Option<Direction>,
+    /// 直接属于本子图的节点（不含嵌套子图成员）。
     pub nodes: Vec<Node>,
+    /// 直接属于本子图的边（不含嵌套子图内部的边）。
     pub edges: Vec<Edge>,
+    /// 嵌套子图（保留层级，供容器嵌套绘制）。
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub subgraphs: Vec<Subgraph>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

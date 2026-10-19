@@ -1,10 +1,26 @@
 //! 各图表的配色与排版常量。
 //!
-//! 从旧 `visual::theme` 迁移而来，现独立为 builder 层的主题模块，
-//! 由各图表 builder 通过 `crate::vir::theme`（重导出）引用。
+//! 从旧 `visual::theme` 迁移而来，现独立为 builder 层的主题模块；
+//! `materialize` 直接引用 `crate::builder::theme` 的常量。
 
 use lievisual::Color;
 use lievisual::text::{TextAlign, TextBaseline, TextStyle};
+
+// ---- 渲染层级（SceneNode.z_index）----
+// 数值约定：背景 < 容器 < 数据图元 < 标签 < 标题。materialize 是唯一消费方。
+
+/// 画布背景。
+pub const Z_BACKGROUND: i32 = 0;
+/// 子图 / 复合状态等容器框（位于节点与边之下）。
+pub const Z_SUBGRAPH: i32 = 5;
+/// 网格 / 参考线（如 timeline 轴线）。
+pub const Z_GRID: i32 = 10;
+/// 数据图元（节点、扇区、时间轴块）。
+pub const Z_SERIES: i32 = 20;
+/// 节点 / 边标签。
+pub const Z_LABEL: i32 = 40;
+/// 图表标题。
+pub const Z_TITLE: i32 = 50;
 
 // ---- 基础 ----
 pub const BACKGROUND: Color = Color::new(255, 255, 255, 255);

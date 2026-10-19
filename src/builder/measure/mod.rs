@@ -288,7 +288,7 @@ fn shape_padding(shape: ir::shape::ShapeKind) -> (f64, f64, bool) {
         // rect：W = text_w + 60，H = text_h + 30。
         // rounded：官方 golden 实测 `B(Rounded)` → rect 94.95 = 文本 64.95 + **30**
         //（即 pad_x = 15，与 rect 的 30 不同；高度仍为 text_h + 30）。
-        S::Rectangle | S::QuadrantCell => (NODE_PAD_X, NODE_PAD_Y, false),
+        S::Rectangle => (NODE_PAD_X, NODE_PAD_Y, false),
         S::Rounded => (15.0, NODE_PAD_Y, false),
         // 圆 / 双圆：直径 = max(text_w, text_h) + 15。
         S::Circle | S::DoubleCircle | S::StartDot | S::EndDot => (7.5, 7.5, true),

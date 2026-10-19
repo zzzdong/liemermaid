@@ -1,4 +1,4 @@
-use lievisual::geometry::{Color, Point};
+use lievisual::geometry::Color;
 
 /// 风格的默认配置
 pub const DEFAULT_WIDTH: f64 = 800.0;
@@ -32,19 +32,4 @@ impl Default for OutputConfig {
             upscale: false,
         }
     }
-}
-
-/// 居中辅助：计算矩形区域内居中绘制文本时的偏移量
-pub fn center_in_rect(
-    text_w: f64,
-    text_h: f64,
-    rect_x: f64,
-    rect_y: f64,
-    rect_w: f64,
-    rect_h: f64,
-) -> Point {
-    Point::new(
-        rect_x + (rect_w - text_w) / 2.0,
-        rect_y + (rect_h - text_h) / 2.0,
-    )
 }

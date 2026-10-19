@@ -82,7 +82,6 @@ fn all_shape_kinds_materialize_and_paint_without_panic() {
         ShapeKind::StartDot,
         ShapeKind::EndDot,
         ShapeKind::PieSlice,
-        ShapeKind::QuadrantCell,
     ];
 
     for &kind in &kinds {
@@ -143,7 +142,7 @@ fn each_shape_kind_produces_distinct_geometry_variant() {
     use liemermaid::builder::ir::shape::ShapeGeometry::*;
     /// (形状, 期望的几何变体判定) 对照表。
     type Expectation = (ShapeKind, fn(&ShapeGeometry) -> bool);
-    let expectations: [Expectation; 17] = [
+    let expectations: [Expectation; 16] = [
         (ShapeKind::Rectangle, |g| matches!(g, Rect { .. })),
         (ShapeKind::Rounded, |g| matches!(g, RoundedRect { .. })),
         (ShapeKind::Stadium, |g| matches!(g, Stadium { .. })),
@@ -161,7 +160,6 @@ fn each_shape_kind_produces_distinct_geometry_variant() {
         (ShapeKind::StartDot, |g| matches!(g, Ellipse { .. })),
         (ShapeKind::EndDot, |g| matches!(g, Ellipse { .. })),
         (ShapeKind::PieSlice, |g| matches!(g, Pie { .. })),
-        (ShapeKind::QuadrantCell, |g| matches!(g, Rect { .. })),
     ];
     for (kind, pred) in expectations {
         let gg = gg_with(kind);

@@ -10,6 +10,7 @@
 //! - 画布尺寸小于 2×边距时 `scale` 变负，产出 `viewBox="0 0 0 -20.41"`
 
 use liemermaid::ast::{ArrowType, Diagram, RelationKind, SequenceBlockKind};
+use liemermaid::error::ParseError;
 use liemermaid::{MermaidParser, render};
 
 /// 去掉 `<svg ...>` 根节点后的内容长度（0 表示什么都没画）。
@@ -508,5 +509,27 @@ fn pathological_inputs_do_not_panic() {
         // 解析/渲染可以失败（返回 Err），但绝不能 panic。
         let _ = render(src, 800, 600);
         let _ = liemermaid::render_png(src, 200, 200);
+    }
+}
+
+/// 编辑器保存的 UTF-8 BOM 不应导致整图解析失败。
+#[test]
+fn utf8_bom_is_ignored() {
+    let fc = flowchart_of("\u{feff}flowchart TD\nA-->B");
+    assert_eq!(fc.edges.len(), 1);
+    assert_eq!(fc.nodes.len(), 2);
+}
+
+/// 空输入应报告 “no diagram found”，而非误导性的 “unsupported diagram type”。
+#[test]
+fn empty_input_reports_no_diagram() {
+    for src in ["", "   ", "\n\t\r\n"] {
+        assert!(
+            matches!(
+                MermaidParser::parse_mermaid(src),
+                Err(ParseError::NoDiagram)
+            ),
+            "src={src:?}"
+        );
     }
 }

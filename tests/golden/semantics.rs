@@ -297,25 +297,40 @@ impl SemDiff {
 
 /// 比较 semantics（ours = liemermaid 当前，golden = 官方）。
 /// 文本/节点标签要求**集合相等**（强）；类型计数记录偏差（弱，由调用方决定 fail/warn）。
+/// 归一化空白：官方 SVG 来自 HTML `<span>`，标签之间的换行/缩进会被
+/// XML 文本节点保留（如 `发布   v1.0`）；liemermaid 直接输出 `发布 v1.0`。
+/// 比较文本集合前把连续空白折叠为单个空格，避免纯排版差异造成误报。
+fn normalize_ws(items: &BTreeSet<String>) -> BTreeSet<String> {
+    items
+        .iter()
+        .map(|t| t.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|t| !t.is_empty())
+        .collect()
+}
+
 pub fn compare(ours: &DiagramSemantics, golden: &DiagramSemantics) -> SemDiff {
     let mut d = SemDiff::default();
-    for t in &golden.texts {
-        if !ours.texts.contains(t) {
+    let ours_texts = normalize_ws(&ours.texts);
+    let golden_texts = normalize_ws(&golden.texts);
+    let ours_labels = normalize_ws(&ours.node_labels);
+    let golden_labels = normalize_ws(&golden.node_labels);
+    for t in &golden_texts {
+        if !ours_texts.contains(t) {
             d.missing_texts.insert(t.clone());
         }
     }
-    for t in &ours.texts {
-        if !golden.texts.contains(t) {
+    for t in &ours_texts {
+        if !golden_texts.contains(t) {
             d.extra_texts.insert(t.clone());
         }
     }
-    for t in &golden.node_labels {
-        if !ours.node_labels.contains(t) {
+    for t in &golden_labels {
+        if !ours_labels.contains(t) {
             d.missing_node_labels.insert(t.clone());
         }
     }
-    for t in &ours.node_labels {
-        if !golden.node_labels.contains(t) {
+    for t in &ours_labels {
+        if !golden_labels.contains(t) {
             d.extra_node_labels.insert(t.clone());
         }
     }
