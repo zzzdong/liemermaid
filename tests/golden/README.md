@@ -8,7 +8,7 @@
 |---|---|
 | `cases/catalog.json` | 用例清单：每个用例指向一段 Mermaid 源码 + 画布尺寸 |
 | `cases/*.mmd` | 各用例的 Mermaid 源码（经典 + 边界场景） |
-| `golden/*.svg` | **黄金样本**：官方 mermaid-cli 渲染的"标准答案" |
+| `golden/*.svg` | **黄金样本**：官方 mermaid-cli 渲染的"标准答案"（**本地生成，不提交**） |
 | `generate_golden.js` | 调用官方 `@mermaid-js/mermaid-cli` 生成黄金样本 |
 | `official_compare_test.rs` | 对拍主入口：语义/文本比对 + 结构差异报告 + 硬门槛 |
 | `svgdiff.rs` / `semantics.rs` | SVG DOM 结构 / 语义抽取工具（供上述测试复用） |
@@ -26,7 +26,7 @@
    - **软报告**：语义类型计数、坐标包围盒差异（两套渲染引擎天然不同，仅打印不失败）
 4. 输出逐用例差异报告，可定位布局算法对齐问题
 
-## 当前覆盖（54 个用例，全部有官方参考 SVG）
+## 当前覆盖（54 个输入用例）
 
 | 类型 | 数量 | 说明 |
 |---|---|---|
@@ -39,16 +39,20 @@
 | timeline | 2 | 基础/多事件 |
 | gitgraph | 2 | 基础/属性 |
 
-每个用例的**官方参考 SVG** 均已通过 mermaid-cli 生成并保存在 `golden/`，
-与 `cases/*.mmd` 一一对应（54 个源码 = 54 个官方 SVG）。
+`cases/*.mmd` + `catalog.json` 是提交到仓库的**输入**；
+`golden/*.svg` 是开发者本地运行 `generate_golden.js` 生成的**产物**，
+不提交（不同 mermaid 版本/字体会产生差异，且体积较大）。
+
 全部 54 个用例 liemermaid 都能解析渲染（`liemermaid: false` 已清零）。
+本地没有 `golden/` 时，`official_compare_test` 会打印提示并跳过官方对比；
+`catalog_cases_render_test` 仍然照常运行。
 
 ### catalog 标记语义
 
 | 字段 | 含义 |
 |---|---|
-| `liemermaid: false` | liemermaid 无法解析/渲染该语法；冒烟测试跳过，官方参考 SVG 仍保留。当前没有用例使用该标记。 |
-| `compare: false` | liemermaid 能渲染，但文本/结构对拍暂不适用（如子图容器框、note 布局、ER 属性块、git 分支）。仅做冒烟渲染。 |
+| `liemermaid: false` | liemermaid 无法解析/渲染该语法；冒烟测试跳过。当前没有用例使用该标记。 |
+| `compare: false` | liemermaid 能渲染，但文本/结构对拍暂不适用（如子图容器框、note 布局、ER 属性块、git 分支）。仅做冒烟渲染；本地生成 golden 后也不参与对拍。 |
 | 缺省 | 参与完整对拍（含文本硬门槛）。 |
 
 当前 `compare: false` 的 5 个用例：`flowchart__subgraph`、`sequence__notes`、
@@ -60,6 +64,8 @@
   渲染出标准 SVG（含真实文本测宽）。需要 `npm` 与网络；检测到系统 Chromium
   （如 `pacman -S chromium`）时自动通过 `PUPPETEER_EXECUTABLE_PATH` 使用它，
   避免下载 puppeteer 自带浏览器。
+- 生成目录 `golden/` 已被 `.gitignore` 忽略，请勿提交。需要官方对比时在本地生成，
+  CI 只跑不依赖 golden 的冒烟/单元测试。
 
 ## 运行
 

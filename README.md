@@ -72,7 +72,9 @@ cargo test
 Covers parsing, syntax-compatibility regressions, layout quality (no
 edge-through-node crossings, layer alignment, no overlap), SVG structure, PNG
 encoding, pathological inputs, and structural comparison against official
-mermaid-cli golden output (see `tests/golden/`).
+mermaid-cli golden output. Official golden SVGs are **generated locally** with
+`tests/golden/generate_golden.js` and are not committed; the comparison test
+skips automatically when they are absent.
 
 ## Known limitations
 

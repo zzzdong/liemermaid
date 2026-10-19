@@ -11,8 +11,8 @@ repository = "https://github.com/zzzdong/liemermaid"
 homepage = "https://github.com/zzzdong/liemermaid"
 keywords = ["mermaid", "diagram", "flowchart", "sequence", "graph"]
 categories = ["visualization", "parser-implementations", "rendering"]
-# 说明：根目录的 demo 产物（*.svg / *.png）已被 .gitignore 忽略，
-# 不再使用 `exclude = ["*.svg"]`——那会连 tests/golden/golden/*.svg 基线一起排除。
+# 说明：demo 产物与 tests/golden/golden/*.svg 均由 .gitignore 排除（本地生成），
+# 无需 `exclude`；避免误伤仓库中其他需要打包的资源。
 
 [dependencies]
 anyhow = "1.0"

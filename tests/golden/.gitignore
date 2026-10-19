@@ -10,8 +10,6 @@ package-lock.json
 # 我们自己的渲染输出（Rust 测试产物，可随时重生成）
 ours/
 
-# 保留黄金样本 SVG —— 它们是"标准答案"，必须提交。
-# 根 .gitignore 忽略了 *.svg，这里用否定重新包含。
-!golden/
-!golden/**/*.svg
-!golden/**/
+# 黄金样本由 `node generate_golden.js` 用官方 mermaid-cli 本地生成，
+# 属于构建产物，不提交（不同 mermaid 版本/字体会产生差异）。
+golden/

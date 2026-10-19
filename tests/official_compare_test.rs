@@ -27,6 +27,20 @@ mod svgdiff;
 const CASES_DIR: &str = "tests/golden/cases";
 const GOLDEN_DIR: &str = "tests/golden/golden";
 
+/// 本地是否已生成官方黄金样本。
+///
+/// `tests/golden/golden/` 是 mermaid-cli 的构建产物（不提交）；开发者需要时运行
+/// `node tests/golden/generate_golden.js` 生成。缺失时本测试跳过官方对比，
+/// 避免新克隆的仓库 / CI 因缺少产物而失败。
+fn golden_available() -> bool {
+    fs::read_dir(GOLDEN_DIR)
+        .ok()
+        .into_iter()
+        .flatten()
+        .flatten()
+        .any(|e| e.path().extension().is_some_and(|ext| ext == "svg"))
+}
+
 /// 加载并解析 catalog.json 得到用例列表。
 fn load_catalog() -> Vec<Case> {
     let path = Path::new(CASES_DIR).join("catalog.json");
@@ -56,6 +70,13 @@ fn default_true() -> bool {
 
 #[test]
 fn official_semantic_compare() {
+    if !golden_available() {
+        println!(
+            "official_semantic_compare: no golden baselines under {GOLDEN_DIR}; skipping. \
+             Run `cd tests/golden && node generate_golden.js` to enable official comparison."
+        );
+        return;
+    }
     let cases = load_catalog();
     let mut failures: BTreeMap<String, String> = BTreeMap::new();
     let mut struct_failures: Vec<String> = Vec::new();

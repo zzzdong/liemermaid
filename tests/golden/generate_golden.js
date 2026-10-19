@@ -7,8 +7,8 @@
 // 运行:
 //   cd tests/golden && npm install && node generate_golden.js
 //
-// 生成的 SVG 作为"黄金标准"存入仓库，供 Rust 测试做结构化对比
-// （见 tests/official_compare_test.rs 的官方语义/结构对比）。
+// 生成的 SVG 作为"黄金标准"保存在本地 golden/（已被 .gitignore 忽略，不提交），
+// 供 Rust 测试做结构化对比（见 tests/official_compare_test.rs）。
 //
 // 说明：mermaid-cli 的 SVG 会包含外部字体 URL 与主题相关元数据，
 // 这些不影响布局结构。Rust 侧只做结构化对比（节点矩形位置/尺寸、边路径），

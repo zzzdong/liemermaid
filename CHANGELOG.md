@@ -45,6 +45,10 @@
 - `identifier` 改为线性扫描，去掉每个标识符对剩余全文的 `Vec<(usize, char)>` 收集
   （大规模图解析从 O(n²) 降为 O(n)）。
 - 新增 CI（`.github/workflows/ci.yml`）：fmt / clippy / test / doc。
+- **golden 基线改为本地生成**：`tests/golden/golden/*.svg` 是官方 mermaid-cli 的
+  构建产物，已加入 `.gitignore` 并停止提交；`official_compare_test` 在缺少基线时
+  打印提示并跳过官方对比，`catalog_cases_render_test` 仍照常运行。发布包也不再
+  依赖这些产物。
 - 文档整理：过时设计稿移入 `docs/archive/`，新增 `docs/README.md` 索引与
   `docs/architecture.md` 现状说明。
 - examples 按「图表类型 + 功能」重组，新增 `examples/README.md`；删除审查辅助脚本

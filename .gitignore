@@ -3,8 +3,10 @@
 *.svg
 *.png
 *.html
-# 但 golden 测试基线（官方 + 自比）必须纳入版本控制，供 CI 回归比对
-!tests/golden/**/*.svg
+# golden 基线由开发者本地用 mermaid-cli 生成（node tests/golden/generate_golden.js），
+# 属于构建产物，不提交；测试在缺少基线时会自动跳过官方对比。
+/tests/golden/golden/
+/tests/golden/ours/
 # site 演示页必须纳入版本控制（GitHub Pages 工作流会拷贝 site/index.html）
 !site/index.html
 # wasm-pack 本地产物不入库（CI 构建到 _site 时会重新生成）
