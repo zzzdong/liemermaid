@@ -72,29 +72,149 @@ enum Plan {
     Normal,
 }
 
+/// 均匀网格空间索引：把避让矩形按格分桶，使「某区域有哪些矩形」的查询
+/// 从 O(V) 降到 O(命中数)。
+///
+/// 查询**不去重**（同一矩形跨多格会重复出现）；本模块的调用方全部是
+/// 布尔 / min / max / 「某段是否存在冲突」语义，重复不影响结果，因此省掉
+/// 去重所需的额外分配与 seen 数组。
+struct RectGrid {
+    cell: f64,
+    min_x: f64,
+    min_y: f64,
+    cols: usize,
+    rows: usize,
+    buckets: Vec<Vec<usize>>,
+}
+
+impl RectGrid {
+    const EMPTY: Self = RectGrid {
+        cell: 1.0,
+        min_x: 0.0,
+        min_y: 0.0,
+        cols: 0,
+        rows: 0,
+        buckets: Vec::new(),
+    };
+
+    /// 每个矩形约占一格（cell ≈ √(面积/数量)），并限制总格数上限。
+    fn new(rects: &[Rect]) -> Self {
+        if rects.is_empty() {
+            return Self::EMPTY;
+        }
+        let mut min_x = f64::INFINITY;
+        let mut min_y = f64::INFINITY;
+        let mut max_x = f64::NEG_INFINITY;
+        let mut max_y = f64::NEG_INFINITY;
+        for r in rects {
+            min_x = min_x.min(r.min_x());
+            min_y = min_y.min(r.min_y());
+            max_x = max_x.max(r.max_x());
+            max_y = max_y.max(r.max_y());
+        }
+        if !min_x.is_finite() || !min_y.is_finite() {
+            return Self::EMPTY;
+        }
+        let w = (max_x - min_x).max(1e-6);
+        let h = (max_y - min_y).max(1e-6);
+        let n = rects.len() as f64;
+        let mut cell = ((w * h) / n).sqrt().clamp(8.0, 512.0);
+        loop {
+            let cols = (w / cell).ceil() as usize + 1;
+            let rows = (h / cell).ceil() as usize + 1;
+            if cols.saturating_mul(rows) <= MAX_GRID_CELLS {
+                let mut buckets = vec![Vec::new(); cols * rows];
+                for (i, r) in rects.iter().enumerate() {
+                    let c0 = col_of(r.min_x(), min_x, cell, cols);
+                    let c1 = col_of(r.max_x(), min_x, cell, cols);
+                    let r0 = row_of(r.min_y(), min_y, cell, rows);
+                    let r1 = row_of(r.max_y(), min_y, cell, rows);
+                    for row in r0..=r1 {
+                        for col in c0..=c1 {
+                            buckets[row * cols + col].push(i);
+                        }
+                    }
+                }
+                return RectGrid {
+                    cell,
+                    min_x,
+                    min_y,
+                    cols,
+                    rows,
+                    buckets,
+                };
+            }
+            cell *= 2.0;
+        }
+    }
+
+    fn col_of(&self, x: f64) -> usize {
+        clamp_cell(((x - self.min_x) / self.cell).floor() as isize, self.cols)
+    }
+
+    fn row_of(&self, y: f64) -> usize {
+        clamp_cell(((y - self.min_y) / self.cell).floor() as isize, self.rows)
+    }
+
+    /// 遍历包围盒 `area` 覆盖的所有候选矩形下标（可能重复，见结构体注释）。
+    fn for_each(&self, area: Rect, mut f: impl FnMut(usize)) {
+        if self.buckets.is_empty() {
+            return;
+        }
+        let (c0, c1) = (self.col_of(area.min_x()), self.col_of(area.max_x()));
+        let (r0, r1) = (self.row_of(area.min_y()), self.row_of(area.max_y()));
+        for row in r0..=r1 {
+            for col in c0..=c1 {
+                for &i in &self.buckets[row * self.cols + col] {
+                    f(i);
+                }
+            }
+        }
+    }
+}
+
+/// 网格总格数上限（超出则放大 cell）。
+const MAX_GRID_CELLS: usize = 1 << 20;
+
+fn clamp_cell(v: isize, n: usize) -> usize {
+    if v < 0 {
+        0
+    } else if v as usize >= n {
+        n - 1
+    } else {
+        v as usize
+    }
+}
+
+fn col_of(x: f64, min_x: f64, cell: f64, cols: usize) -> usize {
+    clamp_cell(((x - min_x) / cell).floor() as isize, cols)
+}
+
+fn row_of(y: f64, min_y: f64, cell: f64, rows: usize) -> usize {
+    clamp_cell(((y - min_y) / cell).floor() as isize, rows)
+}
+
 /// 避让矩形集合：节点 + 容器。
 ///
 /// 容器避让规则：边只绕开「两端均非其成员」的容器；
 /// 若边至少一端是某容器成员，则该边允许穿过该容器（容器内边 / 跨容器边）。
+///
+/// `grid` 作用于原始坐标，`grid_t` 作用于转置（垂直）空间——水平主轴的
+/// 路由统一在垂直空间规划，两套索引只建一次，避免每边克隆矩形列表。
 struct Obstacles {
     /// 全部避让矩形（owner 为节点 id 或容器 id），已含 padding。
     rects: Vec<(usize, Rect, String)>,
+    /// 转置（垂直）空间的同一批矩形（下标 / owner 与 `rects` 一致）。
+    rects_t: Vec<(usize, Rect, String)>,
+    grid: RectGrid,
+    grid_t: RectGrid,
+    /// 全部矩形的 x 范围（原始 / 转置空间各一份），供兜底通道使用。
+    all_min_x: f64,
+    all_max_x: f64,
+    all_min_x_t: f64,
+    all_max_x_t: f64,
     /// 容器 id → 成员节点 id 集合（用于跳过「本容器内部 / 跨本容器的边」）。
     members: HashMap<String, HashSet<String>>,
-}
-
-impl Obstacles {
-    /// 转置到垂直空间（水平主轴时统一在垂直空间规划）。
-    fn transposed(&self) -> Obstacles {
-        Obstacles {
-            rects: self
-                .rects
-                .iter()
-                .map(|(i, r, o)| (*i, tr_rect(*r), o.clone()))
-                .collect(),
-            members: self.members.clone(),
-        }
-    }
 }
 
 /// 为一条边构造「是否跳过某避让矩形」的判定：
@@ -158,8 +278,24 @@ pub fn route_edges(
     }
     let mut all_rects = node_rects.clone();
     all_rects.extend(container_rects);
+    // 转置空间（水平主轴时统一在垂直空间规划）+ 两套空间索引，全部只建一次。
+    let rects_t: Vec<(usize, Rect, String)> = all_rects
+        .iter()
+        .map(|(i, r, o)| (*i, tr_rect(*r), o.clone()))
+        .collect();
+    let grid = RectGrid::new(&all_rects.iter().map(|(_, r, _)| *r).collect::<Vec<_>>());
+    let grid_t = RectGrid::new(&rects_t.iter().map(|(_, r, _)| *r).collect::<Vec<_>>());
+    let (all_min_x, all_max_x) = x_range(&all_rects);
+    let (all_min_x_t, all_max_x_t) = x_range(&rects_t);
     let obstacles = Obstacles {
         rects: all_rects,
+        rects_t,
+        grid,
+        grid_t,
+        all_min_x,
+        all_max_x,
+        all_min_x_t,
+        all_max_x_t,
         members,
     };
 
@@ -177,16 +313,21 @@ pub fn route_edges(
         .iter()
         .map(|e| (e.source.clone(), e.target.clone()))
         .collect();
+    // 节点中心索引：回边交叉者计数需要 O(1) 取节点中心（旧实现线性扫 node_rects）。
+    let centers: HashMap<&str, Point> =
+        gg.nodes.iter().map(|n| (n.id.as_str(), n.center)).collect();
 
     // 预计算 mutual 对集合（u↔v 与 v↔u 同时存在）。
+    // 用有向边集合做 O(1) 反向查询，替代旧的双重循环 O(E²)。
+    let directed: std::collections::HashSet<(&str, &str)> = gg
+        .edges
+        .iter()
+        .map(|e| (e.source.as_str(), e.target.as_str()))
+        .collect();
     let mut mutual_pairs: std::collections::HashSet<(String, String)> =
         std::collections::HashSet::new();
     for e in &gg.edges {
-        if gg
-            .edges
-            .iter()
-            .any(|o| o.source == e.target && o.target == e.source)
-        {
+        if directed.contains(&(e.target.as_str(), e.source.as_str())) {
             mutual_pairs.insert((e.source.clone(), e.target.clone()));
         }
     }
@@ -212,9 +353,9 @@ pub fn route_edges(
                         s,
                         t,
                         direction,
-                        &node_rects,
                         &obstacles,
                         &edge_pairs,
+                        &centers,
                         &mut used_channels,
                     ) {
                         Some((ch, ch_side)) => Plan::BackChannel { ch, side: ch_side },
@@ -536,11 +677,12 @@ fn try_channel_side(
     top: f64,
     bot: f64,
     rects: &[(usize, Rect, String)],
+    grid: &RectGrid,
     skip: &dyn Fn(&str) -> bool,
     ends_clear: &dyn Fn(f64) -> bool,
     used: &[(f64, f64, f64)],
 ) -> Option<f64> {
-    let mut ch = settle_channel(start, to_right, top, bot, rects, skip)?;
+    let mut ch = settle_channel(start, to_right, top, bot, rects, grid, skip)?;
     if !ends_clear(ch) {
         return None;
     }
@@ -554,7 +696,7 @@ fn try_channel_side(
         } else {
             ch - CH_STACK
         };
-        ch = settle_channel(ch, to_right, top, bot, rects, skip)?;
+        ch = settle_channel(ch, to_right, top, bot, rects, grid, skip)?;
         if !ends_clear(ch) {
             return None;
         }
@@ -565,18 +707,26 @@ fn try_channel_side(
 /// 规划回边通道：若 source/target 之间存在节点或容器阻挡，计算一条无冲突且
 /// 不与其他边通道重叠的侧边通道坐标（垂直空间）。
 /// 成功时登记占用并返回（通道坐标, 侧向 ±1）；无阻挡或无解 → None。
+///
+/// 所有矩形查询走网格索引（`obstacles.grid` / `grid_t`，按主轴方向选用），
+/// 不再为每条回边克隆整份矩形列表。
 fn plan_back_channel(
     s: &GGNode,
     t: &GGNode,
     direction: crate::ast::Direction,
-    node_rects: &[(usize, Rect, String)],
     obstacles: &Obstacles,
     edges: &[(String, String)],
+    centers: &HashMap<&str, Point>,
     used: &mut Vec<(f64, f64, f64)>,
 ) -> Option<(f64, f64)> {
     use crate::ast::Direction;
     let vert = matches!(direction, Direction::TB | Direction::TD | Direction::BT);
     let tr = |p: Point| if vert { p } else { Point::new(p.y, p.x) };
+    let (rects, grid) = if vert {
+        (&obstacles.rects, &obstacles.grid)
+    } else {
+        (&obstacles.rects_t, &obstacles.grid_t)
+    };
     let sc = tr(s.center);
     let tc = tr(t.center);
     // 回边：源在 target 下游（垂直空间 sc.y > tc.y）。异常朝向放弃通道。
@@ -585,21 +735,6 @@ fn plan_back_channel(
     }
     let (top, bot) = (tc.y, sc.y);
     let mid_x = (sc.x + tc.x) / 2.0;
-    // 垂直主轴保持原矩形；水平主轴转置到垂直空间。
-    let rects_v: Vec<(usize, Rect, String)> = if vert {
-        obstacles.rects.to_vec()
-    } else {
-        obstacles.transposed().rects
-    };
-    // 仅节点矩形（转置后）供 crosser 计数取节点中心。
-    let node_rects_v: Vec<(usize, Rect, String)> = if vert {
-        node_rects.to_vec()
-    } else {
-        node_rects
-            .iter()
-            .map(|(i, r, o)| (*i, tr_rect(*r), o.clone()))
-            .collect()
-    };
     let skip = edge_skip(&s.id, &t.id, &obstacles.members);
 
     // 阻挡带：两中心之间的矩形（外扩 BAND_PAD），命中即视为阻挡。
@@ -612,16 +747,17 @@ fn plan_back_channel(
     let mut any = false;
     let mut ob_min = f64::INFINITY;
     let mut ob_max = f64::NEG_INFINITY;
-    for (_, r, owner) in &rects_v {
+    grid.for_each(band, |i| {
+        let (_, r, owner) = &rects[i];
         if skip(owner) {
-            continue;
+            return;
         }
         if rects_overlap(*r, band) {
             any = true;
             ob_min = ob_min.min(r.min_x());
             ob_max = ob_max.max(r.max_x());
         }
-    }
+    });
     if !any {
         return None;
     }
@@ -632,11 +768,13 @@ fn plan_back_channel(
             polyline_clear(
                 &[Point::new(sc.x.min(ch), y), Point::new(sc.x.max(ch), y)],
                 &skip,
-                &rects_v,
+                rects,
+                grid,
             ) && polyline_clear(
                 &[Point::new(tc.x.min(ch), y), Point::new(tc.x.max(ch), y)],
                 &skip,
-                &rects_v,
+                rects,
+                grid,
             )
         })
     };
@@ -645,7 +783,8 @@ fn plan_back_channel(
         true,
         top,
         bot,
-        &rects_v,
+        rects,
+        grid,
         &skip,
         &ends_clear,
         used,
@@ -655,7 +794,8 @@ fn plan_back_channel(
         false,
         top,
         bot,
-        &rects_v,
+        rects,
+        grid,
         &skip,
         &ends_clear,
         used,
@@ -664,12 +804,6 @@ fn plan_back_channel(
     // 交叉者计数：候选通道之外（beyond）若有节点，且该节点有边连到
     // 「通道跨度内的节点」（如 E→C 连 C，C 位于 B..D 跨度内），则该边的
     // 绕行/进入段会与本通道交叉 —— 该侧应降级。用于在两侧等距时选空侧。
-    let center_of = |id: &str| -> Option<(f64, f64)> {
-        node_rects_v
-            .iter()
-            .find(|(_, _, o)| o == id)
-            .map(|(_, r, _)| ((r.min_x() + r.max_x()) / 2.0, (r.min_y() + r.max_y()) / 2.0))
-    };
     let crossers = |ch: f64, to_right: bool| -> usize {
         let beyond = |x: f64| if to_right { x > ch } else { x < ch };
         let mut cnt = 0usize;
@@ -677,13 +811,15 @@ fn plan_back_channel(
             if u == &s.id || u == &t.id || v == &s.id || v == &t.id {
                 continue;
             }
-            let (Some(uc), Some(vc)) = (center_of(u), center_of(v)) else {
+            let (Some(&uc), Some(&vc)) = (centers.get(u.as_str()), centers.get(v.as_str())) else {
                 continue;
             };
-            let in_span = if beyond(uc.0) {
-                vc.1
-            } else if beyond(vc.0) {
-                uc.1
+            // 统一在垂直空间比较（通道规划空间）。
+            let (uc, vc) = (tr(uc), tr(vc));
+            let in_span = if beyond(uc.x) {
+                vc.y
+            } else if beyond(vc.x) {
+                uc.y
             } else {
                 continue;
             };
@@ -716,26 +852,32 @@ fn plan_back_channel(
 
 /// 从初始通道坐标出发，沿 `to_right` 方向逐个让开挡路的节点/容器矩形，
 /// 直到垂直段 (ch, top..bot) 无冲突。超过迭代上限返回 None。
+///
+/// 候选阻挡用网格粗筛（x 夹住 ch、y 与 [top, bot] 相交的薄带）；
+/// 多个阻挡时取**下标最小**者，与原「按 rects 顺序取第一个」行为一致。
 fn settle_channel(
     mut ch: f64,
     to_right: bool,
     top: f64,
     bot: f64,
     rects: &[(usize, Rect, String)],
+    grid: &RectGrid,
     skip: &dyn Fn(&str) -> bool,
 ) -> Option<f64> {
     for _ in 0..60 {
-        let mut blocker: Option<Rect> = None;
-        for (_, r, owner) in rects {
+        let area = Rect::new(ch - 1e-6, top, ch + 1e-6, bot);
+        let mut blocker: Option<usize> = None;
+        grid.for_each(area, |i| {
+            let (_, r, owner) = &rects[i];
             if skip(owner) {
-                continue;
+                return;
             }
             if r.min_y() <= bot && r.max_y() >= top && r.min_x() < ch && r.max_x() > ch {
-                blocker = Some(*r);
-                break;
+                blocker = Some(blocker.map_or(i, |b: usize| b.min(i)));
             }
-        }
-        let Some(r) = blocker else { return Some(ch) };
+        });
+        let Some(i) = blocker else { return Some(ch) };
+        let r = rects[i].1;
         ch = if to_right {
             r.max_x() + CHANNEL_MARGIN
         } else {
@@ -814,12 +956,12 @@ fn spline_route_safe(
     let vertical = matches!(sp, Port::Top | Port::Bottom);
     let tr = |p: Point| if vertical { p } else { Point::new(p.y, p.x) };
     let skip = edge_skip(&s.id, &t.id, &obstacles.members);
-
-    // 统一在垂直空间做检测与规划（水平主轴时转置，垂直主轴保持原样）。
-    let rects_v: Vec<(usize, Rect, String)> = if vertical {
-        obstacles.rects.to_vec()
+    // 统一在垂直空间做检测与规划（水平主轴时转置，垂直主轴保持原样）；
+    // 矩形/索引从 Obstacles 取，避免每边克隆整份列表。
+    let (rects_v, grid_v) = if vertical {
+        (&obstacles.rects, &obstacles.grid)
     } else {
-        obstacles.transposed().rects
+        (&obstacles.rects_t, &obstacles.grid_t)
     };
 
     // 采样朴素曲线，收集穿过的非端点节点 / 非成员容器。
@@ -828,16 +970,18 @@ fn spline_route_safe(
     let mut hit_min = f64::INFINITY;
     let mut hit_max = f64::NEG_INFINITY;
     for w in samples_v.windows(2) {
-        for (_, r, owner) in &rects_v {
+        let area = seg_bbox(w[0], w[1]);
+        grid_v.for_each(area, |i| {
+            let (_, r, owner) = &rects_v[i];
             if skip(owner) {
-                continue;
+                return;
             }
             if segment_intersects_rect(w[0], w[1], r) {
                 hit = true;
                 hit_min = hit_min.min(r.min_x());
                 hit_max = hit_max.max(r.max_x());
             }
-        }
+        });
     }
     if !hit {
         return naive;
@@ -854,20 +998,33 @@ fn spline_route_safe(
 
     // 候选通道：命中障碍两侧 + 所有障碍最外侧（兜底）。
     let mut candidates: Vec<f64> = Vec::new();
-    if let Some(ch) = settle_channel(hit_max + CHANNEL_MARGIN, true, top, bot, &rects_v, &skip) {
+    if let Some(ch) = settle_channel(
+        hit_max + CHANNEL_MARGIN,
+        true,
+        top,
+        bot,
+        rects_v,
+        grid_v,
+        &skip,
+    ) {
         candidates.push(ch);
     }
-    if let Some(ch) = settle_channel(hit_min - CHANNEL_MARGIN, false, top, bot, &rects_v, &skip) {
+    if let Some(ch) = settle_channel(
+        hit_min - CHANNEL_MARGIN,
+        false,
+        top,
+        bot,
+        rects_v,
+        grid_v,
+        &skip,
+    ) {
         candidates.push(ch);
     }
-    let all_max = rects_v
-        .iter()
-        .map(|(_, r, _)| r.max_x())
-        .fold(f64::NEG_INFINITY, f64::max);
-    let all_min = rects_v
-        .iter()
-        .map(|(_, r, _)| r.min_x())
-        .fold(f64::INFINITY, f64::min);
+    let (all_min, all_max) = if vertical {
+        (obstacles.all_min_x, obstacles.all_max_x)
+    } else {
+        (obstacles.all_min_x_t, obstacles.all_max_x_t)
+    };
     candidates.push(all_max + CHANNEL_MARGIN);
     candidates.push(all_min - CHANNEL_MARGIN);
 
@@ -884,7 +1041,7 @@ fn spline_route_safe(
                 bv,
                 p3v,
             ];
-            if !polyline_clear(&pts, &skip, &rects_v) {
+            if !polyline_clear(&pts, &skip, rects_v, grid_v) {
                 continue;
             }
             if strict && channel_conflicts_used(*ch, top, bot, used_channels) {
@@ -1002,7 +1159,7 @@ fn orthogonal_route(
     let mut best: Option<(usize, bool, f64, Vec<Point>)> = None;
     for trunk in candidates {
         let pts = build(trunk);
-        let c = polyline_conflicts(&pts, &skip, &obstacles.rects);
+        let c = polyline_conflicts(&pts, &skip, &obstacles.rects, &obstacles.grid);
         let used = trunk_conflicts_used(trunk, s0, s1, used_trunks);
         let better = match &best {
             None => true,
@@ -1362,20 +1519,40 @@ fn rects_overlap(a: Rect, b: Rect) -> bool {
         && a.max_y() >= b.min_y()
 }
 
+/// 矩形集合的 x 范围（用于兜底通道坐标）。
+fn x_range(rects: &[(usize, Rect, String)]) -> (f64, f64) {
+    let mut min = f64::INFINITY;
+    let mut max = f64::NEG_INFINITY;
+    for (_, r, _) in rects {
+        min = min.min(r.min_x());
+        max = max.max(r.max_x());
+    }
+    (min, max)
+}
+
 /// 折线是否完全避开非端点节点 / 非成员容器（true = 无冲突）。
+///
+/// `grid` 与 `rects` 必须属于同一空间（原始或转置）；网格只做粗筛，
+/// 精确判定仍走 `segment_intersects_rect`。
 fn polyline_clear(
     pts: &[Point],
     skip: &dyn Fn(&str) -> bool,
     rects: &[(usize, Rect, String)],
+    grid: &RectGrid,
 ) -> bool {
     for w in pts.windows(2) {
-        for (_, r, owner) in rects {
-            if skip(owner) {
-                continue;
+        let area = seg_bbox(w[0], w[1]);
+        let mut clear = true;
+        grid.for_each(area, |i| {
+            if clear {
+                let (_, r, owner) = &rects[i];
+                if !skip(owner) && segment_intersects_rect(w[0], w[1], r) {
+                    clear = false;
+                }
             }
-            if segment_intersects_rect(w[0], w[1], r) {
-                return false;
-            }
+        });
+        if !clear {
+            return false;
         }
     }
     true
@@ -1386,14 +1563,28 @@ fn polyline_conflicts(
     pts: &[Point],
     skip: &dyn Fn(&str) -> bool,
     rects: &[(usize, Rect, String)],
+    grid: &RectGrid,
 ) -> usize {
     pts.windows(2)
         .filter(|w| {
-            rects
-                .iter()
-                .any(|(_, r, owner)| !skip(owner) && segment_intersects_rect(w[0], w[1], r))
+            let area = seg_bbox(w[0], w[1]);
+            let mut hit = false;
+            grid.for_each(area, |i| {
+                if !hit {
+                    let (_, r, owner) = &rects[i];
+                    if !skip(owner) && segment_intersects_rect(w[0], w[1], r) {
+                        hit = true;
+                    }
+                }
+            });
+            hit
         })
         .count()
+}
+
+/// 线段的轴对齐包围盒（网格查询窗口）。
+fn seg_bbox(a: Point, b: Point) -> Rect {
+    Rect::new(a.x.min(b.x), a.y.min(b.y), a.x.max(b.x), a.y.max(b.y))
 }
 
 /// 把折线点序列转成路由段序列（跳过重复点；相邻段合并共线）。
@@ -1978,5 +2169,65 @@ mod tests {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod grid_tests {
+    use super::*;
+
+    fn rects(items: &[(f64, f64, f64, f64)]) -> Vec<Rect> {
+        items
+            .iter()
+            .map(|&(x0, y0, x1, y1)| Rect::new(x0, y0, x1, y1))
+            .collect()
+    }
+
+    #[test]
+    fn grid_query_returns_only_overlapping_rects() {
+        let r = rects(&[
+            (0.0, 0.0, 100.0, 100.0),
+            (500.0, 500.0, 600.0, 600.0),
+            (1000.0, 0.0, 1100.0, 50.0),
+        ]);
+        let grid = RectGrid::new(&r);
+        let mut hits: Vec<usize> = Vec::new();
+        grid.for_each(Rect::new(90.0, 90.0, 110.0, 110.0), |i| hits.push(i));
+        assert!(hits.contains(&0), "查询区域应与 0 号矩形相交: {hits:?}");
+        assert!(!hits.contains(&1), "远端矩形不应被返回: {hits:?}");
+        assert!(!hits.contains(&2), "远端矩形不应被返回: {hits:?}");
+    }
+
+    #[test]
+    fn grid_query_handles_out_of_range_and_empty() {
+        let r = rects(&[(0.0, 0.0, 10.0, 10.0)]);
+        let grid = RectGrid::new(&r);
+        // 网格外查询会被 clamp 到边缘格，可能返回候选，但精确判定必须过滤掉。
+        let query = Rect::new(-1e6, -1e6, -9e5, -9e5);
+        let mut exact = 0usize;
+        grid.for_each(query, |i| {
+            if rects_overlap(r[i], query) {
+                exact += 1;
+            }
+        });
+        assert_eq!(exact, 0, "网格外查询不得产生精确命中");
+
+        let empty = RectGrid::new(&[]);
+        let mut hits = 0usize;
+        empty.for_each(Rect::new(-1.0, -1.0, 1.0, 1.0), |_| hits += 1);
+        assert_eq!(hits, 0, "空网格不应命中");
+    }
+
+    /// 网格查询是粗筛：精确判定仍由 `segment_intersects_rect` 完成，
+    /// 因此跨格矩形可能重复返回（布尔 / min / max 语义下无影响）。
+    #[test]
+    fn grid_may_return_duplicates_but_never_misses() {
+        let r = rects(&[(-50.0, -50.0, 50.0, 50.0), (400.0, 400.0, 500.0, 500.0)]);
+        let grid = RectGrid::new(&r);
+        let mut hits: Vec<usize> = Vec::new();
+        grid.for_each(Rect::new(-60.0, -60.0, 60.0, 60.0), |i| hits.push(i));
+        assert!(hits.contains(&0));
+        assert!(!hits.contains(&1));
+        assert!(!hits.is_empty(), "查询区域至少应命中自身所在格: {hits:?}");
     }
 }
