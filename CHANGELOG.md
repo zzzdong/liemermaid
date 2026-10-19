@@ -2,6 +2,27 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.3.1] - 2026-10-19
+
+补发版：0.3.0 之后的工程与性能改进（不影响公开 API 行为，除 golden 测试产物不再入
+库外均为内部实现优化）。
+
+### Changed
+
+- **golden 基线改为本地生成**：`tests/golden/golden/*.svg` 是官方 mermaid-cli 的
+  构建产物，已加入 `.gitignore` 并停止提交；`official_compare_test` 在缺少基线时
+  打印提示并跳过官方对比，`catalog_cases_render_test` 仍照常运行。发布包也不再
+  依赖这些产物（打包体积 2.1 MiB → 1.1 MiB）。
+- **边路由空间索引（O(E·V) → 近似 O(E·k)）**：避让矩形（节点 + 容器）一次性构建
+  均匀网格 `RectGrid`，每条边只查询自身附近的候选矩形，不再全量扫描，也不再为
+  每条回边克隆整份矩形列表；`mutual` 对检测由 O(E²) 降为 O(E)，回边交叉者计数
+  改为 O(1) 节点中心查找。链状 4000 边 `build_diagram` 从约 18.5s 降到约 0.24s
+  （约 75×），且随规模近似线性增长。
+
+### Tests
+
+- 新增 `RectGrid` 单元测试：查询命中、越界 clamp、空网格、跨格重复返回语义。
+
 ## [0.3.0] - 2026-10-19
 
 ### Fixed
@@ -45,15 +66,6 @@
 - `identifier` 改为线性扫描，去掉每个标识符对剩余全文的 `Vec<(usize, char)>` 收集
   （大规模图解析从 O(n²) 降为 O(n)）。
 - 新增 CI（`.github/workflows/ci.yml`）：fmt / clippy / test / doc。
-- **golden 基线改为本地生成**：`tests/golden/golden/*.svg` 是官方 mermaid-cli 的
-  构建产物，已加入 `.gitignore` 并停止提交；`official_compare_test` 在缺少基线时
-  打印提示并跳过官方对比，`catalog_cases_render_test` 仍照常运行。发布包也不再
-  依赖这些产物。
-- **边路由空间索引（O(E·V) → 近似 O(E·k)）**：避让矩形（节点 + 容器）一次性构建
-  均匀网格 `RectGrid`，每条边只查询自身附近的候选矩形，不再全量扫描，也不再为
-  每条回边克隆整份矩形列表；`mutual` 对检测由 O(E²) 降为 O(E)，回边交叉者计数
-  改为 O(1) 节点中心查找。链状 4000 边 `build_diagram` 从约 18.5s 降到约 0.24s
-  （约 75×），且随规模近似线性增长。
 - 文档整理：过时设计稿移入 `docs/archive/`，新增 `docs/README.md` 索引与
   `docs/architecture.md` 现状说明。
 - examples 按「图表类型 + 功能」重组，新增 `examples/README.md`；删除审查辅助脚本
